@@ -1,0 +1,44 @@
+package com.example.springai.mcp;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Component
+public class McpClientFactory {
+    
+    private final ObjectMapper objectMapper;
+    private final ProcessManager processManager;
+    private final Map<String, McpClient> clients = new ConcurrentHashMap<>();
+    
+    public McpClientFactory(ObjectMapper objectMapper, ProcessManager processManager) {
+        this.objectMapper = objectMapper;
+        this.processManager = processManager;
+    }
+    
+    public McpClient createClient(String serverName) throws IOException {
+        return clients.computeIfAbsent(serverName, this::createNewClient);
+    }
+    
+    private McpClient createNewClient(String serverName) {
+        try {
+            Process process = processManager.getOrCreateProcess(serverName);
+            return new StdioMcpClient(process, objectMapper);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create MCP client for " + serverName, e);
+        }
+    }
+    
+    public java.util.Set<String> getAvailableServers() {
+        return processManager.getAvailableServers();
+    }
+    
+    public void closeAll() {
+        clients.values().forEach(McpClient::close);
+        clients.clear();
+        processManager.closeAll();
+    }
+}
