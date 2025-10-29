@@ -1,0 +1,7 @@
+server:
+  port: 8082
+
+gemini:
+  api-key: AIzaSyDpB1EFb4dIBV7oj6QFXooC79q_obrdHMA
+  model: gemini-2.5-flash
+  base-url: https://generativelanguage.googleapis.com/v1/models
