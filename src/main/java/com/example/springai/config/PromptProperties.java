@@ -1,17 +1,16 @@
 package com.example.springai.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
-@Component
 @ConfigurationProperties(prefix = "prompts")
 public class PromptProperties {
     
-    private String system;
-    private String toolDecision;
-    private String toolChoice;
-    private String finalAnswer;
-    private String contextAware;
+    private String system = "";
+    private String agentSystem = "";
+    private String toolDecision = "";
+    private String toolChoice = "";
+    private String finalAnswer = "";
+    private String contextAware = "";
     
     public String getSystem() {
         return system;
@@ -19,6 +18,14 @@ public class PromptProperties {
     
     public void setSystem(String system) {
         this.system = system;
+    }
+
+    public String getAgentSystem() {
+        return agentSystem;
+    }
+
+    public void setAgentSystem(String agentSystem) {
+        this.agentSystem = agentSystem;
     }
     
     public String getToolDecision() {

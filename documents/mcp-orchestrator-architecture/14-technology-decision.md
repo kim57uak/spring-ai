@@ -1,0 +1,36 @@
+# 14. Technology Decision
+
+## Final Choice
+
+- `Spring AI + LangGraph4j + Redis`
+
+## Decision Context (Current Source)
+
+- 현재 소스의 진입점은 `HttpChatController`, 핵심 조율은 `HttpChatService`다.
+- 메모리는 `SessionMemoryManager` 기반 인메모리 구조다.
+- MCP 호출은 `McpClientFactory`/`ProcessManager`/`StdioMcpClient`로 이미 분리되어 있다.
+- `build.gradle`에 `spring-ai`와 `langgraph4j` 의존성이 이미 포함되어 있다.
+
+## Why This Combination
+
+- `Spring AI`: 모델/프롬프트/스트리밍 API를 통합해 LLM Provider 변경 비용을 낮춘다.
+- `LangGraph4j`: planning, conditional edge, checkpoint resume을 코드 규칙으로 강제할 수 있다.
+- `Redis`: 대화 히스토리, 그래프 상태, 체크포인트를 외부화해 수평 확장과 복구를 지원한다.
+- 세 기술 모두 Spring Boot 기반에서 운영 표준화가 쉽다.
+
+## Platform-Neutral Principles
+
+- 특정 벤더 API 타입을 상위 계층에 노출하지 않는다.
+- 모델 선택, MCP 서버 목록, 저장소 구현은 설정/어댑터로 교체 가능해야 한다.
+- 오케스트레이터는 `tool group`과 `capability` 기준으로 라우팅하고, 도메인 고유명에 고정하지 않는다.
+
+## Deferred Options
+
+- `Spring AI only`: 단순 체인은 가능하지만 복잡한 handoff/재개 흐름의 관리 비용이 커진다.
+- `LangChain 계열 추가`: 가능하지만 현재 범위에서는 불필요한 프레임워크 표면적 증가다.
+
+## Scope
+
+- As-Is: 현재 `http-chat + mcp.*` 소스 유지
+- To-Be: Agentic orchestration 계층 신규 추가
+- 필수 구성요소: `Spring AI`, `LangGraph4j`, `Redis`

@@ -1,0 +1,89 @@
+@startuml
+!pragma layout smetana
+title 03. Agentic MCP Component Architecture
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+package "controller" {
+  [HttpChatController] as Controller
+}
+
+package "application/service" {
+  [AgentOrchestrator] as Orchestrator
+  [LangGraph4J StateGraph] as StateGraph
+  interface "ConversationStore" as ConversationStore
+  interface "GraphCheckpointStore" as GraphCheckpointStore
+  interface "PlanningService" as FunctionPlanningService
+  [FunctionPlanningServiceImpl] as Planner
+  interface "PromptTemplateService" as PromptTemplateService
+  [PromptTemplateServiceImpl] as PromptService
+  interface "ToolExecutionService" as McpFunctionExecutionService
+  [ToolExecutionServiceImpl] as Executor
+  interface "ResponseComposeService" as ResponseComposeService
+  [ResponseComposeServiceImpl] as Composer
+}
+
+package "runtime" {
+  interface "AgentLlmRuntime" as LlmRuntime
+}
+
+package "store" {
+  [Redis Conversation Store] as ConversationHistoryStore
+  [Redis Checkpoint Store] as GraphStateStore
+}
+
+package "mcp" {
+  [McpFunctionRegistry] as Registry
+  [Research Function Group] as SupplyCostGroup
+  [Market Function Group] as ReservationGroup
+  [Action Function Group] as SaleProductGroup
+}
+
+Controller --> Orchestrator
+FunctionPlanningService <|.. Planner
+McpFunctionExecutionService <|.. Executor
+ResponseComposeService <|.. Composer
+Orchestrator --> ConversationStore
+Orchestrator --> GraphCheckpointStore
+Orchestrator --> FunctionPlanningService
+Orchestrator --> PromptTemplateService
+Orchestrator --> McpFunctionExecutionService
+Orchestrator --> ResponseComposeService
+Orchestrator --> StateGraph
+Planner --> LlmRuntime
+Planner --> PromptService
+Composer --> LlmRuntime
+Composer --> PromptService
+Executor --> Registry
+Registry --> SupplyCostGroup
+Registry --> ReservationGroup
+Registry --> SaleProductGroup
+ConversationStore --> ConversationHistoryStore
+GraphCheckpointStore --> GraphStateStore
+
+note right of Orchestrator
+Depends on interfaces only
+- history/checkpoint
+- planning
+- prompt resolution
+- execution
+- composition
+- LangGraph4J StateGraph assembly
+end note
+
+note bottom of Controller
+Spring Boot entry point
+- request binding
+- validation
+- SSE response
+end note
+
+note bottom of Registry
+Tool groups from mcp.servers metadata
+- knowledge-retrieval
+- live-data-query
+- action-execution
+end note
+
+@enduml

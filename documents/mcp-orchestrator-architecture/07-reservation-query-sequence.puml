@@ -1,0 +1,32 @@
+@startuml
+!pragma layout smetana
+title 07. Handoff Sequence (Live Data -> Action)
+
+skinparam shadowing false
+
+actor User
+participant "HttpChatController" as Controller
+participant "AgentOrchestrator" as Orchestrator
+participant "PlanningService" as Planner
+participant "ToolExecutionService" as Executor
+participant "Spring AI Runtime" as Runtime
+participant "Market MCP" as MarketMcp
+participant "Action MCP" as ActionMcp
+
+User -> Controller : "현재 지표 확인 후 주문 실행해줘"
+Controller -> Orchestrator : execute(request)
+Orchestrator -> Planner : plan step-1
+Planner -> Runtime : choose live-data-query
+Orchestrator -> Executor : execute market tool
+Executor -> MarketMcp : read market data
+MarketMcp --> Executor : market result
+
+Orchestrator -> Planner : re-plan with market result
+Planner -> Runtime : choose action-execution
+Orchestrator -> Executor : execute action tool
+Executor -> ActionMcp : submit action
+ActionMcp --> Executor : action result
+
+Controller --> User : composed stream response
+
+@enduml

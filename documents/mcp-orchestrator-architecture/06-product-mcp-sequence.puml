@@ -1,0 +1,44 @@
+@startuml
+!pragma layout smetana
+title 06. Generic MCP Tool Sequence
+
+skinparam shadowing false
+
+actor User
+participant "HttpChatController" as Controller
+participant "AgentOrchestrator" as Orchestrator
+participant "LangGraph4J StateGraph" as StateGraph
+participant "PlanningService" as Planner
+participant "ToolExecutionService" as Executor
+participant "ResponseComposeService" as Composer
+participant "Spring AI Runtime" as Runtime
+participant "Conversation Store (Redis)" as HistoryRedis
+participant "Checkpoint Store (Redis)" as CheckpointRedis
+participant "Research MCP" as ResearchMcp
+participant "Market MCP" as MarketMcp
+
+User -> Controller : HTTP stream request
+Controller -> Orchestrator : execute(request)
+Orchestrator -> StateGraph : invoke(PlanningContext)
+Orchestrator -> HistoryRedis : load history
+Orchestrator -> CheckpointRedis : load checkpoint
+Orchestrator -> Planner : plan(history, request)
+Planner -> Runtime : choose capability
+
+alt knowledge-retrieval
+  Orchestrator -> Executor : execute(research tool)
+  Executor -> ResearchMcp : tool call
+  ResearchMcp --> Executor : result
+else live-data-query
+  Orchestrator -> Executor : execute(market tool)
+  Executor -> MarketMcp : tool call
+  MarketMcp --> Executor : result
+end
+
+Orchestrator -> Composer : compose final answer
+Composer -> Runtime : stream summary tokens
+Orchestrator -> HistoryRedis : save history
+Orchestrator -> CheckpointRedis : save checkpoint
+Controller --> User : SSE stream
+
+@enduml

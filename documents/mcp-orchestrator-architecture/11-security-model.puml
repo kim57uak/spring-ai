@@ -1,0 +1,49 @@
+@startuml
+!pragma layout smetana
+title 11. Security Model
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+rectangle "Security Flow" {
+  [AuthService] as AuthFilter
+  [Auth Session Redis] as AuthStore
+  [HumanMessageService] as HumanMessageService
+  [AuditLogger] as AuditLogger
+}
+
+AuthFilter --> AuthStore
+AuthFilter --> HumanMessageService
+AuthFilter --> AuditLogger
+
+note right of AuthFilter
+Validate by
+- sessionId
+- ttl/expiry
+- scope/role
+- required request fields
+end note
+
+note bottom of HumanMessageService
+Return HUMAN_MESSAGE on
+- session not found
+- expired session
+- permission denied
+end note
+
+note bottom of AuditLogger
+Do not log
+- token
+- raw prompt secrets
+- internal redis keys
+- full mcp payload
+end note
+
+note left of AuthStore
+Security rules
+- least privilege access
+- ttl validation
+- key prefix isolation
+end note
+
+@enduml
