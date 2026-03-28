@@ -1,6 +1,8 @@
 package com.example.springai.mcp;
 
+import com.example.springai.mcp.exception.McpClientCreationException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -19,7 +21,7 @@ public class McpClientFactory {
         this.processManager = processManager;
     }
     
-    public McpClient createClient(String serverName) throws IOException {
+    public McpClient createClient(String serverName) {
         return clients.computeIfAbsent(serverName, this::createNewClient);
     }
     
@@ -27,8 +29,10 @@ public class McpClientFactory {
         try {
             Process process = processManager.getOrCreateProcess(serverName);
             return new StdioMcpClient(process, objectMapper);
+        } catch (RuntimeException e) {
+            throw new McpClientCreationException(serverName, e.getMessage(), e);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to create MCP client for " + serverName, e);
+            throw new McpClientCreationException(serverName, e.getMessage(), e);
         }
     }
     
@@ -36,6 +40,7 @@ public class McpClientFactory {
         return processManager.getAvailableServers();
     }
     
+    @PreDestroy
     public void closeAll() {
         clients.values().forEach(McpClient::close);
         clients.clear();

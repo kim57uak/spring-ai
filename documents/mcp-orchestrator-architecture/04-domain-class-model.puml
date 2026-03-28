@@ -1,0 +1,86 @@
+@startuml
+!pragma layout smetana
+title 04. Agentic Domain and Contract Class Model
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+class ChatRequest {
+  +sessionId: String
+  +message: String
+  +model: String
+}
+
+class ChatChunk {
+  +sessionId: String
+  +type: ChunkType
+  +content: String
+}
+
+enum ChunkType {
+  TOKEN
+  TOOL_RESULT
+  HANDOFF
+  HUMAN_MESSAGE
+  COMPLETE
+  ERROR
+}
+
+class PlanningContext {
+  +sessionId: String
+  +history: List<String>
+  +currentNode: String
+  +plan: ToolPlan
+  +checkpointId: String
+}
+
+interface ConversationStore {
+  +load(sessionId)
+  +save(sessionId, history)
+}
+
+interface GraphCheckpointStore {
+  +loadCheckpoint(sessionId)
+  +saveCheckpoint(sessionId, checkpoint)
+}
+
+interface PlanningService {
+  +plan(request, context)
+}
+
+interface ToolExecutionService {
+  +execute(plan, context)
+}
+
+interface ResponseComposeService {
+  +compose(result, context)
+}
+
+class ConversationStoreImpl
+class GraphCheckpointStoreImpl
+class PlanningServiceImpl
+class ToolExecutionServiceImpl
+class ResponseComposeServiceImpl
+
+ConversationStore <|.. ConversationStoreImpl
+GraphCheckpointStore <|.. GraphCheckpointStoreImpl
+PlanningService <|.. PlanningServiceImpl
+ToolExecutionService <|.. ToolExecutionServiceImpl
+ResponseComposeService <|.. ResponseComposeServiceImpl
+
+ChatRequest --> PlanningContext
+PlanningContext --> ChatChunk
+PlanningService --> PlanningContext
+ToolExecutionService --> PlanningContext
+ResponseComposeService --> PlanningContext
+
+note bottom of PlanningContext
+Shared orchestration state
+- request
+- recent history
+- graph node
+- tool handoff trace
+- LangGraph4J checkpoint metadata
+end note
+
+@enduml

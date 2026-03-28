@@ -1,0 +1,43 @@
+@startuml
+!pragma layout smetana
+title 05. LangGraph4J Orchestration
+
+skinparam shadowing false
+
+start
+
+:Request Validate Node;
+:History Load Node;
+:Checkpoint State Load Node;
+:Plan Node;
+
+if (Capability?) then (knowledge-retrieval)
+  :Research Execute Node;
+elseif (live-data-query)
+  :Market Execute Node;
+else (action-execution)
+  :Action Execute Node;
+endif
+
+if (Need Handoff?) then (yes)
+  :Handoff Node;
+  :Plan Node;
+endif
+
+:Compose Node;
+:History Persist Node;
+:Checkpoint State Persist Node;
+:Streaming Emit Node;
+
+note right
+LangGraph4J mapping
+- StateGraph<PlanningContext>
+- conditional edges
+- checkpoint persistence
+- LangGraph4J is required
+- default backing store is Redis
+- checkpoint store is required as part of the graph runtime
+end note
+
+stop
+@enduml

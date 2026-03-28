@@ -1,0 +1,41 @@
+@startuml
+!pragma layout smetana
+title 19. Spring AI Agentic Sequence
+
+skinparam shadowing false
+
+actor User
+participant "HttpChatController" as Controller
+participant "AgentOrchestrator" as Orchestrator
+participant "LangGraph4J StateGraph" as StateGraph
+participant "Conversation Store (Redis)" as HistoryRedis
+participant "Graph Checkpoint Store (Redis)" as CheckpointRedis
+participant "PlanningService" as Planner
+participant "ToolExecutionService" as Executor
+participant "ResponseComposeService" as Composer
+participant "Spring AI Runtime" as Runtime
+participant "MCP Server" as McpServer
+
+User -> Controller : chat stream request
+Controller -> Orchestrator : execute(request)
+Orchestrator -> StateGraph : invoke(context)
+Orchestrator -> HistoryRedis : load history
+Orchestrator -> CheckpointRedis : load checkpoint
+Orchestrator -> Planner : plan(history, request)
+Planner -> Runtime : infer capability + tool
+Orchestrator -> Executor : execute planned tool
+Executor -> McpServer : call tool
+McpServer --> Executor : tool result
+Orchestrator -> Composer : compose result
+Composer -> Runtime : stream final response
+Orchestrator -> HistoryRedis : save history
+Orchestrator -> CheckpointRedis : save checkpoint
+Controller --> User : SSE stream
+
+note right of Runtime
+Cost guardrail
+- per step: 1 call
+- retry once on failure
+end note
+
+@enduml

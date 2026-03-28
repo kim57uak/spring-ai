@@ -1,36 +1,53 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.2.0'
+    id 'org.springframework.boot' version '3.4.3'
     id 'io.spring.dependency-management' version '1.1.4'
 }
 
 group = 'com.example'
-version = '0.0.1-SNAPSHOT'
+version = '2.0.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = '17'
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 repositories {
     mavenCentral()
-    maven { url 'https://repo.spring.io/milestone' }
 }
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
-    implementation 'dev.langchain4j:langchain4j:0.34.0'
-    implementation 'dev.langchain4j:langchain4j-google-ai-gemini:0.34.0'
-    implementation 'dev.langchain4j:langchain4j-spring-boot-starter:0.34.0'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+    implementation 'org.bsc.langgraph4j:langgraph4j-core'
+    implementation 'org.bsc.langgraph4j:langgraph4j-spring-ai'
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.awaitility:awaitility:4.2.0'
+    testImplementation 'org.mockito:mockito-core'
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
 }
 
 dependencyManagement {
     imports {
-        mavenBom "org.springframework.ai:spring-ai-bom:0.8.1"
+        mavenBom "org.springframework.ai:spring-ai-bom:1.0.3"
+        mavenBom "org.bsc.langgraph4j:langgraph4j-bom:1.8.10"
     }
 }
 
 compileJava {
     options.compilerArgs += ["-Xlint:deprecation", "-Xlint:unchecked"]
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = false
+    }
 }

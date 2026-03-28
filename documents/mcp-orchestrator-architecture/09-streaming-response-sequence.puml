@@ -1,0 +1,33 @@
+@startuml
+!pragma layout smetana
+title 09. Streaming Response Sequence
+
+skinparam shadowing false
+
+actor User
+participant "HttpChatController" as Controller
+participant "AgentOrchestrator" as Orchestrator
+participant "LangGraph4J StateGraph" as StateGraph
+participant "ResponseComposeService" as Composer
+participant "Spring AI Runtime" as Runtime
+participant "Conversation Store (Redis)" as HistoryRedis
+participant "Checkpoint Store (Redis)" as CheckpointRedis
+
+User -> Controller : HTTP stream request
+Controller -> Orchestrator : execute(request)
+Orchestrator -> StateGraph : invoke(context)
+StateGraph -> Composer : compose(context)
+Composer -> Runtime : stream tokens
+
+loop token stream
+  Runtime --> Composer : token
+  Composer --> Orchestrator : chunk(token)
+  Orchestrator --> Controller : chunk(token)
+  Controller --> User : SSE data
+end
+
+Orchestrator -> HistoryRedis : save history
+Orchestrator -> CheckpointRedis : save checkpoint
+Controller --> User : SSE complete
+
+@enduml

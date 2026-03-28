@@ -1,0 +1,81 @@
+@startuml
+!pragma layout smetana
+title 01. Agentic AI System Context (As-Is + To-Be)
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+actor User
+
+rectangle "Client Channel" {
+  [Web UI] as WebUi
+}
+
+rectangle "spring-ai application" {
+  [HttpChatController] as HttpChatController
+  [HttpChatService] as HttpChatService
+  [AgentOrchestrator] as AgentOrchestrator
+  [LangGraph4J StateGraph] as LangGraph4JStateGraph
+  [PlanningService] as PlanningService
+  [ToolExecutionService] as ToolExecutionService
+  [ResponseComposeService] as ResponseComposeService
+  [McpClientFactory] as McpClientFactory
+}
+
+database "Redis" as Redis {
+  [Conversation History Store] as ConversationHistoryRedis
+  [Graph State Store] as GraphStateRedis
+  [Checkpoint Store] as CheckpointRedis
+}
+
+cloud "LLM Provider" {
+  [Spring AI Runtime Port] as SpringAiRuntime
+}
+
+node "MCP Servers" {
+  [Research MCP] as ResearchMcp
+  [Market MCP] as MarketMcp
+}
+
+User --> WebUi
+WebUi --> HttpChatController : Entry
+HttpChatController --> HttpChatService
+HttpChatController --> AgentOrchestrator : Agentic flow
+AgentOrchestrator --> LangGraph4JStateGraph
+AgentOrchestrator --> PlanningService
+AgentOrchestrator --> ToolExecutionService
+AgentOrchestrator --> ResponseComposeService
+AgentOrchestrator --> ConversationHistoryRedis
+AgentOrchestrator --> GraphStateRedis
+AgentOrchestrator --> CheckpointRedis
+PlanningService --> SpringAiRuntime
+ResponseComposeService --> SpringAiRuntime
+ToolExecutionService --> McpClientFactory
+McpClientFactory --> ResearchMcp
+McpClientFactory --> MarketMcp
+
+note right of AgentOrchestrator
+LangGraph4J StateGraph flow
+- planning
+- tool routing
+- handoff via conditional edge
+- checkpoint resume
+- response synthesis
+end note
+
+note bottom of Redis
+Default backing store
+- conversation history
+- graph state
+- checkpoint
+end note
+
+note right of LangGraph4JStateGraph
+Required orchestration engine
+- planning
+- tool routing
+- handoff
+- checkpoint resume
+end note
+
+@enduml

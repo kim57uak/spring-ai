@@ -1,0 +1,33 @@
+@startuml
+!pragma layout smetana
+title 17. Technology Options Comparison
+
+skinparam shadowing false
+skinparam defaultTextAlignment center
+
+rectangle "Option A\nSpring AI + LangGraph4J\n(Recommended)" as A
+rectangle "Option B\nSpring AI only\n(custom orchestration)" as B
+rectangle "Option C\nLangChain + LangGraph4J\n(future extension)" as C
+
+note bottom of A
+- fits current source best
+- aligns with current build.gradle dependencies
+- supports StateGraph, handoff, checkpoint, Redis persistence
+end note
+
+note bottom of B
+- possible for simple flow
+- graph complexity grows in code
+- handoff/state resume less structured
+end note
+
+note bottom of C
+- possible extension path
+- not current standard
+- adds extra framework surface
+end note
+
+A --> B : lower risk
+A --> C : easier migration path
+
+@enduml

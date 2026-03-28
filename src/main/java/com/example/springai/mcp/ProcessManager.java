@@ -1,20 +1,31 @@
 package com.example.springai.mcp;
 
 import com.example.springai.config.McpProperties;
+import com.example.springai.mcp.exception.McpProcessLaunchException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
+@Component
 public class ProcessManager {
-    
+
+    private static final Logger logger = LoggerFactory.getLogger(ProcessManager.class);
+    private static final long PROCESS_SHUTDOWN_TIMEOUT_SECONDS = 5;
+
     private final Map<String, Process> processes = new ConcurrentHashMap<>();
     private final McpProperties mcpProperties;
+    private final McpProcessLauncher processLauncher;
     
-    public ProcessManager(McpProperties mcpProperties) {
+    public ProcessManager(McpProperties mcpProperties, McpProcessLauncher processLauncher) {
         this.mcpProperties = mcpProperties;
+        this.processLauncher = processLauncher;
     }
     
     public Process getOrCreateProcess(String serverName) throws IOException {
@@ -22,46 +33,78 @@ public class ProcessManager {
         if (existingProcess != null && existingProcess.isAlive()) {
             return existingProcess;
         }
-        
-        // 기존 프로세스가 죽었거나 없으면 새로 생성
-        if (existingProcess != null) {
-            processes.remove(serverName);
+
+        synchronized (this) {
+            Process rechecked = processes.get(serverName);
+            if (rechecked != null && rechecked.isAlive()) {
+                return rechecked;
+            }
+            if (rechecked != null) {
+                rechecked.destroy();
+                processes.remove(serverName);
+            }
+
+            Process launched = createProcess(serverName);
+            processes.put(serverName, launched);
+            return launched;
         }
-        
-        Process newProcess = createProcess(serverName);
-        processes.put(serverName, newProcess);
-        return newProcess;
     }
     
-    private Process createProcess(String serverName) {
+    private Process createProcess(String serverName) throws IOException {
         try {
-            McpProperties.ServerConfig config = mcpProperties.getServers().get(serverName);
-            if (config == null) {
-                throw new IllegalArgumentException("Unknown MCP server: " + serverName);
-            }
-            
-            List<String> command = new ArrayList<>();
-            command.add(config.getCommand());
-            if (config.getArgs() != null) {
-                command.addAll(config.getArgs());
-            }
-            
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
-            
-            if (config.getEnv() != null) {
-                pb.environment().putAll(config.getEnv());
-            }
-            
-            return pb.start();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to create MCP process: " + e.getMessage(), e);
+            return processLauncher.launch(serverName);
+        } catch (RuntimeException | IOException e) {
+            throw new McpProcessLaunchException(serverName, e.getMessage(), e);
         }
     }
     
     public void closeAll() {
-        processes.values().forEach(Process::destroy);
+        if (processes.isEmpty()) {
+            return;
+        }
+
+        logger.info("Closing {} MCP processes", processes.size());
+        List<String> failedProcesses = new ArrayList<>();
+
+        processes.forEach((serverName, process) -> {
+            try {
+                closeProcess(serverName, process);
+            } catch (Exception e) {
+                logger.error("Failed to close process for server '{}': {}", serverName, e.getMessage(), e);
+                failedProcesses.add(serverName);
+            }
+        });
+
         processes.clear();
+
+        if (!failedProcesses.isEmpty()) {
+            logger.warn("Failed to properly close {} process(es): {}", failedProcesses.size(), failedProcesses);
+        }
+    }
+
+    private void closeProcess(String serverName, Process process) {
+        if (!process.isAlive()) {
+            logger.debug("Process for server '{}' is already terminated", serverName);
+            return;
+        }
+
+        try {
+            logger.debug("Attempting graceful shutdown of process for server '{}'", serverName);
+            process.destroy();
+            boolean terminated = process.waitFor(PROCESS_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            if (!terminated && process.isAlive()) {
+                logger.warn("Process for server '{}' did not terminate gracefully, forcing shutdown", serverName);
+                process.destroyForcibly();
+                process.waitFor(PROCESS_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            }
+
+            logger.info("Process for server '{}' terminated successfully", serverName);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Interrupted while closing process for server '{}'", serverName, e);
+            process.destroyForcibly();
+        }
     }
     
     public java.util.Set<String> getAvailableServers() {

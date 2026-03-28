@@ -1,0 +1,40 @@
+@startuml
+!pragma layout smetana
+title 10. Exception Handling (Agentic Layer)
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+class SessionAuthException
+class PlanningException
+class ToolExecutionException
+class ResponseComposeException
+
+class HumanMessageService
+class GlobalErrorMapper
+class SecurityAuditLogger
+
+GlobalErrorMapper --> HumanMessageService
+GlobalErrorMapper --> SecurityAuditLogger
+
+HumanMessageService --> SessionAuthException
+GlobalErrorMapper --> PlanningException
+GlobalErrorMapper --> ToolExecutionException
+GlobalErrorMapper --> ResponseComposeException
+
+note right of HumanMessageService
+Auth failure
+permission failure
+missing required input
+returns HUMAN_MESSAGE
+end note
+
+note bottom of GlobalErrorMapper
+Do not leak
+- stack trace
+- token
+- session internal data
+- raw tool payload
+end note
+
+@enduml

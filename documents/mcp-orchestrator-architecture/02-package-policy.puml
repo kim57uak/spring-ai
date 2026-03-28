@@ -1,0 +1,56 @@
+@startuml
+!pragma layout smetana
+title 02. Package Policy (com.example.springai)
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "com.example.springai" {
+  package "controller" {
+    class HttpChatController
+  }
+
+  package "service" {
+    class HttpChatService
+    package "agent" {
+      package "orchestrator" {
+        class AgentOrchestrator
+      }
+      package "graph" {
+        interface AgentStateGraphFactory
+      }
+      package "plan" {
+        interface PlanningService
+      }
+      package "execute" {
+        interface ToolExecutionService
+      }
+      package "compose" {
+        interface ResponseComposeService
+      }
+      package "store" {
+        interface ConversationStore
+        interface GraphCheckpointStore
+      }
+      package "runtime" {
+        interface AgentLlmRuntime
+      }
+    }
+  }
+
+  package "mcp" {
+    class McpClientFactory
+    class ProcessManager
+    class StdioMcpClient
+  }
+}
+
+note bottom
+Rules
+- 기존 http-chat 패키지는 유지
+- agent 패키지는 신규 추가
+- orchestrator는 포트(interface)에만 의존
+- provider/tool/store는 필요하면 기존 코드 직접 수정으로 전환 가능
+end note
+
+@enduml
