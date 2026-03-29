@@ -9,13 +9,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Component
 public class GeminiApiClient {
     
-    @Value("${gemini.api-key}")
+    @Value("${http-llm.gemini.api-key}")
     private String apiKey;
     
-    @Value("${gemini.model}")
+    @Value("${http-llm.gemini.model}")
     private String model;
     
-    @Value("${gemini.base-url}")
+    @Value("${http-llm.gemini.base-url}")
     private String baseUrl;
     
     private final WebClient webClient;
