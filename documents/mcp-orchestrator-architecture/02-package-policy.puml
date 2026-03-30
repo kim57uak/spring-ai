@@ -6,12 +6,43 @@ skinparam shadowing false
 skinparam packageStyle rectangle
 
 package "com.example.springai" {
+  package "advice" {
+    class GlobalExceptionHandler
+  }
+
   package "controller" {
     class HttpChatController
   }
 
+  package "exception" {
+    class ChatProcessingException
+    class McpException
+  }
+
   package "service" {
     class HttpChatService
+    class ModelChatServiceFactory
+    class ChatModelType
+
+    package "chat" {
+      interface ChatService
+      interface SyncChatService
+      interface StreamChatService
+      class LlmCallPolicy
+    }
+
+    package "llm" {
+      interface LlmApiClient
+      interface ResponseParser
+    }
+
+    package "parser" {
+      class AbstractResponseParser
+      class OpenAiResponseParser
+      class GeminiResponseParser
+      class MistralResponseParser
+    }
+
     package "agent" {
       package "orchestrator" {
         class AgentOrchestrator
@@ -28,12 +59,19 @@ package "com.example.springai" {
       package "compose" {
         interface ResponseComposeService
       }
-      package "store" {
-        interface ConversationStore
-        interface GraphCheckpointStore
+      package "prompt" {
+        interface PromptTemplateService
       }
       package "runtime" {
         interface AgentLlmRuntime
+      }
+      package "security" {
+        class HumanMessageService
+        class PromptInjectionGuard
+      }
+      package "store" {
+        interface ConversationStore
+        interface GraphCheckpointStore
       }
     }
   }
@@ -43,14 +81,22 @@ package "com.example.springai" {
     class ProcessManager
     class StdioMcpClient
   }
+
+  package "model.agent" {
+    class AgentChatRequest
+    class PlanningContext
+    class ToolPlan
+    class ToolExecutionResult
+    class AgentGraphState
+  }
 }
 
 note bottom
 Rules
-- 기존 http-chat 패키지는 유지
-- agent 패키지는 신규 추가
-- orchestrator는 포트(interface)에만 의존
-- provider/tool/store는 필요하면 기존 코드 직접 수정으로 전환 가능
+- controller/service는 API 진입과 조율 책임만 가진다
+- 예외 처리와 예외 타입은 advice/exception 패키지에서 분리한다
+- orchestrator는 포트(interface)에만 의존한다
+- parser는 ResponseParser 계약으로 교체 가능하도록 유지한다
 end note
 
 @enduml

@@ -13,17 +13,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.net.IDN;
+import java.net.InetAddress;
+import java.net.Inet6Address;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Component
 public class McpToolExecutionService implements ToolExecutionService {
 
     private static final Logger logger = LoggerFactory.getLogger(McpToolExecutionService.class);
+    private static final Set<String> BLOCKED_HOSTS = Set.of(
+            "localhost",
+            "metadata.google.internal",
+            "metadata",
+            "169.254.169.254",
+            "100.100.100.200"
+    );
 
     private final McpClientFactory mcpClientFactory;
     private final McpProperties mcpProperties;
@@ -149,10 +163,15 @@ public class McpToolExecutionService implements ToolExecutionService {
         }
         if (fields.contains("url")) {
             String extractedUrl = extractFirstUrl(userMessage);
-            if (extractedUrl != null) {
-                return Map.of("url", extractedUrl);
+            Optional<String> safeUrl = validateExternalUrl(extractedUrl);
+            if (safeUrl.isPresent()) {
+                return Map.of("url", safeUrl.get());
             }
-            return Map.of("url", "https://www.google.com/search", "query", userMessage);
+            logger.warn("Blocked unsafe or missing URL for tool {}. Using query fallback only.", toolName);
+            if (fields.contains("query")) {
+                return Map.of("query", userMessage);
+            }
+            return Map.of();
         }
         if (fields.contains("queries")) {
             return Map.of("queries", List.of(userMessage));
@@ -208,6 +227,80 @@ public class McpToolExecutionService implements ToolExecutionService {
             }
         }
         return null;
+    }
+
+    private Optional<String> validateExternalUrl(String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            return Optional.empty();
+        }
+        URI uri;
+        try {
+            uri = new URI(rawUrl.trim());
+        } catch (URISyntaxException e) {
+            return Optional.empty();
+        }
+        String scheme = uri.getScheme();
+        if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+            return Optional.empty();
+        }
+        if (uri.getUserInfo() != null) {
+            return Optional.empty();
+        }
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) {
+            return Optional.empty();
+        }
+        String normalizedHost = IDN.toASCII(host.toLowerCase());
+        if (isBlockedHost(normalizedHost)) {
+            return Optional.empty();
+        }
+        if (!isPublicHost(normalizedHost)) {
+            return Optional.empty();
+        }
+        return Optional.of(uri.toString());
+    }
+
+    private boolean isBlockedHost(String host) {
+        if (BLOCKED_HOSTS.contains(host)) {
+            return true;
+        }
+        return host.endsWith(".local")
+                || host.endsWith(".internal")
+                || host.endsWith(".localhost");
+    }
+
+    private boolean isPublicHost(String host) {
+        try {
+            InetAddress[] addresses = InetAddress.getAllByName(host);
+            if (addresses.length == 0) {
+                return false;
+            }
+            for (InetAddress address : addresses) {
+                if (!isPublicAddress(address)) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (UnknownHostException e) {
+            return false;
+        }
+    }
+
+    private boolean isPublicAddress(InetAddress address) {
+        if (address instanceof Inet6Address inet6 && isUniqueLocalIpv6(inet6)) {
+            return false;
+        }
+        return !(address.isAnyLocalAddress()
+                || address.isLoopbackAddress()
+                || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress()
+                || address.isMulticastAddress());
+    }
+
+    private boolean isUniqueLocalIpv6(Inet6Address address) {
+        byte first = address.getAddress()[0];
+        int prefix = first & 0xFE;
+        return prefix == 0xFC;
     }
 
     private List<Map<String, Object>> extractAvailableTools(McpClient client) {

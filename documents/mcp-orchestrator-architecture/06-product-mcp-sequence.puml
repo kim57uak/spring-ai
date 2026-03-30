@@ -1,44 +1,46 @@
 @startuml
 !pragma layout smetana
-title 06. Generic MCP Tool Sequence
+title 06. Generic MCP Tool Sequence (Current Runtime)
 
 skinparam shadowing false
 
 actor User
 participant "HttpChatController" as Controller
+participant "HttpChatService" as ChatService
 participant "AgentOrchestrator" as Orchestrator
-participant "LangGraph4J StateGraph" as StateGraph
-participant "PlanningService" as Planner
-participant "ToolExecutionService" as Executor
-participant "ResponseComposeService" as Composer
-participant "Spring AI Runtime" as Runtime
 participant "Conversation Store (Redis)" as HistoryRedis
 participant "Checkpoint Store (Redis)" as CheckpointRedis
-participant "Research MCP" as ResearchMcp
-participant "Market MCP" as MarketMcp
+participant "LangGraph4J CompiledGraph" as StateGraph
+participant "PlanningService" as Planner
+participant "ToolExecutionService" as Executor
+participant "MCP Server" as McpServer
+participant "ResponseComposeService" as Composer
+participant "Spring AI Runtime" as Runtime
 
-User -> Controller : HTTP stream request
-Controller -> Orchestrator : execute(request)
-Orchestrator -> StateGraph : invoke(PlanningContext)
-Orchestrator -> HistoryRedis : load history
-Orchestrator -> CheckpointRedis : load checkpoint
-Orchestrator -> Planner : plan(history, request)
-Planner -> Runtime : choose capability
+User -> Controller : HTTP /api/http-chat/stream
+Controller -> ChatService : streamChat(sessionId, message, model)
+ChatService -> Orchestrator : execute(AgentChatRequest)
+Orchestrator --> Controller : preface chunk("[생각의 과정 요약] ...")
 
-alt knowledge-retrieval
-  Orchestrator -> Executor : execute(research tool)
-  Executor -> ResearchMcp : tool call
-  ResearchMcp --> Executor : result
-else live-data-query
-  Orchestrator -> Executor : execute(market tool)
-  Executor -> MarketMcp : tool call
-  MarketMcp --> Executor : result
-end
+Orchestrator -> HistoryRedis : load(sessionId)
+Orchestrator -> CheckpointRedis : loadCheckpoint(sessionId)
+Orchestrator -> StateGraph : invoke(state)
+StateGraph -> Planner : plan(context)
+Planner -> Runtime : complete(tool planning prompt)
+StateGraph -> Executor : execute(plan, context)
+Executor -> McpServer : callTool(tool, args)
+McpServer --> Executor : tool result
 
-Orchestrator -> Composer : compose final answer
-Composer -> Runtime : stream summary tokens
-Orchestrator -> HistoryRedis : save history
-Orchestrator -> CheckpointRedis : save checkpoint
-Controller --> User : SSE stream
+Orchestrator -> Composer : streamCompose(context)
+Composer -> Runtime : stream final answer
+Runtime --> Composer : token chunks
+Composer --> Orchestrator : chunk
+Orchestrator --> ChatService : chunk
+ChatService --> Controller : chunk
+Controller --> User : SSE data
+
+Orchestrator -> HistoryRedis : save(updated history)
+Orchestrator -> CheckpointRedis : saveCheckpoint(COMPLETED)
+Controller --> User : SSE complete
 
 @enduml

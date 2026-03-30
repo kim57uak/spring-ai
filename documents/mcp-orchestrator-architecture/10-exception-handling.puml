@@ -1,40 +1,51 @@
 @startuml
 !pragma layout smetana
-title 10. Exception Handling (Agentic Layer)
+title 10. Exception Handling (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
-class SessionAuthException
-class PlanningException
-class ToolExecutionException
-class ResponseComposeException
+class HttpChatController
+class HttpChatService
+class AgentOrchestrator
+class LlmCallPolicy
+class GlobalExceptionHandler
 
-class HumanMessageService
-class GlobalErrorMapper
-class SecurityAuditLogger
+class ChatProcessingException
+class McpException
+class McpClientCreationException
+class McpProcessLaunchException
+class McpToolCallException
+class McpValidationException
 
-GlobalErrorMapper --> HumanMessageService
-GlobalErrorMapper --> SecurityAuditLogger
+HttpChatController --> HttpChatService
+HttpChatService --> AgentOrchestrator
+HttpChatService --> LlmCallPolicy
 
-HumanMessageService --> SessionAuthException
-GlobalErrorMapper --> PlanningException
-GlobalErrorMapper --> ToolExecutionException
-GlobalErrorMapper --> ResponseComposeException
+LlmCallPolicy --> ChatProcessingException : throw
+GlobalExceptionHandler --> ChatProcessingException : @ExceptionHandler
+GlobalExceptionHandler --> IllegalArgumentException : @ExceptionHandler
+GlobalExceptionHandler --> IllegalStateException : @ExceptionHandler
+GlobalExceptionHandler --> MethodArgumentNotValidException : @ExceptionHandler
+GlobalExceptionHandler --> ConstraintViolationException : @ExceptionHandler
+GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
 
-note right of HumanMessageService
-Auth failure
-permission failure
-missing required input
-returns HUMAN_MESSAGE
+McpException <|-- McpClientCreationException
+McpException <|-- McpProcessLaunchException
+McpException <|-- McpToolCallException
+McpException <|-- McpValidationException
+
+note bottom of GlobalExceptionHandler
+Return ErrorResponse with sanitized message
+- no stack trace
+- no token/secret
+- no internal payload leak
 end note
 
-note bottom of GlobalErrorMapper
-Do not leak
-- stack trace
-- token
-- session internal data
-- raw tool payload
+note right of LlmCallPolicy
+Maps upstream errors
+- 401 -> auth guidance message
+- 429/5xx -> retry/backoff policy
 end note
 
 @enduml

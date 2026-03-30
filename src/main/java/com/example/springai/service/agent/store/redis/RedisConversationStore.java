@@ -29,39 +29,57 @@ public class RedisConversationStore implements ConversationStore {
 
     @Override
     public List<String> load(String sessionId) {
-        try {
+        return runOrDefault(() -> {
             String raw = redisTemplate.opsForValue().get(key(sessionId));
             if (raw == null || raw.isBlank()) {
                 return List.of();
             }
             return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            logger.warn("Failed to load conversation from Redis for session {}: {}", sessionId, e.getMessage());
-            return List.of();
-        }
+        }, List.of(), "load conversation", sessionId);
     }
 
     @Override
     public void save(String sessionId, List<String> messages) {
         List<String> safeMessages = messages == null ? Collections.emptyList() : messages;
-        try {
+        runSafely(() -> {
             String payload = objectMapper.writeValueAsString(safeMessages);
             redisTemplate.opsForValue().set(key(sessionId), payload, TTL);
-        } catch (Exception e) {
-            logger.warn("Failed to save conversation to Redis for session {}: {}", sessionId, e.getMessage());
-        }
+        }, "save conversation", sessionId);
     }
 
     @Override
     public void clear(String sessionId) {
-        try {
-            redisTemplate.delete(key(sessionId));
-        } catch (Exception e) {
-            logger.warn("Failed to clear conversation from Redis for session {}: {}", sessionId, e.getMessage());
-        }
+        runSafely(() -> redisTemplate.delete(key(sessionId)), "clear conversation", sessionId);
     }
 
     private String key(String sessionId) {
         return KEY_PREFIX + sessionId;
+    }
+
+    private <T> T runOrDefault(ThrowingSupplier<T> action, T defaultValue, String actionName, String sessionId) {
+        try {
+            return action.get();
+        } catch (Exception e) {
+            logger.warn("Failed to {} in Redis for session {}: {}", actionName, sessionId, e.getMessage());
+            return defaultValue;
+        }
+    }
+
+    private void runSafely(ThrowingRunnable action, String actionName, String sessionId) {
+        try {
+            action.run();
+        } catch (Exception e) {
+            logger.warn("Failed to {} in Redis for session {}: {}", actionName, sessionId, e.getMessage());
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
+    }
+
+    @FunctionalInterface
+    private interface ThrowingRunnable {
+        void run() throws Exception;
     }
 }

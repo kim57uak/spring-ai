@@ -1,15 +1,16 @@
 @startuml
 !pragma layout smetana
-title 19. Spring AI Agentic Sequence
+title 19. Spring AI Agentic Sequence (Current Source)
 
 skinparam shadowing false
 
 actor User
 participant "HttpChatController" as Controller
+participant "HttpChatService" as ChatService
 participant "AgentOrchestrator" as Orchestrator
-participant "LangGraph4J StateGraph" as StateGraph
 participant "Conversation Store (Redis)" as HistoryRedis
 participant "Graph Checkpoint Store (Redis)" as CheckpointRedis
+participant "LangGraph4J CompiledGraph" as StateGraph
 participant "PlanningService" as Planner
 participant "ToolExecutionService" as Executor
 participant "ResponseComposeService" as Composer
@@ -17,20 +18,33 @@ participant "Spring AI Runtime" as Runtime
 participant "MCP Server" as McpServer
 
 User -> Controller : chat stream request
-Controller -> Orchestrator : execute(request)
-Orchestrator -> StateGraph : invoke(context)
+Controller -> ChatService : streamChat(...)
+ChatService -> Orchestrator : execute(request)
+
 Orchestrator -> HistoryRedis : load history
 Orchestrator -> CheckpointRedis : load checkpoint
-Orchestrator -> Planner : plan(history, request)
-Planner -> Runtime : infer capability + tool
-Orchestrator -> Executor : execute planned tool
-Executor -> McpServer : call tool
-McpServer --> Executor : tool result
-Orchestrator -> Composer : compose result
+Orchestrator -> StateGraph : invoke(state)
+StateGraph -> Planner : plan(context)
+Planner -> Runtime : complete(planning prompt)
+
+alt tool required
+  StateGraph -> Executor : execute(plan, context)
+  Executor -> McpServer : call tool
+  McpServer --> Executor : tool result
+else no tool required
+  StateGraph --> Orchestrator : skip execution
+end
+
+Orchestrator -> Composer : streamCompose(context)
 Composer -> Runtime : stream final response
+Runtime --> Composer : tokens
+Composer --> Orchestrator : chunks
+Orchestrator --> ChatService : chunks
+ChatService --> Controller : chunks
+Controller --> User : SSE stream
+
 Orchestrator -> HistoryRedis : save history
 Orchestrator -> CheckpointRedis : save checkpoint
-Controller --> User : SSE stream
 
 note right of Runtime
 Cost guardrail

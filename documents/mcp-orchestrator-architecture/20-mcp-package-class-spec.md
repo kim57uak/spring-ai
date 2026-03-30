@@ -7,18 +7,26 @@
 ## Scope
 
 - As-Is 참고: `controller.HttpChatController`, `service.HttpChatService`, `mcp.*`
-- To-Be 추가: `service.agent.*` 중심 Agentic orchestration
+- To-Be/Current: `service.agent.*` 중심 Agentic orchestration + `advice`/`exception` 분리
 - 필수 런타임: `Spring AI`, `LangGraph4j`, `Redis`
 
 ## Recommended Package Structure
 
 ```text
 src/main/java/com/example/springai
+├── advice
+│   └── GlobalExceptionHandler
 ├── controller
 │   ├── HttpChatController
 │   └── (single entry)
+├── exception
+│   ├── ChatProcessingException
+│   └── McpException + subclasses
 ├── service
 │   ├── HttpChatService
+│   ├── chat/{ChatService, SyncChatService, StreamChatService, LlmCallPolicy}
+│   ├── llm/{LlmApiClient, ResponseParser}
+│   ├── parser/{AbstractResponseParser, OpenAiResponseParser, GeminiResponseParser, MistralResponseParser}
 │   └── agent
 │       ├── orchestrator/AgentOrchestrator
 │       ├── graph/AgentStateGraphFactory
@@ -28,22 +36,23 @@ src/main/java/com/example/springai
 │       ├── prompt/PromptTemplateService
 │       ├── runtime/AgentLlmRuntime
 │       ├── store/{ConversationStore, GraphCheckpointStore}
-│       └── security/{AuthService, HumanMessageService}
+│       └── security/{HumanMessageService, PromptInjectionGuard}
 ├── mcp
 │   ├── McpClientFactory
 │   ├── ProcessManager
 │   └── StdioMcpClient
 └── model/agent
     ├── AgentChatRequest
-    ├── AgentChatChunk
+    ├── AgentGraphState
     ├── PlanningContext
     ├── ToolPlan
-    └── ToolExecutionResult
+    ├── ToolExecutionResult
+    └── ChunkType
 ```
 
 ## Core Contracts
 
-- `PlanningService#plan(PlanningContext)`
+- `PlanningService#plan(PlanningContext): List<ToolPlan>`
 - `ToolExecutionService#execute(ToolPlan, PlanningContext)`
 - `ResponseComposeService#streamCompose(PlanningContext)`
 - `ConversationStore#load/save(sessionId, history)`
@@ -53,6 +62,8 @@ src/main/java/com/example/springai
 ## Dependency Policy
 
 - `controller -> orchestrator -> ports(plan/execute/compose/store/runtime/security)`
+- `controller -> service(HttpChatService) -> orchestrator -> ports(plan/execute/compose/store/runtime/security/prompt)`
+- `advice -> exception`
 - 구현체는 `impl` 또는 기능별 패키지에 둔다.
 - 상위 계층은 concrete class 의존 금지, interface 의존만 허용한다.
 - provider/tool/storage 변경 시 필요한 계층은 직접 수정/리팩토링할 수 있다.

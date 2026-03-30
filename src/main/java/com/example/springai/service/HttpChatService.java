@@ -12,11 +12,12 @@ import java.time.Duration;
  * SOLID 원칙 준수:
  * - SRP: 세션별 대화 조율만 담당 (메모리, 프롬프트, LLM 호출은 위임)
  * - OCP: 새로운 모델 추가 시 수정 불필요
- * - DIP: 추상화(SessionMemoryManager, PromptBuilder, Factory)에 의존
+ * - DIP: 추상화(AgentOrchestrator)에 의존
  */
 @Service
 public class HttpChatService {
 
+    private static final Duration CHAT_TIMEOUT = Duration.ofMinutes(2);
     private final AgentOrchestrator agentOrchestrator;
 
     public HttpChatService(AgentOrchestrator agentOrchestrator) {
@@ -27,7 +28,7 @@ public class HttpChatService {
         String response = streamChat(sessionId, message, modelType)
                 .collectList()
                 .map(chunks -> String.join("", chunks))
-                .block(Duration.ofMinutes(2));
+                .block(CHAT_TIMEOUT);
         return response == null ? "" : response;
     }
 

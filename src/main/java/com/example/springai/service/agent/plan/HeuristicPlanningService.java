@@ -8,6 +8,7 @@ import com.example.springai.mcp.StdioMcpClient;
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.model.agent.ToolPlan;
 import com.example.springai.service.agent.runtime.AgentLlmRuntime;
+import com.example.springai.service.agent.security.PromptInjectionGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
@@ -34,6 +35,7 @@ public class HeuristicPlanningService implements PlanningService {
     private final PromptProperties promptProperties;
     private final McpClientFactory mcpClientFactory;
     private final AgentLlmRuntime llmRuntime;
+    private final PromptInjectionGuard promptInjectionGuard;
     private final ObjectMapper objectMapper;
 
     public HeuristicPlanningService(
@@ -41,12 +43,14 @@ public class HeuristicPlanningService implements PlanningService {
             PromptProperties promptProperties,
             McpClientFactory mcpClientFactory,
             AgentLlmRuntime llmRuntime,
+            PromptInjectionGuard promptInjectionGuard,
             ObjectMapper objectMapper
     ) {
         this.mcpProperties = mcpProperties;
         this.promptProperties = promptProperties;
         this.mcpClientFactory = mcpClientFactory;
         this.llmRuntime = llmRuntime;
+        this.promptInjectionGuard = promptInjectionGuard;
         this.objectMapper = objectMapper;
     }
 
@@ -54,35 +58,15 @@ public class HeuristicPlanningService implements PlanningService {
     public List<ToolPlan> plan(PlanningContext context) {
         String plannerOutput = llmRuntime.complete(buildToolPlanningPrompt(context), context.getModel());
         if (isCompleteOutput(plannerOutput)) {
-            List<ToolPlan> selected = List.of(ToolPlan.noTool("LLM planner returned COMPLETE"));
-            logger.info("Tool selection result: {}", selected);
-            return selected;
+            return logResult(noToolSelection("LLM planner returned COMPLETE"));
         }
 
-        List<ToolPlan> parsed = parsePlans(plannerOutput);
-        if (parsed.isEmpty()) {
-            String repaired = llmRuntime.complete(buildPlannerRepairPrompt(plannerOutput), context.getModel());
-            if (isCompleteOutput(repaired)) {
-                List<ToolPlan> selected = List.of(ToolPlan.noTool("LLM planner repaired to COMPLETE"));
-                logger.info("Tool selection result: {}", selected);
-                return selected;
-            }
-            parsed = parsePlans(repaired);
-            if (!parsed.isEmpty()) {
-                logger.info("Tool selection repaired successfully. raw={}, repaired={}", plannerOutput, repaired);
-            } else {
-                logger.warn("Tool selection repair failed. raw={}, repaired={}", plannerOutput, repaired);
-            }
-        }
+        List<ToolPlan> parsed = parseWithRepair(plannerOutput, context);
         if (!parsed.isEmpty()) {
-            List<ToolPlan> selected = deduplicate(parsed);
-            logger.info("Tool selection result: {}", selected);
-            return selected;
+            return logResult(deduplicate(parsed));
         }
 
-        List<ToolPlan> selected = List.of(ToolPlan.noTool("LLM planner returned no valid tool plan"));
-        logger.info("Tool selection result: {}", selected);
-        return selected;
+        return logResult(noToolSelection("LLM planner returned no valid tool plan"));
     }
 
     private String buildToolPlanningPrompt(PlanningContext context) {
@@ -91,57 +75,16 @@ public class HeuristicPlanningService implements PlanningService {
                 ? "NONE"
                 : String.join("\n", context.getToolTrace());
         String latestResult = context.getExecutionResult().executed()
-                ? context.getExecutionResult().rawPayload()
+                ? promptInjectionGuard.protectToolResult(context.getExecutionResult().rawPayload())
                 : "NONE";
+        String protectedUserMessage = promptInjectionGuard.protectUserInput(context.getUserMessage());
         String dateHints = buildDateHints();
-        return """
-                %s
-                %s
-                [Task]
-                Decide whether MCP tools are strictly necessary.
-                Default decision is COMPLETE.
-                Use MCP tools ONLY if at least one condition is true:
-                1) The user explicitly requests search/tool usage or external lookup.
-                2) The answer requires real-time or rapidly-changing facts not reliable from model knowledge.
-                3) The request requires external action/execution (reservation, transaction, API side effect).
-                Do NOT use tools for general explanations, summaries, translation, rewriting, coding help,
-                historical/common knowledge, or opinion/advice questions that can be answered directly.
-                If uncertain, choose COMPLETE.
-                Use only servers from [Available MCP Servers].
-                Select tool using exact function name from tool list.
-                Build arguments that strictly match each tool inputSchema.
-                Never ask the user a follow-up question in this step.
-                Infer relative dates from the user message using [Date Hints].
-                If tools are not needed, return "COMPLETE".
-
-                [Available MCP Servers]
-                %s
-
-                [User Message]
-                %s
-
-                [Date Hints]
-                %s
-
-                [Already Executed Tools]
-                %s
-
-                [Latest Tool Result]
-                %s
-
-                [Output Rules]
-                - Return JSON array only (no markdown): [{"server":"...","tool":"...","reason":"...","arguments":{...}}]
-                - "tool" and "arguments" must match inputSchema from selected tool.
-                - For multi-intent request, include multiple items.
-                - Prefer zero-tool answer whenever model knowledge is sufficient.
-                - If no tool needed, return exactly: COMPLETE
-                - Do not output explanations, apologies, or questions.
-                - Do not ask for missing dates; infer best possible values from [Date Hints].
-                """.formatted(
+        String template = required(promptProperties.getToolPlanningPromptTemplate(), "prompts.tool-planning-prompt-template");
+        return template.formatted(
                 promptProperties.getAgentSystem(),
                 promptProperties.getToolChoice(),
                 serverCatalog,
-                context.getUserMessage(),
+                protectedUserMessage,
                 dateHints,
                 executedTools,
                 latestResult
@@ -149,17 +92,8 @@ public class HeuristicPlanningService implements PlanningService {
     }
 
     private String buildPlannerRepairPrompt(String invalidOutput) {
-        return """
-                Convert the following planner output into VALID output contract.
-                Output contract:
-                - JSON array only: [{"server":"...","tool":"...","reason":"...","arguments":{...}}]
-                - OR exactly COMPLETE
-                - No markdown, no explanation, no extra text.
-                - Never ask the user questions.
-
-                Invalid output:
-                %s
-                """.formatted(invalidOutput == null ? "" : invalidOutput);
+        String template = required(promptProperties.getPlannerRepairPromptTemplate(), "prompts.planner-repair-prompt-template");
+        return template.formatted(invalidOutput == null ? "" : invalidOutput);
     }
 
     private String buildServerCatalog() {
@@ -338,17 +272,50 @@ public class HeuristicPlanningService implements PlanningService {
         LocalDate nextWeekMonday = now.with(TemporalAdjusters.next(DayOfWeek.MONDAY));
         LocalDate nextWeekSunday = nextWeekMonday.plusDays(6);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-        return """
-                - Today(KST): %s
-                - 'next week' range (Mon-Sun): %s ~ %s
-                - If user says '다음주 출발', use startDate=%s and endDate=%s unless user gives exact dates.
-                """.formatted(
+        String template = required(promptProperties.getDateHintsTemplate(), "prompts.date-hints-template");
+        return template.formatted(
                 now.format(formatter),
                 nextWeekMonday.format(formatter),
                 nextWeekSunday.format(formatter),
                 nextWeekMonday.format(formatter),
                 nextWeekSunday.format(formatter)
         );
+    }
+
+    private List<ToolPlan> parseWithRepair(String plannerOutput, PlanningContext context) {
+        List<ToolPlan> parsed = parsePlans(plannerOutput);
+        if (!parsed.isEmpty()) {
+            return parsed;
+        }
+
+        String repaired = llmRuntime.complete(buildPlannerRepairPrompt(plannerOutput), context.getModel());
+        if (isCompleteOutput(repaired)) {
+            return noToolSelection("LLM planner repaired to COMPLETE");
+        }
+
+        List<ToolPlan> repairedPlans = parsePlans(repaired);
+        if (!repairedPlans.isEmpty()) {
+            logger.info("Tool selection repaired successfully. raw={}, repaired={}", plannerOutput, repaired);
+        } else {
+            logger.warn("Tool selection repair failed. raw={}, repaired={}", plannerOutput, repaired);
+        }
+        return repairedPlans;
+    }
+
+    private String required(String value, String key) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required prompt property: " + key);
+        }
+        return value;
+    }
+
+    private List<ToolPlan> noToolSelection(String reason) {
+        return List.of(ToolPlan.noTool(reason));
+    }
+
+    private List<ToolPlan> logResult(List<ToolPlan> plans) {
+        logger.info("Tool selection result: {}", plans);
+        return plans;
     }
 
     private record PlannerToolSelection(

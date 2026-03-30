@@ -2,20 +2,19 @@
 
 ## Phase 1: Baseline Agentic Layer
 
-- 기존 `HttpChatController`를 Agentic 진입점으로 확장
-- `AgentOrchestrator` 도입 (`LangGraph4j StateGraph` 실행 담당)
-- `PlanningService`, `ToolExecutionService`, `ResponseComposeService` 분리
-- Redis 기반 `ConversationStore`, `GraphCheckpointStore` 구현
-- 기존 `HttpChatController`/`HttpChatService`는 유지 (병행 운영)
-- 기본 노드: `plan -> execute -> compose -> persist`
+- 완료: `HttpChatController -> HttpChatService -> AgentOrchestrator` 흐름 정착
+- 완료: `PlanningService`, `ToolExecutionService`, `ResponseComposeService` 분리
+- 완료: Redis 기반 `ConversationStore`, `GraphCheckpointStore` 운영
+- 완료: `LangGraphAgentStateGraphFactory` 기반 그래프 실행
+- 완료: 기본 흐름 `plan -> execute -> compose -> persist`
 
 ## Phase 2: Reliable Orchestration
 
-- conditional edge handoff (`LangGraph4j`)
-- checkpoint resume + retry policy
-- tool group 라우팅 정책 고도화 (플랫폼 중립 capability 기준)
-- 인증/권한 실패 시 `HUMAN_MESSAGE` 표준화
-- component 테스트 + graph 통합 테스트
+- 진행중: conditional edge handoff (`LangGraph4j`)
+- 진행중: checkpoint resume + retry policy 고도화
+- 진행중: capability 기반 tool 라우팅 정책 정밀화
+- 진행중: 예외/실패 시 사용자 메시지 표준화(`HumanMessageService`)
+- 예정: component 테스트 + graph 통합 테스트
 
 ## Phase 3: Production Hardening
 
@@ -30,3 +29,4 @@
 - LLM call: step당 기본 1회 + 실패 시 1회 재시도
 - tool allowlist 강제
 - raw prompt/token/session 내부값 로그 금지
+- 예외 응답은 `GlobalExceptionHandler`에서 일원화

@@ -1,4 +1,4 @@
-package com.example.springai.mcp.exception;
+package com.example.springai.exception;
 
 /**
  * Base exception for all MCP-related errors.

@@ -15,7 +15,7 @@
   - `PlanningService`, `ToolExecutionService`, `ResponseComposeService`
   - `ConversationStore`, `GraphCheckpointStore`
 - 도메인 모델 추가
-  - `AgentChatRequest`, `AgentChatChunk`, `PlanningContext`, `ToolPlan`, `ToolExecutionResult`, `ChunkType`
+  - `AgentChatRequest`, `PlanningContext`, `ToolPlan`, `ToolExecutionResult`, `ChunkType`, `AgentGraphState`
 - 완료 기준
   - 컨트롤러/상위 서비스는 구현체가 아닌 포트(interface) 중심 의존
 
@@ -79,4 +79,4 @@
 
 ## 이번 턴 범위
 
-- 위 우선순위를 기준으로 P0~P4를 우선 구현하고, 가능한 범위에서 P5 테스트까지 완료한다.
+- 현재 소스 기준으로 P0~P4는 반영되었고, P5는 환경 의존 테스트를 분리해 안정 실행 가능한 범위를 유지한다.

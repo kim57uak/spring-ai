@@ -2,72 +2,39 @@ package com.example.springai.service.agent.prompt;
 
 import com.example.springai.config.PromptProperties;
 import com.example.springai.model.agent.PlanningContext;
+import com.example.springai.service.agent.security.PromptInjectionGuard;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Component
 public class DefaultPromptTemplateService implements PromptTemplateService {
 
     private final PromptProperties promptProperties;
+    private final PromptInjectionGuard promptInjectionGuard;
 
-    public DefaultPromptTemplateService(PromptProperties promptProperties) {
+    public DefaultPromptTemplateService(
+            PromptProperties promptProperties,
+            PromptInjectionGuard promptInjectionGuard
+    ) {
         this.promptProperties = promptProperties;
-    }
-
-    @Override
-    public String buildPlanningPrompt(PlanningContext context) {
-        String history = context.getHistory().stream()
-                .limit(10)
-                .collect(Collectors.joining("\n"));
-        String baseSystem = resolveBaseSystemPrompt();
-        return """
-                %s
-                %s
-                [Planner]
-                Decide whether MCP tool is required for this user input.
-                Return one line: YES or NO.
-                User: %s
-                History:
-                %s
-                """.formatted(baseSystem, promptProperties.getToolDecision(), context.getUserMessage(), history);
+        this.promptInjectionGuard = promptInjectionGuard;
     }
 
     @Override
     public String buildComposePrompt(PlanningContext context) {
-        String history = context.getHistory().stream()
-                .limit(10)
+        String history = recentHistory(context.getHistory()).stream()
                 .collect(Collectors.joining("\n"));
+        String protectedHistory = promptInjectionGuard.protectHistory(history);
         String toolResult = context.getExecutionResult().executed()
-                ? context.getExecutionResult().rawPayload()
+                ? promptInjectionGuard.protectToolResult(context.getExecutionResult().rawPayload())
                 : "NO_TOOL_EXECUTED";
-
-        String composeRules = """
-                [Compose Rules]
-                - Return only final answer to the user.
-                - Analyze the current user intent first.
-                - Use recent history only when directly relevant to the current user message.
-                - If current input is greeting/small-talk, ignore unrelated history/tool context and answer briefly.
-                - If [Tool Result] is not NO_TOOL_EXECUTED, use it as the primary source.
-                - Do not ignore tool result and do not answer with generic "cannot provide weather" unless tool result is empty/error.
-                - Summarize concrete facts first, then optional brief guidance.
-                - Never expose internal reasoning or chain-of-thought.
-                - Write with concrete and useful detail; avoid shallow/generic wording.
-                """;
+        String protectedUserMessage = promptInjectionGuard.protectUserInput(context.getUserMessage());
+        String composeRules = required(promptProperties.getComposeRules(), "prompts.compose-rules");
         String baseSystem = resolveBaseSystemPrompt();
-
-        return """
-                %s
-                %s
-                %s
-                [Context]
-                User question: %s
-                Recent history:
-                %s
-
-                [Tool Result]
-                %s
-                """.formatted(baseSystem, promptProperties.getFinalAnswer(), composeRules, context.getUserMessage(), history, toolResult);
+        String template = required(promptProperties.getComposePromptTemplate(), "prompts.compose-prompt-template");
+        return template.formatted(baseSystem, promptProperties.getFinalAnswer(), composeRules, protectedUserMessage, protectedHistory, toolResult);
     }
 
     private String resolveBaseSystemPrompt() {
@@ -76,5 +43,21 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
             return agentSystem;
         }
         return promptProperties.getSystem();
+    }
+
+    private List<String> recentHistory(List<String> history) {
+        if (history == null || history.isEmpty()) {
+            return List.of();
+        }
+        int maxMessages = 6; // 3 conversation pairs (user/assistant)
+        int fromIndex = Math.max(0, history.size() - maxMessages);
+        return history.subList(fromIndex, history.size());
+    }
+
+    private String required(String value, String key) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required prompt property: " + key);
+        }
+        return value;
     }
 }

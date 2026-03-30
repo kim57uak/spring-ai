@@ -1,7 +1,6 @@
 package com.example.springai.service.parser;
 
 import com.example.springai.model.GeminiResponse;
-import com.example.springai.service.llm.ResponseParser;
 import com.example.springai.service.util.JsonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -16,20 +15,28 @@ import java.util.regex.Pattern;
  * SRP(Single Responsibility Principle) 준수
  */
 @Component
-public class GeminiResponseParser implements ResponseParser {
+public class GeminiResponseParser extends AbstractResponseParser {
 
     private static final Logger logger = LoggerFactory.getLogger(GeminiResponseParser.class);
     private static final Pattern TEXT_PATTERN = Pattern.compile("\"text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
 
-    private final ObjectMapper objectMapper;
-
     public GeminiResponseParser(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        super(objectMapper);
+    }
+
+    @Override
+    protected Logger logger() {
+        return logger;
+    }
+
+    @Override
+    protected String providerName() {
+        return "Gemini";
     }
 
     @Override
     public String extractText(String response) {
-        try {
+        return parseText(() -> {
             GeminiResponse geminiResponse = objectMapper.readValue(response, GeminiResponse.class);
             if (geminiResponse.getCandidates() != null && !geminiResponse.getCandidates().isEmpty()) {
                 GeminiResponse.Candidate candidate = geminiResponse.getCandidates().get(0);
@@ -42,16 +49,13 @@ public class GeminiResponseParser implements ResponseParser {
                     }
                 }
             }
-            throw new IllegalStateException("Failed to parse Gemini response content");
-        } catch (Exception e) {
-            logger.error("Failed to parse Gemini response", e);
-            throw new IllegalStateException("Failed to parse Gemini response", e);
-        }
+            return "";
+        });
     }
 
     @Override
     public String extractStreamText(String chunk) {
-        try {
+        return parseStream(() -> {
             Matcher matcher = TEXT_PATTERN.matcher(chunk);
             StringBuilder parsed = new StringBuilder();
             while (matcher.find()) {
@@ -59,9 +63,6 @@ public class GeminiResponseParser implements ResponseParser {
                 parsed.append(JsonUtils.unescapeJson(text));
             }
             return parsed.toString();
-        } catch (Exception e) {
-            logger.error("Gemini stream parse error", e);
-            return "";
-        }
+        }, "");
     }
 }

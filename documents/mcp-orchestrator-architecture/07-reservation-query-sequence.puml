@@ -1,32 +1,40 @@
 @startuml
 !pragma layout smetana
-title 07. Handoff Sequence (Live Data -> Action)
+title 07. Iterative Handoff Sequence (Plan -> Execute -> Re-plan)
 
 skinparam shadowing false
 
 actor User
 participant "HttpChatController" as Controller
+participant "HttpChatService" as ChatService
 participant "AgentOrchestrator" as Orchestrator
+participant "LangGraph4J CompiledGraph" as StateGraph
 participant "PlanningService" as Planner
 participant "ToolExecutionService" as Executor
-participant "Spring AI Runtime" as Runtime
-participant "Market MCP" as MarketMcp
-participant "Action MCP" as ActionMcp
+participant "MCP Server (Market)" as MarketMcp
+participant "MCP Server (Action)" as ActionMcp
+participant "ResponseComposeService" as Composer
 
-User -> Controller : "현재 지표 확인 후 주문 실행해줘"
-Controller -> Orchestrator : execute(request)
-Orchestrator -> Planner : plan step-1
-Planner -> Runtime : choose live-data-query
-Orchestrator -> Executor : execute market tool
+User -> Controller : "지표 확인 후 실행까지 진행해줘"
+Controller -> ChatService : streamChat(...)
+ChatService -> Orchestrator : execute(request)
+Orchestrator -> StateGraph : invoke(state)
+
+StateGraph -> Planner : plan #1
+StateGraph -> Executor : execute #1
 Executor -> MarketMcp : read market data
 MarketMcp --> Executor : market result
 
-Orchestrator -> Planner : re-plan with market result
-Planner -> Runtime : choose action-execution
-Orchestrator -> Executor : execute action tool
+StateGraph -> Planner : re-plan #2 (with tool result)
+StateGraph -> Executor : execute #2
 Executor -> ActionMcp : submit action
 ActionMcp --> Executor : action result
 
-Controller --> User : composed stream response
+StateGraph --> Orchestrator : context(updated plans/results)
+Orchestrator -> Composer : streamCompose(context)
+Composer --> Orchestrator : response chunks
+Orchestrator --> ChatService : chunks
+ChatService --> Controller : chunks
+Controller --> User : SSE stream
 
 @enduml

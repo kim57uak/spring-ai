@@ -1,33 +1,34 @@
 @startuml
 !pragma layout smetana
-title 17. Technology Options Comparison
+title 17. Technology Options Comparison (Current Context)
 
 skinparam shadowing false
 skinparam defaultTextAlignment center
 
-rectangle "Option A\nSpring AI + LangGraph4J\n(Recommended)" as A
-rectangle "Option B\nSpring AI only\n(custom orchestration)" as B
-rectangle "Option C\nLangChain + LangGraph4J\n(future extension)" as C
+rectangle "Option A\nSpring AI + LangGraph4J + Redis\n(Current/Recommended)" as A
+rectangle "Option B\nSpring AI + custom loop\n(no graph engine)" as B
+rectangle "Option C\nAlternative orchestration stack\n(additional framework)" as C
 
 note bottom of A
-- fits current source best
-- aligns with current build.gradle dependencies
-- supports StateGraph, handoff, checkpoint, Redis persistence
+- already implemented in current source
+- CompiledGraph + Redis checkpoint/store in use
+- MCP integration path is stable
+- lowest migration risk
 end note
 
 note bottom of B
-- possible for simple flow
-- graph complexity grows in code
-- handoff/state resume less structured
+- possible for very simple flows
+- state transitions become implicit in service code
+- checkpoint/handoff logic harder to enforce
 end note
 
 note bottom of C
-- possible extension path
-- not current standard
-- adds extra framework surface
+- possible future path
+- larger framework surface and migration cost
+- needs adapter rewrite for current ports
 end note
 
-A --> B : lower risk
-A --> C : easier migration path
+A --> B : simpler architecture, weaker state guarantees
+A --> C : lower migration effort from current code
 
 @enduml

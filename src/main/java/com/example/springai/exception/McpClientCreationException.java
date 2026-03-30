@@ -1,4 +1,4 @@
-package com.example.springai.mcp.exception;
+package com.example.springai.exception;
 
 /**
  * Exception thrown when MCP client creation fails.

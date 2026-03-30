@@ -50,8 +50,7 @@ public class OpenAiModelChatService extends AbstractLlmChatService {
                 "openai",
                 apiKey,
                 "OPENAI_API_KEY",
-                "HTTP_OPENAI_API_KEY",
-                "OPEN_API_KEY"
+                "HTTP_OPENAI_API_KEY"
         );
     }
 

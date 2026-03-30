@@ -1,6 +1,5 @@
 package com.example.springai.service.parser;
 
-import com.example.springai.service.llm.ResponseParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -12,19 +11,27 @@ import org.springframework.stereotype.Component;
  * SRP(Single Responsibility Principle) 준수
  */
 @Component
-public class OpenAiResponseParser implements ResponseParser {
+public class OpenAiResponseParser extends AbstractResponseParser {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenAiResponseParser.class);
 
-    private final ObjectMapper objectMapper;
-
     public OpenAiResponseParser(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        super(objectMapper);
+    }
+
+    @Override
+    protected Logger logger() {
+        return logger;
+    }
+
+    @Override
+    protected String providerName() {
+        return "OpenAI";
     }
 
     @Override
     public String extractText(String response) {
-        try {
+        return parseText(() -> {
             JsonNode root = objectMapper.readTree(response);
             JsonNode choices = root.path("choices");
             if (choices.isArray() && !choices.isEmpty()) {
@@ -36,16 +43,13 @@ public class OpenAiResponseParser implements ResponseParser {
                     }
                 }
             }
-            throw new IllegalStateException("Failed to parse OpenAI response content");
-        } catch (Exception e) {
-            logger.error("Failed to parse OpenAI response", e);
-            throw new IllegalStateException("Failed to parse OpenAI response", e);
-        }
+            return "";
+        });
     }
 
     @Override
     public String extractStreamText(String chunk) {
-        try {
+        return parseStream(() -> {
             StringBuilder parsed = new StringBuilder();
             String[] lines = chunk.split("\n");
             boolean consumedSse = false;
@@ -71,10 +75,7 @@ public class OpenAiResponseParser implements ResponseParser {
                 parsed.append(extractChunkContent(root));
             }
             return parsed.toString();
-        } catch (Exception e) {
-            logger.error("OpenAI stream parse error: {}", e.getMessage());
-            return "";
-        }
+        }, "");
     }
 
     private String extractChunkContent(JsonNode root) {

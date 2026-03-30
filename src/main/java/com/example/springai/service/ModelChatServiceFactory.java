@@ -3,6 +3,8 @@ package com.example.springai.service;
 import com.example.springai.service.chat.ChatService;
 import com.example.springai.service.chat.StreamChatService;
 import com.example.springai.service.chat.SyncChatService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumMap;
@@ -19,11 +21,20 @@ import java.util.Map;
 @Component
 public class ModelChatServiceFactory {
 
+    private static final Logger logger = LoggerFactory.getLogger(ModelChatServiceFactory.class);
     private final Map<ChatModelType, ChatService> services = new EnumMap<>(ChatModelType.class);
 
     public ModelChatServiceFactory(List<ChatService> chatServices) {
         for (ChatService chatService : chatServices) {
-            services.put(chatService.modelType(), chatService);
+            ChatService previous = services.putIfAbsent(chatService.modelType(), chatService);
+            if (previous != null) {
+                throw new IllegalStateException(
+                        "Duplicate ChatService registration for model: " + chatService.modelType().value()
+                );
+            }
+            logger.debug("Registered ChatService model={}, type={}",
+                    chatService.modelType().value(),
+                    chatService.getClass().getSimpleName());
         }
     }
 
@@ -36,18 +47,18 @@ public class ModelChatServiceFactory {
     }
 
     public SyncChatService resolveSync(ChatModelType modelType) {
-        ChatService service = resolve(modelType);
-        if (!(service instanceof SyncChatService syncService)) {
-            throw new IllegalStateException("Model does not support sync chat: " + modelType.value());
-        }
-        return syncService;
+        return resolveAs(modelType, SyncChatService.class, "sync");
     }
 
     public StreamChatService resolveStream(ChatModelType modelType) {
+        return resolveAs(modelType, StreamChatService.class, "stream");
+    }
+
+    private <T> T resolveAs(ChatModelType modelType, Class<T> expectedType, String mode) {
         ChatService service = resolve(modelType);
-        if (!(service instanceof StreamChatService streamService)) {
-            throw new IllegalStateException("Model does not support stream chat: " + modelType.value());
+        if (!expectedType.isInstance(service)) {
+            throw new IllegalStateException("Model does not support " + mode + " chat: " + modelType.value());
         }
-        return streamService;
+        return expectedType.cast(service);
     }
 }

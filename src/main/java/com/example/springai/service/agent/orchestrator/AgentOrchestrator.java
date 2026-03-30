@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.function.Tuple2;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,7 +52,9 @@ public class AgentOrchestrator {
                         .flatMapMany(context -> {
                             StringBuilder assistantResponse = new StringBuilder();
                             return responseComposeService.streamCompose(context)
-                                    .doOnNext(assistantResponse::append)
+                                    .index()
+                                    .doOnNext(indexedChunk -> appendFinalAnswerOnly(assistantResponse, indexedChunk))
+                                    .map(Tuple2::getT2)
                                     .onErrorResume(error -> Flux.just(humanMessageService.fromException(error)))
                                     .doFinally(signalType -> persist(context, assistantResponse.toString()));
                         })
@@ -74,6 +77,16 @@ public class AgentOrchestrator {
         updated.add("assistant: " + assistantResponse);
         conversationStore.save(context.getSessionId(), updated);
         checkpointStore.saveCheckpoint(context.getSessionId(), "state=COMPLETED;at=" + Instant.now());
+    }
+
+    private void appendFinalAnswerOnly(StringBuilder assistantResponse, Tuple2<Long, String> indexedChunk) {
+        if (indexedChunk.getT1() == 0) {
+            return;
+        }
+        String chunk = indexedChunk.getT2();
+        if (chunk != null) {
+            assistantResponse.append(chunk);
+        }
     }
 
     private PlanningContext invokeGraph(AgentChatRequest request) {

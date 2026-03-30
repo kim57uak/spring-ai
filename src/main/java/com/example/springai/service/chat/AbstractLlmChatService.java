@@ -2,7 +2,7 @@ package com.example.springai.service.chat;
 
 import com.example.springai.service.llm.LlmApiClient;
 import com.example.springai.service.llm.ResponseParser;
-import com.example.springai.service.exception.ChatProcessingException;
+import com.example.springai.exception.ChatProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -53,13 +53,11 @@ public abstract class AbstractLlmChatService implements SyncChatService, StreamC
         return apiClient.streamPost(url, headers, body)
                 .retryWhen(callPolicy.streamRetrySpec(modelType().value()))
                 .map(responseParser::extractStreamText)
-                // .doOnNext(chunk -> logger.info("{} stream chunk: {}", modelType().value(), chunk))
                 .onErrorMap(
                         WebClientResponseException.class,
                         e -> callPolicy.toChatProcessingException(modelType().value(), e)
                 )
-                .onErrorMap(e -> !(e instanceof ChatProcessingException),
-                        e -> new ChatProcessingException("API call failed: " + e.getMessage(), e))
+                .onErrorMap(e -> !(e instanceof ChatProcessingException), this::toUnexpectedChatProcessingException)
                 .doOnError(e -> logger.error("{} stream error", modelType().value(), e));
     }
 
@@ -77,4 +75,8 @@ public abstract class AbstractLlmChatService implements SyncChatService, StreamC
      * 요청 바디 생성 (하위 클래스에서 구현)
      */
     protected abstract String buildRequestBody(String message, boolean streaming);
+
+    private ChatProcessingException toUnexpectedChatProcessingException(Throwable throwable) {
+        return new ChatProcessingException("API call failed: " + throwable.getMessage(), throwable);
+    }
 }
