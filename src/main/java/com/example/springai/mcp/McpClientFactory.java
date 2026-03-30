@@ -1,6 +1,6 @@
 package com.example.springai.mcp;
 
-import com.example.springai.mcp.exception.McpClientCreationException;
+import com.example.springai.exception.McpClientCreationException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;

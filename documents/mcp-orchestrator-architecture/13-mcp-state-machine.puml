@@ -1,26 +1,34 @@
 @startuml
 !pragma layout smetana
-title 13. MCP State Machine
+title 13. MCP State Machine (Current Source)
 
 skinparam shadowing false
 
 [*] --> REQUEST_VALIDATED
 REQUEST_VALIDATED --> HISTORY_LOADED
-HISTORY_LOADED --> STATE_LOADED
-STATE_LOADED --> PLANNED
-PLANNED --> EXECUTING_RESEARCH
-PLANNED --> EXECUTING_MARKET
-PLANNED --> EXECUTING_ACTION
-EXECUTING_RESEARCH --> HANDOFF_REQUIRED
-EXECUTING_MARKET --> HANDOFF_REQUIRED
-EXECUTING_ACTION --> HANDOFF_REQUIRED
-HANDOFF_REQUIRED --> PLANNED : conditional edge
-EXECUTING_RESEARCH --> COMPOSING : no handoff
-EXECUTING_MARKET --> COMPOSING : no handoff
-EXECUTING_ACTION --> COMPOSING : no handoff
-COMPOSING --> PERSISTED
-PERSISTED --> STREAMING
+HISTORY_LOADED --> GRAPH_INVOKED
+GRAPH_INVOKED --> PLANNED
+
+PLANNED --> EXECUTING : planRequired=true
+PLANNED --> COMPOSING : planRequired=false
+
+EXECUTING --> EXECUTING : additional tool plan (max iteration)
+EXECUTING --> COMPOSING : no more executable plan
+
+COMPOSING --> PERSISTING
+PERSISTING --> STREAMING
 STREAMING --> COMPLETED
-HUMAN_MESSAGE --> [*]
+
 COMPLETED --> [*]
+HUMAN_MESSAGE --> [*]
+ERROR --> HUMAN_MESSAGE
+
+note right of EXECUTING
+Tool loop is bounded
+- execute plan
+- append trace
+- re-plan
+- max iterations guard
+end note
+
 @enduml

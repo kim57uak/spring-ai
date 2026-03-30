@@ -1,7 +1,7 @@
-package com.example.springai.controller;
+package com.example.springai.advice;
 
 import com.example.springai.dto.ErrorResponse;
-import com.example.springai.service.exception.ChatProcessingException;
+import com.example.springai.exception.ChatProcessingException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

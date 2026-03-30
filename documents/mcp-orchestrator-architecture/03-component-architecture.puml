@@ -1,89 +1,77 @@
 @startuml
 !pragma layout smetana
-title 03. Agentic MCP Component Architecture
+title 03. Agentic MCP Component Architecture (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
-package "controller" {
+package "entry" {
   [HttpChatController] as Controller
+  [GlobalExceptionHandler] as Advice
 }
 
-package "application/service" {
+package "service" {
+  [HttpChatService] as ChatService
   [AgentOrchestrator] as Orchestrator
-  [LangGraph4J StateGraph] as StateGraph
-  interface "ConversationStore" as ConversationStore
-  interface "GraphCheckpointStore" as GraphCheckpointStore
-  interface "PlanningService" as FunctionPlanningService
-  [FunctionPlanningServiceImpl] as Planner
-  interface "PromptTemplateService" as PromptTemplateService
-  [PromptTemplateServiceImpl] as PromptService
-  interface "ToolExecutionService" as McpFunctionExecutionService
-  [ToolExecutionServiceImpl] as Executor
-  interface "ResponseComposeService" as ResponseComposeService
-  [ResponseComposeServiceImpl] as Composer
+  [LlmCallPolicy] as LlmPolicy
 }
 
-package "runtime" {
+package "agent ports" {
+  interface "PlanningService" as PlanningPort
+  interface "ToolExecutionService" as ExecutePort
+  interface "ResponseComposeService" as ComposePort
+  interface "ConversationStore" as ConversationStorePort
+  interface "GraphCheckpointStore" as CheckpointStorePort
+  interface "AgentStateGraphFactory" as GraphFactoryPort
+}
+
+package "agent impl" {
+  [HeuristicPlanningService] as PlanningImpl
+  [McpToolExecutionService] as ExecuteImpl
+  [LlmResponseComposeService] as ComposeImpl
+  [LangGraphAgentStateGraphFactory] as GraphFactoryImpl
+  [RedisConversationStore] as ConversationStoreImpl
+  [RedisGraphCheckpointStore] as CheckpointStoreImpl
+  [PromptInjectionGuard] as PromptGuard
+  [HumanMessageService] as HumanMessageService
+}
+
+package "runtime/integration" {
   interface "AgentLlmRuntime" as LlmRuntime
+  [DefaultAgentLlmRuntime] as LlmRuntimeImpl
+  [McpClientFactory] as McpFactory
 }
 
-package "store" {
-  [Redis Conversation Store] as ConversationHistoryStore
-  [Redis Checkpoint Store] as GraphStateStore
-}
+Controller --> ChatService
+Advice --> ChatService : error mapping boundary
+ChatService --> Orchestrator
+ChatService --> LlmPolicy
 
-package "mcp" {
-  [McpFunctionRegistry] as Registry
-  [Research Function Group] as SupplyCostGroup
-  [Market Function Group] as ReservationGroup
-  [Action Function Group] as SaleProductGroup
-}
+Orchestrator --> PlanningPort
+Orchestrator --> ExecutePort
+Orchestrator --> ComposePort
+Orchestrator --> ConversationStorePort
+Orchestrator --> CheckpointStorePort
+Orchestrator --> GraphFactoryPort
+Orchestrator --> HumanMessageService
 
-Controller --> Orchestrator
-FunctionPlanningService <|.. Planner
-McpFunctionExecutionService <|.. Executor
-ResponseComposeService <|.. Composer
-Orchestrator --> ConversationStore
-Orchestrator --> GraphCheckpointStore
-Orchestrator --> FunctionPlanningService
-Orchestrator --> PromptTemplateService
-Orchestrator --> McpFunctionExecutionService
-Orchestrator --> ResponseComposeService
-Orchestrator --> StateGraph
-Planner --> LlmRuntime
-Planner --> PromptService
-Composer --> LlmRuntime
-Composer --> PromptService
-Executor --> Registry
-Registry --> SupplyCostGroup
-Registry --> ReservationGroup
-Registry --> SaleProductGroup
-ConversationStore --> ConversationHistoryStore
-GraphCheckpointStore --> GraphStateStore
+PlanningPort <|.. PlanningImpl
+ExecutePort <|.. ExecuteImpl
+ComposePort <|.. ComposeImpl
+GraphFactoryPort <|.. GraphFactoryImpl
+ConversationStorePort <|.. ConversationStoreImpl
+CheckpointStorePort <|.. CheckpointStoreImpl
+
+PlanningImpl --> PromptGuard
+ExecuteImpl --> PromptGuard
+ComposeImpl --> LlmRuntime
+PlanningImpl --> LlmRuntime
+ExecuteImpl --> McpFactory
+LlmRuntime <|.. LlmRuntimeImpl
 
 note right of Orchestrator
-Depends on interfaces only
-- history/checkpoint
-- planning
-- prompt resolution
-- execution
-- composition
-- LangGraph4J StateGraph assembly
-end note
-
-note bottom of Controller
-Spring Boot entry point
-- request binding
-- validation
-- SSE response
-end note
-
-note bottom of Registry
-Tool groups from mcp.servers metadata
-- knowledge-retrieval
-- live-data-query
-- action-execution
+Depends on interfaces first
+and composes end-to-end pipeline.
 end note
 
 @enduml

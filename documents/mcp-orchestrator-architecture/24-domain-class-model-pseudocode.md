@@ -6,7 +6,7 @@
 - 변경 범위는 요구사항 충족에 맞춰 결정한다.
 - 구조 패턴 적용은 강제하지 않는다.
 
-## Request / Response
+## Request Model
 
 ```java
 package com.example.springai.model.agent;
@@ -17,13 +17,6 @@ public record AgentChatRequest(
         @NotBlank String sessionId,
         @NotBlank String message,
         String model
-) {
-}
-
-public record AgentChatChunk(
-        String sessionId,
-        ChunkType type,
-        String content
 ) {
 }
 ```
@@ -40,21 +33,43 @@ public enum ChunkType {
     COMPLETE,
     ERROR
 }
+```
+
+```java
+package com.example.springai.model.agent;
+
+import java.util.Map;
 
 public record ToolPlan(
         String capability,
         String serverName,
         String toolName,
-        String reason
+        String reason,
+        Map<String, Object> arguments,
+        boolean toolRequired
 ) {
+    public static ToolPlan noTool(String reason) {
+        return new ToolPlan("none", "", "", reason, Map.of(), false);
+    }
 }
+```
+
+```java
+package com.example.springai.model.agent;
+
+import java.util.Map;
 
 public record ToolExecutionResult(
         String serverName,
         String toolName,
         String rawPayload,
-        boolean success
+        Map<String, Object> usedArguments,
+        boolean success,
+        boolean executed
 ) {
+    public static ToolExecutionResult skipped() {
+        return new ToolExecutionResult("", "", "", Map.of(), true, false);
+    }
 }
 ```
 
@@ -65,27 +80,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PlanningContext {
-    private String sessionId;
-    private String userMessage;
-    private String currentNode;
-    private String checkpointId;
-    private ToolPlan plan;
-    private ToolExecutionResult executionResult;
-    private final List<String> recentHistory = new ArrayList<>();
-
-    public String getSessionId() { return sessionId; }
-    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
-    public String getUserMessage() { return userMessage; }
-    public void setUserMessage(String userMessage) { this.userMessage = userMessage; }
-    public String getCurrentNode() { return currentNode; }
-    public void setCurrentNode(String currentNode) { this.currentNode = currentNode; }
-    public String getCheckpointId() { return checkpointId; }
-    public void setCheckpointId(String checkpointId) { this.checkpointId = checkpointId; }
-    public ToolPlan getPlan() { return plan; }
-    public void setPlan(ToolPlan plan) { this.plan = plan; }
-    public ToolExecutionResult getExecutionResult() { return executionResult; }
-    public void setExecutionResult(ToolExecutionResult executionResult) { this.executionResult = executionResult; }
-    public List<String> getRecentHistory() { return recentHistory; }
+    private final String sessionId;
+    private final String userMessage;
+    private final String model;
+    private final List<String> history = new ArrayList<>();
+    private String currentNode = "REQUEST_VALIDATED";
+    private String checkpointId = "";
+    private ToolPlan plan = ToolPlan.noTool("initial");
+    private List<ToolPlan> plans = new ArrayList<>(List.of(plan));
+    private final List<String> toolTrace = new ArrayList<>();
+    private ToolExecutionResult executionResult = ToolExecutionResult.skipped();
 }
 ```
 
@@ -96,9 +100,10 @@ package com.example.springai.service.agent.plan;
 
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.model.agent.ToolPlan;
+import java.util.List;
 
 public interface PlanningService {
-    ToolPlan plan(PlanningContext context);
+    List<ToolPlan> plan(PlanningContext context);
 }
 ```
 
@@ -147,19 +152,13 @@ public interface GraphCheckpointStore {
 ```java
 package com.example.springai.service.agent.orchestrator;
 
-import com.example.springai.model.agent.PlanningContext;
-import com.example.springai.service.agent.graph.AgentStateGraphFactory;
+import com.example.springai.model.agent.AgentChatRequest;
 import reactor.core.publisher.Flux;
 
 public class AgentOrchestrator {
-    private final AgentStateGraphFactory graphFactory;
-
-    public AgentOrchestrator(AgentStateGraphFactory graphFactory) {
-        this.graphFactory = graphFactory;
-    }
-
-    public Flux<String> execute(PlanningContext context) {
-        return graphFactory.build().run(context);
+    public Flux<String> execute(AgentChatRequest request) {
+        // validate -> load context -> plan -> execute -> compose -> persist
+        return Flux.empty();
     }
 }
 ```

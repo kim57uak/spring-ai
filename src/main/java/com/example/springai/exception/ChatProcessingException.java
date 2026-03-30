@@ -1,6 +1,10 @@
-package com.example.springai.service.exception;
+package com.example.springai.exception;
 
 public class ChatProcessingException extends RuntimeException {
+
+    public ChatProcessingException(String message) {
+        super(message);
+    }
 
     public ChatProcessingException(String message, Throwable cause) {
         super(message, cause);

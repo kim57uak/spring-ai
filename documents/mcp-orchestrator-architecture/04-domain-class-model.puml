@@ -1,86 +1,117 @@
 @startuml
 !pragma layout smetana
-title 04. Agentic Domain and Contract Class Model
+title 04. Agentic Domain and Contract Class Model (Current Source)
 
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 
-class ChatRequest {
+class AgentChatRequest {
   +sessionId: String
   +message: String
   +model: String
 }
 
-class ChatChunk {
+class PlanningContext {
   +sessionId: String
-  +type: ChunkType
-  +content: String
+  +userMessage: String
+  +model: String
+  +history: List<String>
+  +currentNode: String
+  +checkpointId: String
+  +plan: ToolPlan
+  +plans: List<ToolPlan>
+  +toolTrace: List<String>
+  +executionResult: ToolExecutionResult
+}
+
+class AgentGraphState {
+  +SESSION_ID
+  +USER_MESSAGE
+  +MODEL
+  +HISTORY
+  +CURRENT_NODE
+  +PLAN_*
+  +EXEC_*
 }
 
 enum ChunkType {
   TOKEN
   TOOL_RESULT
-  HANDOFF
   HUMAN_MESSAGE
   COMPLETE
   ERROR
 }
 
-class PlanningContext {
-  +sessionId: String
-  +history: List<String>
-  +currentNode: String
-  +plan: ToolPlan
-  +checkpointId: String
+class ToolPlan {
+  +capability: String
+  +serverName: String
+  +toolName: String
+  +reason: String
+  +arguments: Map<String, Object>
+  +toolRequired: boolean
+}
+
+class ToolExecutionResult {
+  +serverName: String
+  +toolName: String
+  +rawPayload: String
+  +usedArguments: Map<String, Object>
+  +success: boolean
+  +executed: boolean
 }
 
 interface ConversationStore {
-  +load(sessionId)
-  +save(sessionId, history)
+  +load(sessionId): List<String>
+  +save(sessionId, history): void
+  +clear(sessionId): void
 }
 
 interface GraphCheckpointStore {
-  +loadCheckpoint(sessionId)
-  +saveCheckpoint(sessionId, checkpoint)
+  +loadCheckpoint(sessionId): Optional<String>
+  +saveCheckpoint(sessionId, checkpoint): void
+  +clear(sessionId): void
 }
 
 interface PlanningService {
-  +plan(request, context)
+  +plan(context): List<ToolPlan>
 }
 
 interface ToolExecutionService {
-  +execute(plan, context)
+  +execute(plan, context): ToolExecutionResult
 }
 
 interface ResponseComposeService {
-  +compose(result, context)
+  +streamCompose(context): Flux<String>
 }
 
-class ConversationStoreImpl
-class GraphCheckpointStoreImpl
-class PlanningServiceImpl
-class ToolExecutionServiceImpl
-class ResponseComposeServiceImpl
+interface AgentStateGraphFactory {
+  +getCompiledGraph(): CompiledGraph<AgentGraphState>
+}
 
-ConversationStore <|.. ConversationStoreImpl
-GraphCheckpointStore <|.. GraphCheckpointStoreImpl
-PlanningService <|.. PlanningServiceImpl
-ToolExecutionService <|.. ToolExecutionServiceImpl
-ResponseComposeService <|.. ResponseComposeServiceImpl
+class RedisConversationStore
+class RedisGraphCheckpointStore
+class HeuristicPlanningService
+class McpToolExecutionService
+class LlmResponseComposeService
+class LangGraphAgentStateGraphFactory
 
-ChatRequest --> PlanningContext
-PlanningContext --> ChatChunk
-PlanningService --> PlanningContext
-ToolExecutionService --> PlanningContext
-ResponseComposeService --> PlanningContext
+ConversationStore <|.. RedisConversationStore
+GraphCheckpointStore <|.. RedisGraphCheckpointStore
+PlanningService <|.. HeuristicPlanningService
+ToolExecutionService <|.. McpToolExecutionService
+ResponseComposeService <|.. LlmResponseComposeService
+AgentStateGraphFactory <|.. LangGraphAgentStateGraphFactory
+
+AgentChatRequest --> PlanningContext
+PlanningContext --> ToolPlan
+PlanningContext --> ToolExecutionResult
+AgentGraphState --> PlanningContext
 
 note bottom of PlanningContext
 Shared orchestration state
-- request
-- recent history
-- graph node
-- tool handoff trace
-- LangGraph4J checkpoint metadata
+- request/session/model
+- plan list and execution trace
+- graph progression metadata
 end note
 
 @enduml

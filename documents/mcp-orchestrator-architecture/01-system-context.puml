@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 01. Agentic AI System Context (As-Is + To-Be)
+title 01. Agentic AI System Context (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -12,20 +12,21 @@ rectangle "Client Channel" {
 }
 
 rectangle "spring-ai application" {
-  [HttpChatController] as HttpChatController
-  [HttpChatService] as HttpChatService
-  [AgentOrchestrator] as AgentOrchestrator
-  [LangGraph4J StateGraph] as LangGraph4JStateGraph
+  [HttpChatController] as Controller
+  [GlobalExceptionHandler] as Advice
+  [HttpChatService] as ChatService
+  [AgentOrchestrator] as Orchestrator
+  [LangGraph4J CompiledGraph] as StateGraph
   [PlanningService] as PlanningService
   [ToolExecutionService] as ToolExecutionService
   [ResponseComposeService] as ResponseComposeService
   [McpClientFactory] as McpClientFactory
+  [LlmCallPolicy] as LlmPolicy
 }
 
 database "Redis" as Redis {
-  [Conversation History Store] as ConversationHistoryRedis
-  [Graph State Store] as GraphStateRedis
-  [Checkpoint Store] as CheckpointRedis
+  [Conversation Store] as ConversationStore
+  [Graph Checkpoint Store] as CheckpointStore
 }
 
 cloud "LLM Provider" {
@@ -33,49 +34,41 @@ cloud "LLM Provider" {
 }
 
 node "MCP Servers" {
-  [Research MCP] as ResearchMcp
-  [Market MCP] as MarketMcp
+  [MCP Server A] as McpA
+  [MCP Server B] as McpB
 }
 
 User --> WebUi
-WebUi --> HttpChatController : Entry
-HttpChatController --> HttpChatService
-HttpChatController --> AgentOrchestrator : Agentic flow
-AgentOrchestrator --> LangGraph4JStateGraph
-AgentOrchestrator --> PlanningService
-AgentOrchestrator --> ToolExecutionService
-AgentOrchestrator --> ResponseComposeService
-AgentOrchestrator --> ConversationHistoryRedis
-AgentOrchestrator --> GraphStateRedis
-AgentOrchestrator --> CheckpointRedis
+WebUi --> Controller : /api/http-chat, /stream
+Controller --> ChatService
+Controller --> Advice : exception mapped to ErrorResponse
+ChatService --> Orchestrator
+ChatService --> LlmPolicy
+Orchestrator --> StateGraph
+Orchestrator --> PlanningService
+Orchestrator --> ToolExecutionService
+Orchestrator --> ResponseComposeService
+Orchestrator --> ConversationStore
+Orchestrator --> CheckpointStore
 PlanningService --> SpringAiRuntime
 ResponseComposeService --> SpringAiRuntime
 ToolExecutionService --> McpClientFactory
-McpClientFactory --> ResearchMcp
-McpClientFactory --> MarketMcp
+McpClientFactory --> McpA
+McpClientFactory --> McpB
 
-note right of AgentOrchestrator
-LangGraph4J StateGraph flow
-- planning
-- tool routing
-- handoff via conditional edge
-- checkpoint resume
-- response synthesis
+note right of Orchestrator
+Graph flow
+- load history/checkpoint
+- plan
+- execute (optional, iterative)
+- compose stream
+- persist
 end note
 
 note bottom of Redis
-Default backing store
+Externalized state
 - conversation history
-- graph state
-- checkpoint
-end note
-
-note right of LangGraph4JStateGraph
-Required orchestration engine
-- planning
-- tool routing
-- handoff
-- checkpoint resume
+- graph checkpoint
 end note
 
 @enduml

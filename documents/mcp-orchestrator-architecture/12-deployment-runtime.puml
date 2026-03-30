@@ -1,61 +1,63 @@
 @startuml
 !pragma layout smetana
-title 12. Deployment Runtime
+title 12. Deployment Runtime (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
-node "App Runtime" {
-  [HttpChatController] as LegacyController
-  [HttpChatService] as LegacyService
+node "Spring Boot App Runtime" {
   [HttpChatController] as Controller
+  [GlobalExceptionHandler] as Advice
+  [HttpChatService] as ChatService
   [AgentOrchestrator] as Orchestrator
-  [AgentStateGraphFactory] as GraphFactory
-  [LangGraph4J StateGraph] as StateGraph
-  [Spring AI Agent Runtime] as PlanningChatRuntime
+  [LangGraphAgentStateGraphFactory] as GraphFactory
+  [LangGraph4J CompiledGraph] as CompiledGraph
+  [HeuristicPlanningService] as PlanningService
+  [McpToolExecutionService] as ToolExecutionService
+  [LlmResponseComposeService] as ComposeService
   [McpClientFactory] as McpClientFactory
+  [LlmCallPolicy] as LlmPolicy
 }
 
-database "Redis" as RedisB
-component "Conversation Store Adapter" as SpringAiMemoryStore
-component "LangGraph4J Checkpoint Store Adapter" as LangGraphCheckpointStore
-cloud "Spring AI Provider" as Provider
-node "MCP Servers" as McpServers {
-  [Research MCP] as SupplyCost
-  [Market MCP] as Reservation
-  [Action MCP] as SaleProduct
+database "Redis" as Redis {
+  [RedisConversationStore] as ConversationStore
+  [RedisGraphCheckpointStore] as CheckpointStore
 }
 
-LegacyController --> LegacyService
-Controller --> Orchestrator
+cloud "LLM Provider APIs" as Providers
+
+node "MCP Server Processes" as McpServers {
+  [MCP Process 1] as Mcp1
+  [MCP Process 2] as Mcp2
+}
+
+Controller --> ChatService
+Controller --> Advice
+ChatService --> Orchestrator
+ChatService --> LlmPolicy
 Orchestrator --> GraphFactory
-GraphFactory --> StateGraph
-StateGraph --> RedisB : default state/history store
-StateGraph --> LangGraphCheckpointStore : checkpoint implementation
-Orchestrator --> PlanningChatRuntime
-Orchestrator --> McpClientFactory
-McpClientFactory --> SupplyCost
-McpClientFactory --> Reservation
-McpClientFactory --> SaleProduct
-Orchestrator --> RedisB : default history/state store
-Orchestrator --> SpringAiMemoryStore : history store
-PlanningChatRuntime --> Provider
+GraphFactory --> CompiledGraph
+Orchestrator --> PlanningService
+Orchestrator --> ToolExecutionService
+Orchestrator --> ComposeService
+Orchestrator --> ConversationStore
+Orchestrator --> CheckpointStore
+PlanningService --> Providers
+ComposeService --> Providers
+ToolExecutionService --> McpClientFactory
+McpClientFactory --> Mcp1
+McpClientFactory --> Mcp2
 
-note bottom of RedisB
-conversation history + graph state + checkpoint
+note bottom of Redis
+State persistence
+- conversation messages
+- graph checkpoint
+TTL-based cleanup
 end note
 
-note bottom of SpringAiMemoryStore
-ConversationStore implementation
-end note
-
-note bottom of StateGraph
-LangGraph4J is required
-StateGraph handles planning and checkpoint
-end note
-
-note bottom of LangGraphCheckpointStore
-GraphCheckpointStore implementation
+note bottom of McpServers
+Managed by ProcessManager
+and isolated per server config.
 end note
 
 @enduml

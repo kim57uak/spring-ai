@@ -7,7 +7,8 @@
 ## Decision Context (Current Source)
 
 - 현재 소스의 진입점은 `HttpChatController`, 핵심 조율은 `HttpChatService`다.
-- 메모리는 `SessionMemoryManager` 기반 인메모리 구조다.
+- 세션 상태는 `ConversationStore`/`GraphCheckpointStore` 포트를 통해 Redis 구현체로 외부화되어 있다.
+- 예외 처리는 `advice.GlobalExceptionHandler`와 `exception.*` 계층으로 분리되어 있다.
 - MCP 호출은 `McpClientFactory`/`ProcessManager`/`StdioMcpClient`로 이미 분리되어 있다.
 - `build.gradle`에 `spring-ai`와 `langgraph4j` 의존성이 이미 포함되어 있다.
 
@@ -31,6 +32,6 @@
 
 ## Scope
 
-- As-Is: 현재 `http-chat + mcp.*` 소스 유지
-- To-Be: Agentic orchestration 계층 신규 추가
+- As-Is: `http-chat + agent + mcp` 통합 구조 운영
+- To-Be: agent 계층 고도화(관찰성/승인노드/재시도 전략)
 - 필수 구성요소: `Spring AI`, `LangGraph4j`, `Redis`

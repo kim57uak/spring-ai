@@ -1,7 +1,7 @@
 package com.example.springai.mcp;
 
 import com.example.springai.config.McpProperties;
-import com.example.springai.mcp.exception.McpValidationException;
+import com.example.springai.exception.McpValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

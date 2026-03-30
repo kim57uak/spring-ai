@@ -1,42 +1,37 @@
 @startuml
 !pragma layout smetana
-title 05. LangGraph4J Orchestration
+title 05. LangGraph4J Orchestration (Current Runtime)
 
 skinparam shadowing false
 
 start
 
-:Request Validate Node;
-:History Load Node;
-:Checkpoint State Load Node;
-:Plan Node;
+:Request validated (outside graph);
+:History/checkpoint loaded (outside graph);
+:Build AgentGraphState;
+:Invoke CompiledGraph;
 
-if (Capability?) then (knowledge-retrieval)
-  :Research Execute Node;
-elseif (live-data-query)
-  :Market Execute Node;
-else (action-execution)
-  :Action Execute Node;
+:PLAN node;
+if (PLAN_REQUIRED?) then (yes)
+  :EXECUTE node;
+  if (more executable plans?) then (yes)
+    :re-plan inside execute loop;
+  endif
+else (no)
 endif
 
-if (Need Handoff?) then (yes)
-  :Handoff Node;
-  :Plan Node;
-endif
-
-:Compose Node;
-:History Persist Node;
-:Checkpoint State Persist Node;
-:Streaming Emit Node;
+:COMPOSE node;
+:Return PlanningContext;
+:ResponseComposeService stream;
+:Persist history/checkpoint;
 
 note right
-LangGraph4J mapping
-- StateGraph<PlanningContext>
-- conditional edges
-- checkpoint persistence
-- LangGraph4J is required
-- default backing store is Redis
-- checkpoint store is required as part of the graph runtime
+Graph implementation
+- StateGraph<AgentGraphState>
+- nodes: plan, execute, compose
+- edges: START->plan, plan->(execute|compose),
+         execute->compose, compose->END
+- checkpoint id is injected through RunnableConfig
 end note
 
 stop

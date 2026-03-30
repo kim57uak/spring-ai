@@ -7,10 +7,13 @@ public class PromptProperties {
     
     private String system = "";
     private String agentSystem = "";
-    private String toolDecision = "";
     private String toolChoice = "";
     private String finalAnswer = "";
-    private String contextAware = "";
+    private String composeRules = "";
+    private String composePromptTemplate = "";
+    private String toolPlanningPromptTemplate = "";
+    private String plannerRepairPromptTemplate = "";
+    private String dateHintsTemplate = "";
     
     public String getSystem() {
         return system;
@@ -28,14 +31,6 @@ public class PromptProperties {
         this.agentSystem = agentSystem;
     }
     
-    public String getToolDecision() {
-        return toolDecision;
-    }
-    
-    public void setToolDecision(String toolDecision) {
-        this.toolDecision = toolDecision;
-    }
-    
     public String getToolChoice() {
         return toolChoice;
     }
@@ -51,12 +46,44 @@ public class PromptProperties {
     public void setFinalAnswer(String finalAnswer) {
         this.finalAnswer = finalAnswer;
     }
-    
-    public String getContextAware() {
-        return contextAware;
+
+    public String getComposeRules() {
+        return composeRules;
     }
-    
-    public void setContextAware(String contextAware) {
-        this.contextAware = contextAware;
+
+    public void setComposeRules(String composeRules) {
+        this.composeRules = composeRules;
+    }
+
+    public String getComposePromptTemplate() {
+        return composePromptTemplate;
+    }
+
+    public void setComposePromptTemplate(String composePromptTemplate) {
+        this.composePromptTemplate = composePromptTemplate;
+    }
+
+    public String getToolPlanningPromptTemplate() {
+        return toolPlanningPromptTemplate;
+    }
+
+    public void setToolPlanningPromptTemplate(String toolPlanningPromptTemplate) {
+        this.toolPlanningPromptTemplate = toolPlanningPromptTemplate;
+    }
+
+    public String getPlannerRepairPromptTemplate() {
+        return plannerRepairPromptTemplate;
+    }
+
+    public void setPlannerRepairPromptTemplate(String plannerRepairPromptTemplate) {
+        this.plannerRepairPromptTemplate = plannerRepairPromptTemplate;
+    }
+
+    public String getDateHintsTemplate() {
+        return dateHintsTemplate;
+    }
+
+    public void setDateHintsTemplate(String dateHintsTemplate) {
+        this.dateHintsTemplate = dateHintsTemplate;
     }
 }

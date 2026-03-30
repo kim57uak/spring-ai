@@ -1,7 +1,6 @@
 package com.example.springai.service.parser;
 
 import com.example.springai.model.MistralResponse;
-import com.example.springai.service.llm.ResponseParser;
 import com.example.springai.service.util.JsonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -16,20 +15,28 @@ import java.util.regex.Pattern;
  * SRP(Single Responsibility Principle) 준수
  */
 @Component
-public class MistralResponseParser implements ResponseParser {
+public class MistralResponseParser extends AbstractResponseParser {
 
     private static final Logger logger = LoggerFactory.getLogger(MistralResponseParser.class);
     private static final Pattern CONTENT_PATTERN = Pattern.compile("\"content\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
 
-    private final ObjectMapper objectMapper;
-
     public MistralResponseParser(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        super(objectMapper);
+    }
+
+    @Override
+    protected Logger logger() {
+        return logger;
+    }
+
+    @Override
+    protected String providerName() {
+        return "Mistral";
     }
 
     @Override
     public String extractText(String response) {
-        try {
+        return parseText(() -> {
             MistralResponse mistralResponse = objectMapper.readValue(response, MistralResponse.class);
             if (mistralResponse.getChoices() != null && !mistralResponse.getChoices().isEmpty()) {
                 MistralResponse.Choice choice = mistralResponse.getChoices().get(0);
@@ -38,16 +45,13 @@ public class MistralResponseParser implements ResponseParser {
                     return choice.getMessage().getContent();
                 }
             }
-            throw new IllegalStateException("Failed to parse Mistral response content");
-        } catch (Exception e) {
-            logger.error("Failed to parse Mistral response", e);
-            throw new IllegalStateException("Failed to parse Mistral response", e);
-        }
+            return "";
+        });
     }
 
     @Override
     public String extractStreamText(String chunk) {
-        try {
+        return parseStream(() -> {
             Matcher matcher = CONTENT_PATTERN.matcher(chunk);
             StringBuilder parsed = new StringBuilder();
             while (matcher.find()) {
@@ -64,9 +68,6 @@ public class MistralResponseParser implements ResponseParser {
                 return chunk;
             }
             return "";
-        } catch (Exception e) {
-            logger.error("Mistral stream parse error", e);
-            return chunk;
-        }
+        }, chunk == null ? "" : chunk);
     }
 }

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @Component
 public class RedisGraphCheckpointStore implements GraphCheckpointStore {
@@ -24,33 +25,42 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
     @Override
     public Optional<String> loadCheckpoint(String sessionId) {
-        try {
-            return Optional.ofNullable(redisTemplate.opsForValue().get(key(sessionId)));
-        } catch (Exception e) {
-            logger.warn("Failed to load checkpoint from Redis for session {}: {}", sessionId, e.getMessage());
-            return Optional.empty();
-        }
+        return runOrDefault(
+                () -> Optional.ofNullable(redisTemplate.opsForValue().get(key(sessionId))),
+                Optional.empty(),
+                "load checkpoint",
+                sessionId
+        );
     }
 
     @Override
     public void saveCheckpoint(String sessionId, String payload) {
-        try {
-            redisTemplate.opsForValue().set(key(sessionId), payload, TTL);
-        } catch (Exception e) {
-            logger.warn("Failed to save checkpoint to Redis for session {}: {}", sessionId, e.getMessage());
-        }
+        runSafely(() -> redisTemplate.opsForValue().set(key(sessionId), payload, TTL), "save checkpoint", sessionId);
     }
 
     @Override
     public void clear(String sessionId) {
-        try {
-            redisTemplate.delete(key(sessionId));
-        } catch (Exception e) {
-            logger.warn("Failed to clear checkpoint from Redis for session {}: {}", sessionId, e.getMessage());
-        }
+        runSafely(() -> redisTemplate.delete(key(sessionId)), "clear checkpoint", sessionId);
     }
 
     private String key(String sessionId) {
         return KEY_PREFIX + sessionId;
+    }
+
+    private <T> T runOrDefault(Supplier<T> action, T defaultValue, String actionName, String sessionId) {
+        try {
+            return action.get();
+        } catch (Exception e) {
+            logger.warn("Failed to {} in Redis for session {}: {}", actionName, sessionId, e.getMessage());
+            return defaultValue;
+        }
+    }
+
+    private void runSafely(Runnable action, String actionName, String sessionId) {
+        try {
+            action.run();
+        } catch (Exception e) {
+            logger.warn("Failed to {} in Redis for session {}: {}", actionName, sessionId, e.getMessage());
+        }
     }
 }

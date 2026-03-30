@@ -1,49 +1,51 @@
 @startuml
 !pragma layout smetana
-title 11. Security Model
+title 11. Security Model (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
-rectangle "Security Flow" {
-  [AuthService] as AuthFilter
-  [Auth Session Redis] as AuthStore
-  [HumanMessageService] as HumanMessageService
-  [AuditLogger] as AuditLogger
+rectangle "Input/Prompt Security" {
+  [HttpChatController] as Controller
+  [PromptInjectionGuard] as PromptGuard
+  [HumanMessageService] as HumanMsg
 }
 
-AuthFilter --> AuthStore
-AuthFilter --> HumanMessageService
-AuthFilter --> AuditLogger
+rectangle "Tool Call Security" {
+  [McpToolExecutionService] as ToolExec
+  [McpProperties allowlist] as AllowList
+  [URL/Host Validator] as UrlValidator
+}
 
-note right of AuthFilter
-Validate by
-- sessionId
-- ttl/expiry
-- scope/role
-- required request fields
+rectangle "Error Safety" {
+  [GlobalExceptionHandler] as ErrorHandler
+  [ChatProcessingException] as ChatException
+}
+
+Controller --> PromptGuard : sanitize user/tool text
+ToolExec --> AllowList : server/tool allow check
+ToolExec --> UrlValidator : block localhost/internal/private host
+ToolExec --> HumanMsg : fallback message path
+ErrorHandler --> ChatException : map to safe ErrorResponse
+
+note right of PromptGuard
+Protect against prompt injection attempts
+- sanitize user input
+- sanitize tool raw payload
 end note
 
-note bottom of HumanMessageService
-Return HUMAN_MESSAGE on
-- session not found
-- expired session
-- permission denied
+note right of ToolExec
+SSRF guardrails
+- http/https only
+- block localhost/internal domains
+- block private/loopback/link-local IP
 end note
 
-note bottom of AuditLogger
-Do not log
-- token
-- raw prompt secrets
-- internal redis keys
-- full mcp payload
-end note
-
-note left of AuthStore
-Security rules
-- least privilege access
-- ttl validation
-- key prefix isolation
+note bottom of ErrorHandler
+Do not expose internal details
+- stack trace
+- secrets/token
+- raw MCP payload
 end note
 
 @enduml

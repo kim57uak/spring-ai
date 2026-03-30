@@ -1,6 +1,6 @@
 package com.example.springai.service.chat;
 
-import com.example.springai.service.exception.ChatProcessingException;
+import com.example.springai.exception.ChatProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
@@ -13,6 +13,8 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
@@ -23,6 +25,19 @@ import java.util.function.Supplier;
 public class LlmCallPolicy {
 
     private static final Logger logger = LoggerFactory.getLogger(LlmCallPolicy.class);
+    private static final int STATUS_TOO_MANY_REQUESTS = 429;
+    private static final int STATUS_UNAUTHORIZED = 401;
+    private static final long MAX_BACKOFF_SHIFT = 20L;
+    private static final long JITTER_MIN_MS = 100L;
+    private static final long JITTER_MAX_EXCLUSIVE_MS = 401L;
+    private static final String DEFAULT_MODEL_NAME = "llm";
+    private static final String DEFAULT_AUTH_GUIDANCE = "Verify API key and model access permissions.";
+    private static final Map<String, String> AUTH_GUIDANCE_BY_MODEL = Map.of(
+            "openai", "Verify OPENAI_API_KEY (or HTTP_OPENAI_API_KEY) and model access.",
+            "gemini", "Verify HTTP_GEMINI_API_KEY and model access.",
+            "mistral", "Verify MISTRAL_API_KEY and model access.",
+            "gemma", "Verify GEMMA_API_KEY (or HTTP_GEMINI_API_KEY) and model access."
+    );
 
     private final LlmRequestRateLimiter rateLimiter;
 
@@ -52,7 +67,7 @@ public class LlmCallPolicy {
                 throw new ChatProcessingException("API call failed: " + e.getMessage(), e);
             }
         }
-        throw new ChatProcessingException("API call failed after retry exhaustion", null);
+        throw new ChatProcessingException("API call failed after retry exhaustion");
     }
 
     public Retry streamRetrySpec(String modelName) {
@@ -77,19 +92,13 @@ public class LlmCallPolicy {
     }
 
     public ChatProcessingException toChatProcessingException(WebClientResponseException exception) {
-        return toChatProcessingException("llm", exception);
+        return toChatProcessingException(DEFAULT_MODEL_NAME, exception);
     }
 
     public ChatProcessingException toChatProcessingException(String modelName, WebClientResponseException exception) {
-        String normalizedModelName = (modelName == null || modelName.isBlank()) ? "llm" : modelName;
-        if (exception.getStatusCode().value() == 401) {
-            String guidance = switch (normalizedModelName.toLowerCase()) {
-                case "openai" -> "Verify OPENAI_API_KEY (or HTTP_OPENAI_API_KEY / OPEN_API_KEY) and model access.";
-                case "gemini" -> "Verify HTTP_GEMINI_API_KEY and model access.";
-                case "mistral" -> "Verify MISTRAL_API_KEY and model access.";
-                case "gemma" -> "Verify GEMMA_API_KEY (or HTTP_GEMINI_API_KEY) and model access.";
-                default -> "Verify API key and model access permissions.";
-            };
+        String normalizedModelName = normalizeModelName(modelName);
+        if (exception.getStatusCode().value() == STATUS_UNAUTHORIZED) {
+            String guidance = authGuidanceFor(normalizedModelName);
             return new ChatProcessingException(
                     String.format("%s API authentication failed: 401 Unauthorized. %s", normalizedModelName, guidance),
                     exception
@@ -104,7 +113,7 @@ public class LlmCallPolicy {
     private boolean isRetriableError(Throwable throwable) {
         if (throwable instanceof WebClientResponseException webClientException) {
             HttpStatusCode statusCode = webClientException.getStatusCode();
-            return statusCode.value() == 429 || statusCode.is5xxServerError();
+            return statusCode.value() == STATUS_TOO_MANY_REQUESTS || statusCode.is5xxServerError();
         }
         return false;
     }
@@ -117,9 +126,9 @@ public class LlmCallPolicy {
             }
         }
 
-        long multiplier = 1L << Math.min(retryCount, 20L);
+        long multiplier = 1L << Math.min(retryCount, MAX_BACKOFF_SHIFT);
         long delayMs = rateLimiter.initialBackoffMs() * multiplier;
-        long jitterMs = ThreadLocalRandom.current().nextLong(100L, 401L);
+        long jitterMs = ThreadLocalRandom.current().nextLong(JITTER_MIN_MS, JITTER_MAX_EXCLUSIVE_MS);
         return clampDelay(Duration.ofMillis(delayMs + jitterMs));
     }
 
@@ -150,5 +159,19 @@ public class LlmCallPolicy {
             logger.debug("Unable to parse Retry-After header: {}", raw);
             return null;
         }
+    }
+
+    private String normalizeModelName(String modelName) {
+        if (modelName == null || modelName.isBlank()) {
+            return DEFAULT_MODEL_NAME;
+        }
+        return modelName.trim();
+    }
+
+    private String authGuidanceFor(String normalizedModelName) {
+        return AUTH_GUIDANCE_BY_MODEL.getOrDefault(
+                normalizedModelName.toLowerCase(Locale.ROOT),
+                DEFAULT_AUTH_GUIDANCE
+        );
     }
 }
