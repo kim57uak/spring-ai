@@ -5,8 +5,6 @@ import com.example.springai.service.agent.orchestrator.AgentOrchestrator;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.time.Duration;
-
 /**
  * HTTP 기반 채팅 서비스 - 세션 관리 및 LLM 서비스 조율
  * SOLID 원칙 준수:
@@ -16,20 +14,10 @@ import java.time.Duration;
  */
 @Service
 public class HttpChatService {
-
-    private static final Duration CHAT_TIMEOUT = Duration.ofMinutes(2);
     private final AgentOrchestrator agentOrchestrator;
 
     public HttpChatService(AgentOrchestrator agentOrchestrator) {
         this.agentOrchestrator = agentOrchestrator;
-    }
-
-    public String chat(String sessionId, String message, String modelType) {
-        String response = streamChat(sessionId, message, modelType)
-                .collectList()
-                .map(chunks -> String.join("", chunks))
-                .block(CHAT_TIMEOUT);
-        return response == null ? "" : response;
     }
 
     public Flux<String> streamChat(String sessionId, String message, String modelType) {

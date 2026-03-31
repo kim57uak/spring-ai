@@ -15,6 +15,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple2;
+import reactor.util.function.Tuples;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -53,9 +54,9 @@ public class AgentOrchestrator {
                             StringBuilder assistantResponse = new StringBuilder();
                             return responseComposeService.streamCompose(context)
                                     .index()
+                                    .onErrorResume(error -> Flux.just(Tuples.of(1L, humanMessageService.fromException(error))))
                                     .doOnNext(indexedChunk -> appendFinalAnswerOnly(assistantResponse, indexedChunk))
                                     .map(Tuple2::getT2)
-                                    .onErrorResume(error -> Flux.just(humanMessageService.fromException(error)))
                                     .doFinally(signalType -> persist(context, assistantResponse.toString()));
                         })
                         .onErrorResume(error -> Flux.just(humanMessageService.fromException(error)))

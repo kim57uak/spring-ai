@@ -20,16 +20,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Component
 public class HeuristicPlanningService implements PlanningService {
 
     private static final Logger logger = LoggerFactory.getLogger(HeuristicPlanningService.class);
     private static final String OUTPUT_COMPLETE = "COMPLETE";
+    private static final Duration TOOL_SCHEMA_CACHE_TTL = Duration.ofMinutes(5);
 
     private final McpProperties mcpProperties;
     private final PromptProperties promptProperties;
@@ -37,6 +41,7 @@ public class HeuristicPlanningService implements PlanningService {
     private final AgentLlmRuntime llmRuntime;
     private final PromptInjectionGuard promptInjectionGuard;
     private final ObjectMapper objectMapper;
+    private final ConcurrentMap<String, CachedToolSchema> toolSchemaCache = new ConcurrentHashMap<>();
 
     public HeuristicPlanningService(
             McpProperties mcpProperties,
@@ -198,28 +203,44 @@ public class HeuristicPlanningService implements PlanningService {
     }
 
     private List<Map<String, Object>> loadToolsFromRuntime(String serverName) {
+        CachedToolSchema cached = toolSchemaCache.get(serverName);
+        long now = System.currentTimeMillis();
+        if (cached != null && !cached.isExpired(now)) {
+            return cached.tools();
+        }
+
         try {
-            McpClient client = mcpClientFactory.createClient(serverName);
-            if (!(client instanceof StdioMcpClient stdio)) {
-                return List.of();
-            }
-            Object rawTools = stdio.getToolsSchema().get("tools");
-            if (!(rawTools instanceof List<?> list)) {
-                return List.of();
-            }
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (Object item : list) {
-                if (item instanceof Map<?, ?> map) {
-                    Map<String, Object> converted = new LinkedHashMap<>();
-                    map.forEach((k, v) -> converted.put(String.valueOf(k), v));
-                    result.add(converted);
-                }
-            }
-            return result;
+            List<Map<String, Object>> freshTools = readTools(serverName);
+            toolSchemaCache.put(serverName, new CachedToolSchema(freshTools, now + TOOL_SCHEMA_CACHE_TTL.toMillis()));
+            return freshTools;
         } catch (Exception e) {
-            logger.warn("Failed to load MCP tools from server={}: {}", serverName, e.getMessage());
+            logger.warn("Failed to refresh MCP tools from server={}: {}", serverName, e.getMessage());
+            if (cached != null) {
+                logger.info("Using stale MCP tools cache for server={}", serverName);
+                return cached.tools();
+            }
             return List.of();
         }
+    }
+
+    private List<Map<String, Object>> readTools(String serverName) {
+        McpClient client = mcpClientFactory.createClient(serverName);
+        if (!(client instanceof StdioMcpClient stdio)) {
+            return List.of();
+        }
+        Object rawTools = stdio.getToolsSchema().get("tools");
+        if (!(rawTools instanceof List<?> list)) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Map<String, Object> converted = new LinkedHashMap<>();
+                map.forEach((k, v) -> converted.put(String.valueOf(k), v));
+                result.add(converted);
+            }
+        }
+        return result;
     }
 
     private String stringValue(Object raw) {
@@ -324,4 +345,14 @@ public class HeuristicPlanningService implements PlanningService {
             String reason,
             Map<String, Object> arguments
     ) {}
+
+    private record CachedToolSchema(List<Map<String, Object>> tools, long expiresAtMs) {
+        private CachedToolSchema {
+            tools = List.copyOf(tools);
+        }
+
+        private boolean isExpired(long nowMs) {
+            return nowMs >= expiresAtMs;
+        }
+    }
 }
