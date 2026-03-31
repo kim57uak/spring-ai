@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat Assistant</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <style>
+        :root {
+            /* Monochrome (v8) - Soft Black/Gray */
+            --bg-primary: #18181b;      /* Zinc-900 */
+            --bg-secondary: #27272a;    /* Zinc-800 */
+            --bg-tertiary: #3f3f46;     /* Zinc-700 */
+            --surface: #27272a;
+            --surface-hover: #3f3f46;
+            --border: #3f3f46;
+            --border-focus: #52525b;
+            --text-primary: #f4f4f5;    /* Zinc-100 */
+            --text-secondary: #a1a1aa;  /* Zinc-400 */
+            --text-tertiary: #71717a;   /* Zinc-500 */
+            --accent: #52525b;          /* Zinc-600 */
+            --accent-hover: #3f3f46;
+            --accent-glow: rgba(82, 82, 91, 0.3);
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --ai-bubble: #27272a;
+            --user-bubble: #3f3f46;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .app {
+            width: 100%;
+            height: 100vh;
+            background: var(--bg-primary);
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            max-width: 100%;
+        }
+
+        /* Header */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 32px;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+            gap: 24px;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--surface-hover);
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-size: 18px;
+            border: 1px solid var(--border);
+        }
+
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .divider {
+            width: 1px;
+            height: 20px;
+            background: var(--border);
+        }
+
+        select, textarea, button {
+            font-family: inherit;
+        }
+
+        #model-select {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            color: var(--text-primary);
+            padding: 10px 14px;
+            min-width: 200px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        #model-select:hover {
+            background: var(--surface-hover);
+            border-color: var(--border-focus);
+        }
+
+        #model-select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .btn {
+            border: none;
+            border-radius: 12px;
+            padding: 10px 18px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-clear {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .btn-clear:hover {
+            background: var(--surface-hover);
+            color: var(--text-primary);
+            border-color: var(--text-tertiary);
+        }
+
+        /* Chat Container */
+        #chat-container {
+            overflow-y: auto;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            background: var(--bg-primary);
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        #chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #chat-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #chat-container::-webkit-scrollbar-thumb {
+            background: var(--surface);
+            border-radius: 4px;
+        }
+
+        #chat-container::-webkit-scrollbar-thumb:hover {
+            background: var(--surface-hover);
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+            align-self: flex-end;
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            border: 1px solid var(--border);
+        }
+
+        .avatar.ai {
+            background: var(--surface);
+        }
+
+        .avatar.user {
+            background: var(--surface-hover);
+        }
+
+        .bubble {
+            max-width: 900px;
+            border-radius: 10px;
+            padding: 20px 24px;
+            line-height: 1.7;
+            word-break: break-word;
+            font-size: 15px;
+            border: 1px solid var(--border);
+        }
+
+        .message.ai .bubble {
+            background: var(--bg-secondary);
+        }
+
+        .message.user .bubble {
+            background: var(--surface-hover);
+        }
+
+        .bubble code {
+            background: var(--bg-primary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            color: var(--text-secondary);
+        }
+
+        .bubble pre {
+            background: var(--bg-primary);
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 12px 0;
+            border: 1px solid var(--border);
+        }
+
+        .bubble pre code {
+            background: none;
+            padding: 0;
+            color: var(--text-primary);
+        }
+
+        /* Markdown Lists */
+        .bubble ul, .bubble ol {
+            margin: 12px 0;
+            padding-left: 24px;
+        }
+
+        .bubble ul {
+            list-style-type: disc;
+        }
+
+        .bubble ol {
+            list-style-type: decimal;
+        }
+
+        .bubble li {
+            margin: 6px 0;
+            line-height: 1.7;
+        }
+
+        .bubble li > ul,
+        .bubble li > ol {
+            margin: 6px 0;
+            padding-left: 24px;
+        }
+
+        .bubble ul ul {
+            list-style-type: circle;
+        }
+
+        .bubble ul ul ul {
+            list-style-type: square;
+        }
+
+        /* Markdown Paragraphs */
+        .bubble p {
+            margin: 10px 0;
+        }
+
+        .bubble p:first-child {
+            margin-top: 0;
+        }
+
+        .bubble p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Markdown Headings */
+        .bubble h1, .bubble h2, .bubble h3,
+        .bubble h4, .bubble h5, .bubble h6 {
+            margin: 16px 0 8px 0;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .bubble h1 { font-size: 1.5em; }
+        .bubble h2 { font-size: 1.3em; }
+        .bubble h3 { font-size: 1.1em; }
+        .bubble h4, .bubble h5, .bubble h6 { font-size: 1em; }
+
+        /* Markdown Blockquote */
+        .bubble blockquote {
+            margin: 12px 0;
+            padding: 8px 16px;
+            border-left: 3px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+        }
+
+        /* Markdown Tables */
+        .bubble table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+
+        .bubble table th,
+        .bubble table td {
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .bubble table th {
+            background: var(--bg-primary);
+            font-weight: 600;
+        }
+
+        .bubble table tr:hover {
+            background: var(--bg-primary);
+        }
+
+        /* Markdown Links */
+        .bubble a {
+            color: var(--text-secondary);
+            text-decoration: underline;
+            text-decoration-color: var(--text-tertiary);
+            text-underline-offset: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .bubble a:hover {
+            color: var(--text-primary);
+            text-decoration-color: var(--text-secondary);
+        }
+
+        .bubble a:visited {
+            color: var(--text-tertiary);
+        }
+
+        .agent-trace {
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
+
+        .agent-trace summary {
+            cursor: pointer;
+            padding: 12px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            user-select: none;
+            transition: all 0.2s ease;
+            list-style: none;
+        }
+
+        .agent-trace summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .agent-trace summary:hover {
+            background: var(--surface);
+        }
+
+        .agent-trace summary::before {
+            content: '▾';
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .agent-trace-body {
+            border-top: 1px solid var(--border);
+            padding: 16px 20px;
+            font-size: 13px;
+            background: var(--surface);
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .agent-answer {
+            padding: 0;
+        }
+
+        /* Input Area */
+        .input-wrap {
+            border-top: 1px solid var(--border);
+            padding: 24px 32px;
+            background: var(--bg-primary);
+        }
+
+        .input-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: end;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        #prompt-input {
+            width: 100%;
+            min-height: 48px;
+            max-height: 180px;
+            resize: vertical;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            background: var(--surface);
+            color: var(--text-primary);
+            outline: none;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        #prompt-input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        #prompt-input:focus {
+            border-color: var(--border-focus);
+            background: var(--surface-hover);
+        }
+
+        .btn-send {
+            background: var(--accent);
+            height: 48px;
+            min-width: 90px;
+            border: 1px solid var(--border);
+        }
+
+        .btn-send:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-send:active {
+            transform: scale(0.98);
+        }
+
+        .hint {
+            margin-top: 12px;
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-align: center;
+        }
+
+        /* Mermaid Diagrams */
+        .mermaid-diagram {
+            margin: 16px 0;
+            padding: 20px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow-x: auto;
+            text-align: center;
+        }
+
+        .mermaid-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Math Equations */
+        .katex-display {
+            margin: 16px 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 8px 0;
+        }
+
+        .katex {
+            font-size: 1.1em;
+            color: var(--text-primary) !important;
+        }
+
+        .katex .base {
+            color: var(--text-primary);
+        }
+
+        /* Inline math */
+        .bubble p .katex {
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        /* Block math */
+        .bubble .katex-display > .katex {
+            display: block;
+            text-align: center;
+        }
+
+        /* Status Layer (Progress Indicator) */
+        #status-layer {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        #status-layer.active {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        #status-layer.complete {
+            opacity: 0;
+            transform: translateX(-50%) translateY(20px);
+        }
+
+        .status-spinner {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            position: relative;
+            background: transparent;
+            border: 1px solid var(--text-tertiary);
+        }
+
+        .status-spinner::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 1px solid var(--text-tertiary);
+            transform: translate(-50%, -50%);
+            animation: sonarPing 1.5s infinite ease-out;
+        }
+
+        @keyframes sonarPing {
+            0% {
+                width: 100%;
+                height: 100%;
+                opacity: 0.8;
+            }
+            100% {
+                width: 200%;
+                height: 200%;
+                opacity: 0;
+            }
+        }
+
+        .status-check {
+            display: none;
+            font-size: 18px;
+            color: var(--success);
+        }
+
+        #status-layer.complete .status-spinner {
+            display: none;
+        }
+
+        #status-layer.complete .status-check {
+            display: block;
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .topbar {
+                flex-direction: column;
+                align-items: stretch;
+                padding: 16px 20px;
+            }
+            .topbar-left {
+                flex-wrap: wrap;
+            }
+            .divider { display: none; }
+            #model-select {
+                min-width: 0;
+                width: 100%;
+            }
+            .bubble {
+                max-width: 100%;
+            }
+            #chat-container {
+                padding: 20px;
+            }
+            .input-wrap {
+                padding: 16px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="logo">
+                <div class="logo-icon">💬</div>
+                <span class="title">Spring AI Chat</span>
+            </div>
+            <div class="divider"></div>
+            <select id="model-select">
+                <optgroup label="Configured Providers">
+                    <option value="mistral">Mistral</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="gemma">Gemma</option>
+                </optgroup>
+                <optgroup label="Model Aliases">
+                    <option value="mistral-medium-latest">Mistral Medium Latest</option>
+                    <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gemma-3-27b-it">Gemma 3 27B IT</option>
+                </optgroup>
+            </select>
+        </div>
+        <button class="btn btn-clear" type="button" id="clear-history-btn">Clear</button>
+    </div>
+
+    <div id="chat-container">
+        <div class="message ai">
+            <div class="avatar ai">💬</div>
+            <div class="bubble">안녕하세요. 메시지를 입력하면 AI가 실시간으로 응답합니다.</div>
+        </div>
+    </div>
+
+    <div class="input-wrap">
+        <div class="input-row">
+            <textarea id="prompt-input" placeholder="메시지를 입력하세요 (Enter: 전송, Shift+Enter: 줄바꿈)"></textarea>
+            <button class="btn btn-send" type="button" id="send-btn">Send</button>
+        </div>
+        <div class="hint">Spring AI • Streaming Chat</div>
+    </div>
+
+    <!-- Status Layer -->
+    <div id="status-layer">
+        <div class="status-spinner"></div>
+        <div class="status-check">✓</div>
+        <div class="status-text" id="status-text">Processing...</div>
+    </div>
+</div>
+
+<script>
+    let streaming = false;
+
+    // Marked 설정
+    marked.setOptions({
+        gfm: true,
+        breaks: true,
+        pedantic: false,
+        sanitize: false,
+        smartLists: true,
+        smartypants: false
+    });
+
+    // Mermaid 초기화 - Monochrome 테마
+    mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        themeVariables: {
+            primaryColor: '#52525b',
+            primaryTextColor: '#f4f4f5',
+            primaryBorderColor: '#3f3f46',
+            lineColor: '#a1a1aa',
+            secondaryColor: '#27272a',
+            tertiaryColor: '#18181b',
+            background: '#18181b',
+            mainBkg: '#27272a',
+            secondBkg: '#3f3f46',
+            textColor: '#f4f4f5',
+            fontSize: '13px'
+        }
+    });
+
+    // KaTeX 렌더링 함수
+    function renderMath(element) {
+        if (!element || !window.renderMathInElement) {
+            console.warn('KaTeX not available');
+            return;
+        }
+        try {
+            renderMathInElement(element, {
+                delimiters: [
+                    {left: "$$", right: "$$", display: true},
+                    {left: "\\[", right: "\\]", display: true},
+                    {left: "$", right: "$", display: false},
+                    {left: "\\(", right: "\\)", display: false}
+                ],
+                throwOnError: false
+            });
+            console.log('KaTeX renderMathInElement called with custom delimiters');
+        } catch (e) {
+            console.error('KaTeX render error:', e);
+        }
+    }
+
+    // Mermaid 렌더링 함수
+    async function renderMermaid(element) {
+        if (!element) return;
+        const mermaidBlocks = element.querySelectorAll('code.language-mermaid, pre > code:not([class])');
+        for (let i = 0; i < mermaidBlocks.length; i++) {
+            const block = mermaidBlocks[i];
+            const code = block.textContent;
+
+            // Mermaid 코드인지 확인
+            if (!code.trim().match(/^(graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|journey|gitGraph|flowchart)/)) {
+                continue;
+            }
+
+            try {
+                const id = `mermaid-${Date.now()}-${i}`;
+                const { svg } = await mermaid.render(id, code);
+                const wrapper = document.createElement('div');
+                wrapper.className = 'mermaid-diagram';
+                wrapper.innerHTML = svg;
+                block.parentElement.replaceWith(wrapper);
+            } catch (e) {
+                console.warn('Mermaid render error:', e);
+            }
+        }
+    }
+
+    function selectedModelKey() {
+        const modelSelect = document.getElementById('model-select');
+        if (!modelSelect) return 'mistral';
+
+        const value = (modelSelect.value || '').toLowerCase();
+        if (value.includes('gemini')) return 'gemini';
+        if (value.includes('gemma')) return 'gemma';
+        if (value.includes('openai') || value.includes('gpt')) return 'openai';
+        if (value.includes('mistral')) return 'mistral';
+        return 'mistral';
+    }
+
+    function splitTraceAndAnswer(rawText) {
+        const source = rawText || '';
+        const traceHeader = '[생각의 과정 요약]';
+        if (!source.includes(traceHeader)) {
+            return { traceMarkdown: '', answerMarkdown: source };
+        }
+
+        const lines = source.split(/\r?\n/);
+        const traceLines = [];
+        const answerLines = [];
+
+        let inTrace = false;
+        let sawSelectedTools = false;
+        let traceClosed = false;
+
+        const isToolLine = (line) => {
+            const trimmed = line.trim();
+            return trimmed.startsWith('-')
+                    || trimmed.startsWith('없음')
+                    || trimmed.includes('args=')
+                    || trimmed.includes('/');
+        };
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!inTrace && !traceClosed && trimmed.startsWith(traceHeader)) {
+                inTrace = true;
+            }
+
+            if (inTrace && !traceClosed) {
+                traceLines.push(line);
+                if (trimmed.startsWith('[선택된 도구]')) {
+                    sawSelectedTools = true;
+                    continue;
+                }
+                if (sawSelectedTools && trimmed && !trimmed.startsWith('[') && !isToolLine(line)) {
+                    traceLines.pop();
+                    answerLines.push(line);
+                    traceClosed = true;
+                    inTrace = false;
+                }
+                continue;
+            }
+
+            answerLines.push(line);
+        }
+
+        return {
+            traceMarkdown: traceLines.join('\n').trim(),
+            answerMarkdown: answerLines.join('\n').trim()
+        };
+    }
+
+    function renderStreamMessage(target, markdownText, traceState) {
+        const existingTrace = target.querySelector('.agent-trace');
+        if (existingTrace) {
+            traceState.open = existingTrace.open;
+        }
+
+        const parts = splitTraceAndAnswer(markdownText);
+        const hasTrace = !!parts.traceMarkdown;
+        const hasAnswer = !!parts.answerMarkdown;
+
+        if (hasAnswer && !traceState.autoCollapsed && !traceState.userInteracted) {
+            traceState.open = false;
+            traceState.autoCollapsed = true;
+        }
+
+        // 수식을 임시 플레이스홀더로 보호
+        let answerText = parts.answerMarkdown;
+        const mathBlocks = [];
+        const mathInlines = [];
+
+        // 블록 수식 보호 (\[...\] 및 $$...$$)
+        answerText = answerText.replace(/\\\[([\s\S]*?)\\\]/g, (match, content) => {
+            mathBlocks.push(content);
+            return `MATHBLOCK${mathBlocks.length - 1}MATHBLOCK`;
+        });
+        answerText = answerText.replace(/\$\$([\s\S]*?)\$\$/g, (match, content) => {
+            mathBlocks.push(content);
+            return `MATHBLOCK${mathBlocks.length - 1}MATHBLOCK`;
+        });
+
+        // 인라인 수식 보호 (\(...\) 및 $...$)
+        answerText = answerText.replace(/\\\((.*?)\\\)/g, (match, content) => {
+            mathInlines.push(content);
+            return `MATHINLINE${mathInlines.length - 1}MATHINLINE`;
+        });
+        answerText = answerText.replace(/\$([^\$\n]+?)\$/g, (match, content) => {
+            mathInlines.push(content);
+            return `MATHINLINE${mathInlines.length - 1}MATHINLINE`;
+        });
+
+        // 마크다운 파싱
+        let parsedAnswer = marked.parse(answerText);
+
+        // 수식 복원
+        parsedAnswer = parsedAnswer.replace(/MATHBLOCK(\d+)MATHBLOCK/g, (match, index) => {
+            return `\\[${mathBlocks[index]}\\]`;
+        });
+        parsedAnswer = parsedAnswer.replace(/MATHINLINE(\d+)MATHINLINE/g, (match, index) => {
+            return `\\(${mathInlines[index]}\\)`;
+        });
+
+        const traceHtml = hasTrace
+                ? `<details class="agent-trace" ${traceState.open ? 'open' : ''}>
+                       <summary>생각의 과정</summary>
+                       <div class="agent-trace-body">${marked.parse(parts.traceMarkdown)}</div>
+                   </details>`
+                : '';
+        const answerHtml = hasAnswer
+                ? `<div class="agent-answer">${parsedAnswer}</div>`
+                : '';
+
+        target.innerHTML = traceHtml + answerHtml;
+
+        const summary = target.querySelector('.agent-trace > summary');
+        if (summary) {
+            summary.addEventListener('click', () => {
+                traceState.userInteracted = true;
+                setTimeout(() => {
+                    const currentTrace = target.querySelector('.agent-trace');
+                    if (currentTrace) traceState.open = currentTrace.open;
+                }, 0);
+            });
+        }
+    }
+
+    function createStreamingMarkdownRenderer(target, onRendered) {
+        let latestMarkdown = '';
+        let renderedMarkdown = '';
+        let scheduled = false;
+        const traceState = {
+            open: true,
+            autoCollapsed: false,
+            userInteracted: false
+        };
+
+        const renderNow = () => {
+            scheduled = false;
+            if (latestMarkdown === renderedMarkdown) return;
+            renderedMarkdown = latestMarkdown;
+            renderStreamMessage(target, renderedMarkdown, traceState);
+            if (onRendered) onRendered();
+        };
+
+        return {
+            push(markdownText) {
+                latestMarkdown = markdownText;
+                if (scheduled) return;
+                scheduled = true;
+                requestAnimationFrame(renderNow);
+            },
+            flush() {
+                renderNow();
+            }
+        };
+    }
+
+    function addMsg(html, type) {
+        const c = document.getElementById('chat-container');
+        const div = document.createElement('div');
+        div.className = `message ${type}`;
+        div.innerHTML = `
+            <div class="avatar ${type}">${type === 'ai' ? '💬' : '👤'}</div>
+            <div class="bubble">${html}</div>
+        `;
+        c.appendChild(div);
+        scrollToBottom();
+        return div;
+    }
+
+    function scrollToBottom() {
+        const c = document.getElementById('chat-container');
+        c.scrollTop = c.scrollHeight;
+    }
+
+    async function sendMsg() {
+        const inp = document.getElementById('prompt-input');
+        const txt = inp.value.trim();
+        if (!txt || streaming) return;
+
+        addMsg(txt, 'user');
+        inp.value = '';
+        streaming = true;
+
+        // STATUS: Sending
+        StatusLayer.show('Sending message...');
+
+        const aiMsg = addMsg('...', 'ai');
+        const bubble = aiMsg.querySelector('.bubble');
+
+        try {
+            // STATUS: Thinking
+            StatusLayer.update('Thinking...');
+
+            const res = await fetch('/api/http-chat/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: txt, model: selectedModelKey() })
+            });
+
+            // STATUS: Receiving
+            StatusLayer.update('Receiving response...');
+
+            const reader = res.body.getReader();
+            const dec = new TextDecoder();
+            let acc = '';
+            const renderer = createStreamingMarkdownRenderer(bubble, scrollToBottom);
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                acc += dec.decode(value, { stream: true });
+                renderer.push(acc);
+            }
+
+            const tail = dec.decode();
+            if (tail) {
+                acc += tail;
+                renderer.push(acc);
+            }
+            renderer.flush();
+
+            // 스트리밍 완료 후 KaTeX와 Mermaid 렌더링
+            console.log('Rendering math and mermaid...');
+
+            try {
+                renderMath(bubble);
+                console.log('Math rendered');
+            } catch (mathError) {
+                console.error('Math render error:', mathError);
+            }
+
+            try {
+                await renderMermaid(bubble);
+                console.log('Mermaid rendered');
+            } catch (mermaidError) {
+                console.error('Mermaid render error:', mermaidError);
+            }
+
+            // STATUS: Complete
+            StatusLayer.complete('Response Complete');
+        } catch (e) {
+            bubble.innerText = 'Error: ' + e.message;
+            StatusLayer.complete('Error Occurred');
+        } finally {
+            streaming = false;
+        }
+    }
+
+    // Status Layer Controller
+    const StatusLayer = {
+        el: null,
+        textEl: null,
+        init() {
+            this.el = document.getElementById('status-layer');
+            this.textEl = document.getElementById('status-text');
+        },
+        show(msg = 'Processing...') {
+            if (!this.el) this.init();
+            this.textEl.textContent = msg;
+            this.el.classList.remove('complete');
+            this.el.classList.add('active');
+        },
+        update(msg) {
+            if (!this.el) this.init();
+            this.textEl.textContent = msg;
+        },
+        complete(msg = 'Done') {
+            if (!this.el) this.init();
+            this.textEl.textContent = msg;
+            this.el.classList.add('complete');
+            setTimeout(() => {
+                this.el.classList.remove('active', 'complete');
+            }, 1500);
+        }
+    };
+
+    async function clearSessionHistory() {
+        if (!confirm('세션 히스토리를 삭제하시겠습니까?')) return;
+        try {
+            await fetch('/api/http-chat/clear', { method: 'POST' });
+            const c = document.getElementById('chat-container');
+            c.innerHTML = `
+                <div class="message ai">
+                    <div class="avatar ai">💬</div>
+                    <div class="bubble">세션 히스토리가 삭제되었습니다.</div>
+                </div>`;
+        } catch (e) {
+            alert('히스토리 삭제 실패: ' + e.message);
+        }
+    }
+
+    document.getElementById('send-btn').addEventListener('click', sendMsg);
+    document.getElementById('clear-history-btn').addEventListener('click', clearSessionHistory);
+    document.getElementById('prompt-input').addEventListener('keydown', (e) => {
+        if (e.isComposing) return;
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMsg();
+        }
+    });
+
+    // 페이지 로드 시 라이브러리 확인 및 초기 렌더링
+    window.addEventListener('load', () => {
+        console.log('=== Library Check ===');
+        console.log('marked:', typeof marked !== 'undefined' ? '✓' : '✗');
+        console.log('mermaid:', typeof mermaid !== 'undefined' ? '✓' : '✗');
+        console.log('katex:', typeof katex !== 'undefined' ? '✓' : '✗');
+        console.log('renderMathInElement:', typeof renderMathInElement !== 'undefined' ? '✓' : '✗');
+
+        // 초기 메시지에 KaTeX 렌더링 적용
+        const initialBubble = document.querySelector('.bubble');
+        if (initialBubble && typeof renderMathInElement !== 'undefined') {
+            console.log('Rendering initial math...');
+            renderMath(initialBubble);
+        }
+    });
+</script>
+</body>
+</html>
