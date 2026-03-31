@@ -25,16 +25,6 @@ public class HttpChatController {
         this.httpChatService = httpChatService;
     }
 
-    @PostMapping
-    public ChatResponse chat(@Valid @RequestBody ChatRequest request, HttpSession session) {
-        String response = httpChatService.chat(
-                session.getId(),
-                request.message(),
-                request.model()
-        );
-        return new ChatResponse(response);
-    }
-
     @PostMapping(value = "/stream", produces = MediaType.TEXT_PLAIN_VALUE)
     public Flux<String> streamChat(@Valid @RequestBody ChatRequest request, HttpSession session) {
         return httpChatService.streamChat(
