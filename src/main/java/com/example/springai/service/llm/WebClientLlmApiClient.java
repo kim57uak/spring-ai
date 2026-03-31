@@ -41,6 +41,8 @@ public class WebClientLlmApiClient implements LlmApiClient {
 
         headers.forEach(request::header);
 
+        // 공급자가 전송하는 스트림 청크를 String Flux로 그대로 노출한다.
+        // 실제 청크 포맷(JSON line/SSE 유사 등)은 상위 ResponseParser가 해석한다.
         return request
                 .bodyValue(body)
                 .retrieve()

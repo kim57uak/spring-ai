@@ -61,6 +61,7 @@ public class OpenAiModelChatService extends AbstractLlmChatService {
 
     @Override
     protected String buildUrl(boolean streaming) {
+        // OpenAI는 동일 endpoint에서 stream 플래그로 동작이 갈린다.
         return baseUrl;
     }
 
@@ -74,6 +75,7 @@ public class OpenAiModelChatService extends AbstractLlmChatService {
 
     @Override
     protected String buildRequestBody(String message, boolean streaming) {
+        // stream=true일 때 provider가 증분 청크를 반환한다.
         String streamParam = streaming ? ",\"stream\":true" : "";
         return String.format(
                 "{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":%s}],\"max_tokens\":%d%s}",

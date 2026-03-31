@@ -28,6 +28,10 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * LLM + 휴리스틱 기반 도구 선택(Planning) 구현.
+ * MCP 서버/도구 카탈로그를 프롬프트로 제공하고, LLM 출력(JSON)을 ToolPlan으로 변환한다.
+ */
 @Component
 public class HeuristicPlanningService implements PlanningService {
 
@@ -59,6 +63,12 @@ public class HeuristicPlanningService implements PlanningService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 도구 실행 계획 생성.
+     * 1) planner 프롬프트 생성 -> LLM 동기 호출
+     * 2) COMPLETE면 도구 미사용으로 종료
+     * 3) JSON 파싱/보정 후 ToolPlan 목록 반환
+     */
     @Override
     public List<ToolPlan> plan(PlanningContext context) {
         String plannerOutput = llmRuntime.complete(buildToolPlanningPrompt(context), context.getModel());
@@ -74,6 +84,9 @@ public class HeuristicPlanningService implements PlanningService {
         return logResult(noToolSelection("LLM planner returned no valid tool plan"));
     }
 
+    /**
+     * planner가 참고할 서버/도구/실행이력/최근 결과를 포함한 프롬프트를 구성한다.
+     */
     private String buildToolPlanningPrompt(PlanningContext context) {
         String serverCatalog = buildServerCatalog();
         String executedTools = context.getToolTrace().isEmpty()

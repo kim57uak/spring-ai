@@ -38,6 +38,9 @@ public class ModelChatServiceFactory {
         }
     }
 
+    /**
+     * 모델 타입에 해당하는 ChatService 구현체를 조회한다.
+     */
     public ChatService resolve(ChatModelType modelType) {
         ChatService selected = services.get(modelType);
         if (selected == null) {
@@ -46,10 +49,16 @@ public class ModelChatServiceFactory {
         return selected;
     }
 
+    /**
+     * 동기 호출 가능한 서비스로 안전 캐스팅하여 반환한다.
+     */
     public SyncChatService resolveSync(ChatModelType modelType) {
         return resolveAs(modelType, SyncChatService.class, "sync");
     }
 
+    /**
+     * 스트리밍 호출 가능한 서비스로 안전 캐스팅하여 반환한다.
+     */
     public StreamChatService resolveStream(ChatModelType modelType) {
         return resolveAs(modelType, StreamChatService.class, "stream");
     }

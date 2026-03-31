@@ -13,6 +13,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * MCP 서버 프로세스 생명주기 관리 컴포넌트.
+ * 서버명 기준 단일 프로세스를 생성/재사용/종료한다.
+ */
 @Component
 public class ProcessManager {
 
@@ -28,6 +32,10 @@ public class ProcessManager {
         this.processLauncher = processLauncher;
     }
     
+    /**
+     * 서버별 프로세스를 조회하거나 없으면 생성한다.
+     * 이중 체크 + synchronized로 중복 생성 경쟁을 방지한다.
+     */
     public Process getOrCreateProcess(String serverName) throws IOException {
         Process existingProcess = processes.get(serverName);
         if (existingProcess != null && existingProcess.isAlive()) {
@@ -50,6 +58,9 @@ public class ProcessManager {
         }
     }
     
+    /**
+     * 런처 예외를 도메인 예외로 래핑해 상위에 전달한다.
+     */
     private Process createProcess(String serverName) throws IOException {
         try {
             return processLauncher.launch(serverName);
@@ -58,6 +69,9 @@ public class ProcessManager {
         }
     }
     
+    /**
+     * 관리 중인 모든 프로세스를 종료한다.
+     */
     public void closeAll() {
         if (processes.isEmpty()) {
             return;
@@ -82,6 +96,10 @@ public class ProcessManager {
         }
     }
 
+    /**
+     * 개별 프로세스 종료:
+     * graceful 종료 시도 후 타임아웃 시 강제 종료한다.
+     */
     private void closeProcess(String serverName, Process process) {
         if (!process.isAlive()) {
             logger.debug("Process for server '{}' is already terminated", serverName);

@@ -20,6 +20,12 @@ public class HttpChatService {
         this.agentOrchestrator = agentOrchestrator;
     }
 
+    /**
+     * 세션 단위 스트리밍 채팅 실행.
+     * <p>
+     * 이 서비스는 비즈니스 규칙을 최소화하고 오케스트레이션을 위임한다.
+     * 즉, 실제 지연(그래프 실행, 모델 호출, 도구 호출)은 AgentOrchestrator 아래에서 발생한다.
+     */
     public Flux<String> streamChat(String sessionId, String message, String modelType) {
         return agentOrchestrator.execute(new AgentChatRequest(sessionId, message, modelType));
     }

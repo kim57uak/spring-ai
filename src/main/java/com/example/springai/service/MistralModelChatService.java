@@ -60,6 +60,7 @@ public class MistralModelChatService extends AbstractLlmChatService {
 
     @Override
     protected String buildUrl(boolean streaming) {
+        // Mistral도 동일 endpoint에서 stream 플래그로 스트리밍 여부를 제어한다.
         return baseUrl;
     }
 
@@ -73,6 +74,7 @@ public class MistralModelChatService extends AbstractLlmChatService {
 
     @Override
     protected String buildRequestBody(String message, boolean streaming) {
+        // stream=true일 때 provider가 증분 청크를 반환한다.
         String streamParam = streaming ? ",\"stream\":true" : "";
         return String.format(
                 "{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":%s}],\"max_tokens\":%d%s}",

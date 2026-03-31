@@ -23,6 +23,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
+/**
+ * stdio 기반 MCP 클라이언트 구현.
+ * - stdin: JSON-RPC 요청 전송
+ * - stdout: JSON-RPC 응답 수신/라우팅
+ * - stderr: 서버 로그 드레인
+ */
 public class StdioMcpClient implements McpClient {
 
     private static final Logger logger = LoggerFactory.getLogger(StdioMcpClient.class);
@@ -40,6 +46,9 @@ public class StdioMcpClient implements McpClient {
     private final Map<Long, CompletableFuture<Map<String, Object>>> pendingRequests = new ConcurrentHashMap<>();
     private volatile boolean closed;
 
+    /**
+     * 프로세스 IO 스트림을 준비하고 수신 펌프를 시작한 뒤 initialize handshake를 수행한다.
+     */
     public StdioMcpClient(Process process, ObjectMapper objectMapper) throws IOException {
         this.process = process;
         this.objectMapper = objectMapper;
@@ -79,6 +88,7 @@ public class StdioMcpClient implements McpClient {
 
     @Override
     public void close() {
+        // 새 요청을 막고, 대기 중인 요청은 즉시 예외 완료 처리한다.
         closed = true;
         completeAllPendingWithError(new IOException("MCP client closed"));
 
@@ -148,6 +158,10 @@ public class StdioMcpClient implements McpClient {
         return "No schema available for tool: " + toolName;
     }
 
+    /**
+     * MCP 초기화 시퀀스:
+     * initialize -> initialized notification -> tools/list 캐시.
+     */
     private void initialize() throws IOException {
         Map<String, Object> initParams = new HashMap<>();
         initParams.put("protocolVersion", "2024-11-05");
@@ -164,6 +178,10 @@ public class StdioMcpClient implements McpClient {
         logger.info("MCP client initialized");
     }
 
+    /**
+     * tools/list 결과를 로컬 캐시에 보관한다.
+     * 실패 시 빈 스키마로 degrade 한다.
+     */
     private void loadToolsSchema() {
         try {
             Map<String, Object> response = sendRequest("tools/list", Map.of());
@@ -181,6 +199,9 @@ public class StdioMcpClient implements McpClient {
         }
     }
 
+    /**
+     * 요청 ID를 발급하고 pending 맵에 future를 등록한 뒤 응답을 대기한다.
+     */
     private Map<String, Object> sendRequest(String method, Object params) throws IOException {
         if (closed) {
             throw new IOException("MCP client is closed");
@@ -199,6 +220,9 @@ public class StdioMcpClient implements McpClient {
         }
     }
 
+    /**
+     * 응답 대기 공통 처리(타임아웃/인터럽트/실행 예외 변환).
+     */
     private Map<String, Object> waitForResponse(CompletableFuture<Map<String, Object>> responseFuture) throws IOException {
         try {
             return responseFuture.get(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -216,6 +240,9 @@ public class StdioMcpClient implements McpClient {
         }
     }
 
+    /**
+     * ID 없는 JSON-RPC 알림 메시지를 전송한다.
+     */
     private void sendNotification(String method, Object params) throws IOException {
         Map<String, Object> notification = new HashMap<>();
         notification.put("jsonrpc", "2.0");
@@ -224,6 +251,10 @@ public class StdioMcpClient implements McpClient {
         sendJsonLine(objectMapper.writeValueAsString(notification));
     }
 
+    /**
+     * 단일 라인 JSON 전송.
+     * writeLock으로 다중 스레드 동시 write interleave를 방지한다.
+     */
     private void sendJsonLine(String payload) throws IOException {
         synchronized (writeLock) {
             stdinWriter.write(payload);
@@ -232,6 +263,10 @@ public class StdioMcpClient implements McpClient {
         }
     }
 
+    /**
+     * stdout 수신 스레드.
+     * JSON-RPC 형태 메시지만 추려서 routeMessage로 전달한다.
+     */
     private void startStdoutPump() {
         Thread stdoutPump = new Thread(() -> {
             try {
@@ -272,6 +307,10 @@ public class StdioMcpClient implements McpClient {
         stdoutPump.start();
     }
 
+    /**
+     * stderr 드레인 스레드.
+     * 서버 오류 로그를 누락하지 않기 위해 별도 소비한다.
+     */
     private void startErrorStreamDrainer() {
         Thread errorDrainer = new Thread(() -> {
             try {
@@ -291,6 +330,9 @@ public class StdioMcpClient implements McpClient {
         errorDrainer.start();
     }
 
+    /**
+     * 응답 메시지의 id를 기반으로 pending future를 완료시킨다.
+     */
     private void routeMessage(Map<String, Object> message) {
         Object responseId = message.get("id");
         if (responseId == null) {
@@ -315,6 +357,9 @@ public class StdioMcpClient implements McpClient {
         }
     }
 
+    /**
+     * 연결 종료/오류 시 대기 중인 모든 요청을 예외 완료한다.
+     */
     private void completeAllPendingWithError(Throwable error) {
         pendingRequests.forEach((id, future) -> future.completeExceptionally(error));
         pendingRequests.clear();

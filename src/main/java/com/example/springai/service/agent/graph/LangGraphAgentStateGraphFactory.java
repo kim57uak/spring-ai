@@ -22,6 +22,10 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * LangGraph 기반 에이전트 상태 그래프 팩토리.
+ * PLAN -> (EXECUTE?) -> COMPOSE 구조로 계획/도구실행/응답생성을 분리한다.
+ */
 @Component
 public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
 
@@ -69,6 +73,10 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
         return graph;
     }
 
+    /**
+     * PLAN 노드:
+     * 사용자 요청과 컨텍스트를 바탕으로 도구 실행 계획 목록을 생성한다.
+     */
     private AsyncNodeAction<AgentGraphState> planNode() {
         return state -> {
             PlanningContext context = state.toPlanningContext();
@@ -86,6 +94,11 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
         };
     }
 
+    /**
+     * EXECUTE 노드:
+     * 계획된 도구를 최대 MAX_TOOL_ITERATIONS 내에서 실행하고 결과를 상태에 누적한다.
+     * 중복 실행 방지를 위해 서버/도구/인자 시그니처를 dedup 키로 사용한다.
+     */
     private AsyncNodeAction<AgentGraphState> executeNode() {
         return state -> {
             PlanningContext context = state.toPlanningContext();
@@ -175,6 +188,9 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
         ));
     }
 
+    /**
+     * PLAN 결과에서 도구 필요 여부를 읽어 EXECUTE 또는 COMPOSE로 분기한다.
+     */
     private AsyncEdgeAction<AgentGraphState> routeAfterPlan() {
         return state -> CompletableFuture.completedFuture(
                 state.value(AgentGraphState.PLAN_REQUIRED).map(Boolean.class::cast).orElse(false)
