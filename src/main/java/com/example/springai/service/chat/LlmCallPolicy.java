@@ -45,6 +45,12 @@ public class LlmCallPolicy {
         this.rateLimiter = rateLimiter;
     }
 
+    /**
+     * 동기 호출 공통 정책.
+     * - 호출 전 rate-limit 대기
+     * - 429/5xx는 지수 백오프 재시도
+     * - 비재시도 오류는 ChatProcessingException으로 변환
+     */
     public <T> T executeSync(String modelName, Supplier<T> call) {
         int maxRetries = rateLimiter.maxRetries();
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
@@ -70,6 +76,10 @@ public class LlmCallPolicy {
         throw new ChatProcessingException("API call failed after retry exhaustion");
     }
 
+    /**
+     * 스트리밍 호출용 재시도 스펙.
+     * Reactor Retry에 정책을 주입하여 스트림 재시도 타이밍을 통일한다.
+     */
     public Retry streamRetrySpec(String modelName) {
         long baseRetryDelayMs = Math.max(rateLimiter.initialBackoffMs(), rateLimiter.minIntervalMs());
         return Retry.backoff(rateLimiter.maxRetries(), Duration.ofMillis(baseRetryDelayMs))
@@ -87,6 +97,9 @@ public class LlmCallPolicy {
                 });
     }
 
+    /**
+     * 스트림 시작 전에 최소 호출 간격을 강제한다.
+     */
     public void acquireBeforeStream() {
         rateLimiter.acquire();
     }

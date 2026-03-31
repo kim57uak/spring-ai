@@ -45,6 +45,19 @@ public class AgentOrchestrator {
         this.humanMessageService = humanMessageService;
     }
 
+    /**
+     * 에이전트 실행의 최상위 진입점.
+     * <p>
+     * 처리 순서:
+     * 1) 안내 문구 1개를 즉시 반환
+     * 2) invokeGraph()로 계획/도구 실행 상태를 계산
+     * 3) streamCompose()로 최종 답변 스트림 생성
+     * 4) 스트림 종료 시 대화 이력/체크포인트 저장
+     * <p>
+     * TTFT 관점:
+     * 실제 모델 토큰 스트림은 2) 완료 이후에 시작되므로,
+     * invokeGraph()가 길어지면 첫 토큰도 함께 늦어진다.
+     */
     public Flux<String> execute(AgentChatRequest request) {
         return Flux.concat(
                 Flux.just("[생각의 과정 요약]\n- 요청을 분석하고 도구 사용 여부를 판단 중입니다.\n\n"),
@@ -81,6 +94,7 @@ public class AgentOrchestrator {
     }
 
     private void appendFinalAnswerOnly(StringBuilder assistantResponse, Tuple2<Long, String> indexedChunk) {
+        // index 0은 trace summary(생각 요약)이며 실제 assistant 최종 응답에 저장하지 않는다.
         if (indexedChunk.getT1() == 0) {
             return;
         }
@@ -90,6 +104,12 @@ public class AgentOrchestrator {
         }
     }
 
+    /**
+     * LangGraph 실행으로 PlanningContext를 생성한다.
+     * <p>
+     * 이 단계는 블로킹 가능성이 있으므로 boundedElastic에서 실행하며,
+     * 스트림 시작 전 선행 단계이기 때문에 첫 토큰 지연에 직접 영향이 있다.
+     */
     private PlanningContext invokeGraph(AgentChatRequest request) {
         List<String> history = conversationStore.load(request.sessionId());
         String checkpointId = checkpointStore.loadCheckpoint(request.sessionId()).orElse("");

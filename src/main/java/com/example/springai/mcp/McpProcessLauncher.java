@@ -15,6 +15,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+/**
+ * MCP 서버 프로세스 실행 담당.
+ * 실행 전 command/args/env를 검증해 위험한 입력을 차단한다.
+ */
 @Component
 public class McpProcessLauncher {
 
@@ -37,6 +41,9 @@ public class McpProcessLauncher {
         this.mcpProperties = mcpProperties;
     }
 
+    /**
+     * 설정 기반으로 MCP 서버 프로세스를 실행한다.
+     */
     public Process launch(String serverName) throws IOException {
         McpProperties.ServerConfig config = mcpProperties.getServers().get(serverName);
         if (config == null) {
@@ -77,6 +84,12 @@ public class McpProcessLauncher {
         return processBuilder.start();
     }
 
+    /**
+     * command 보안 검증:
+     * - 특수문자 차단
+     * - 절대/상대 경로 실행파일 존재/실행권한 확인
+     * - 단순 실행명은 화이트리스트 허용
+     */
     private void validateCommand(String command, String serverName) {
         // Check for dangerous characters
         if (DANGEROUS_PATTERN.matcher(command).find()) {
@@ -108,6 +121,10 @@ public class McpProcessLauncher {
         }
     }
 
+    /**
+     * 인자 보안 검증.
+     * 스크립트 파일 경로는 존재 여부를 경고 로그로 남긴다.
+     */
     private void validateArguments(List<String> args, String serverName) {
         for (String arg : args) {
             if (arg == null || arg.isBlank()) {
@@ -130,6 +147,10 @@ public class McpProcessLauncher {
         }
     }
 
+    /**
+     * 환경변수 보안 검증:
+     * 키 포맷 검사 + 값의 위험 문자 검사.
+     */
     private void validateEnvironmentVariables(java.util.Map<String, String> env, String serverName) {
         for (java.util.Map.Entry<String, String> entry : env.entrySet()) {
             String key = entry.getKey();

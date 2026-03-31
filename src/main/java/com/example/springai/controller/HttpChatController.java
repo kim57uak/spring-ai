@@ -25,6 +25,16 @@ public class HttpChatController {
         this.httpChatService = httpChatService;
     }
 
+    /**
+     * 스트리밍 채팅 진입점.
+     * <p>
+     * 흐름:
+     * Controller -> HttpChatService -> AgentOrchestrator -> LLM Flux 반환
+     * <p>
+     * 참고:
+     * 첫 토큰은 오케스트레이션(그래프 실행/프롬프트 구성) 이후에 도착한다.
+     * 따라서 이 엔드포인트의 TTFT는 하위 서비스 처리시간 영향을 직접 받는다.
+     */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_PLAIN_VALUE)
     public Flux<String> streamChat(@Valid @RequestBody ChatRequest request, HttpSession session) {
         return httpChatService.streamChat(

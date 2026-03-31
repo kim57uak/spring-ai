@@ -55,6 +55,7 @@ public class GemmaModelChatService extends AbstractLlmChatService {
 
     @Override
     protected String buildUrl(boolean streaming) {
+        // Gemini 호환 API를 사용하므로 endpoint 규칙도 Gemini와 동일하다.
         String endpoint = streaming ? "streamGenerateContent" : "generateContent";
         return String.format("%s/%s:%s?key=%s", baseUrl, model, endpoint, apiKey);
     }
@@ -68,6 +69,7 @@ public class GemmaModelChatService extends AbstractLlmChatService {
 
     @Override
     protected String buildRequestBody(String message, boolean streaming) {
+        // 요청 바디는 동일하고, 스트리밍 여부는 endpoint 선택으로 결정된다.
         return String.format(
                 "{\"contents\":[{\"parts\":[{\"text\":%s}]}],\"generationConfig\":{\"maxOutputTokens\":%d}}",
                 JsonUtils.escapeJson(message),

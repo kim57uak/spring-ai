@@ -45,11 +45,13 @@ public abstract class AbstractLlmChatService implements SyncChatService, StreamC
 
     @Override
     public Flux<String> streamGenerate(String message) {
+        // 스트림 시작 전 공통 rate-limit 정책 적용.
         callPolicy.acquireBeforeStream();
         String url = buildUrl(true);
         Map<String, String> headers = buildHeaders();
         String body = buildRequestBody(message, true);
 
+        // 공급자 API의 청크 응답을 Flux로 받아 파싱 후 상위 계층으로 전달한다.
         return apiClient.streamPost(url, headers, body)
                 .retryWhen(callPolicy.streamRetrySpec(modelType().value()))
                 .map(responseParser::extractStreamText)

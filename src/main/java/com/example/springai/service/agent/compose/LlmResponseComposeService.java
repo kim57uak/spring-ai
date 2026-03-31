@@ -25,6 +25,16 @@ public class LlmResponseComposeService implements ResponseComposeService {
         this.traceSummaryFormatter = traceSummaryFormatter;
     }
 
+    /**
+     * 최종 응답 스트림 구성.
+     * <p>
+     * 반환 구조:
+     * - 첫 청크: trace summary(사고 요약)
+     * - 이후 청크: 실제 LLM 답변 토큰
+     * <p>
+     * bufferTimeout은 너무 잦은 청크를 묶어 전송량을 줄이기 위한 설정이다.
+     * 단, 값이 커질수록 사용자 체감 첫/중간 토큰 지연이 늘어날 수 있다.
+     */
     @Override
     public Flux<String> streamCompose(PlanningContext context) {
         String prompt = promptTemplateService.buildComposePrompt(context);
