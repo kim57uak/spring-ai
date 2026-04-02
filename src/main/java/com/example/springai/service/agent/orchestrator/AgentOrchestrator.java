@@ -125,7 +125,7 @@ public class AgentOrchestrator {
                         Map.of(
                                 AgentGraphState.SESSION_ID, request.sessionId(),
                                 AgentGraphState.USER_MESSAGE, request.message(),
-                                AgentGraphState.MODEL, request.model() == null ? "mistral" : request.model(),
+                                AgentGraphState.MODEL, request.model() == null ? "openai" : request.model(),
                                 AgentGraphState.HISTORY, history,
                                 AgentGraphState.CHECKPOINT_ID, checkpointId,
                                 AgentGraphState.CURRENT_NODE, "HISTORY_LOADED"
@@ -135,7 +135,7 @@ public class AgentOrchestrator {
                 .orElseGet(() -> new AgentGraphState(Map.of(
                         AgentGraphState.SESSION_ID, request.sessionId(),
                         AgentGraphState.USER_MESSAGE, request.message(),
-                        AgentGraphState.MODEL, request.model() == null ? "mistral" : request.model(),
+                        AgentGraphState.MODEL, request.model() == null ? "openai" : request.model(),
                         AgentGraphState.HISTORY, history,
                         AgentGraphState.CHECKPOINT_ID, checkpointId
                 )));

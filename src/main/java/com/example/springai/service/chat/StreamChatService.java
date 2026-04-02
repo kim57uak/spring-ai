@@ -12,4 +12,8 @@ public interface StreamChatService extends ChatService {
      * 스트리밍 방식으로 응답 생성
      */
     Flux<String> streamGenerate(String message);
+
+    default Flux<String> streamGenerate(String message, ChatRequestContext context) {
+        return streamGenerate(message);
+    }
 }

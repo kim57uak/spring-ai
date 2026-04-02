@@ -17,6 +17,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * LLM 호출 공통 정책(최소 간격, 재시도, 백오프)을 한 곳에서 관리한다.
@@ -30,13 +32,15 @@ public class LlmCallPolicy {
     private static final long MAX_BACKOFF_SHIFT = 20L;
     private static final long JITTER_MIN_MS = 100L;
     private static final long JITTER_MAX_EXCLUSIVE_MS = 401L;
+    private static final long MAX_SERVER_RETRY_DELAY_MS = 120_000L;
+    private static final Pattern RETRY_DELAY_SECONDS_PATTERN =
+            Pattern.compile("\"retryDelay\"\\s*:\\s*\"([0-9]+(?:\\.[0-9]+)?)s\"");
     private static final String DEFAULT_MODEL_NAME = "llm";
     private static final String DEFAULT_AUTH_GUIDANCE = "Verify API key and model access permissions.";
     private static final Map<String, String> AUTH_GUIDANCE_BY_MODEL = Map.of(
             "openai", "Verify OPENAI_API_KEY (or HTTP_OPENAI_API_KEY) and model access.",
-            "gemini", "Verify HTTP_GEMINI_API_KEY and model access.",
-            "mistral", "Verify MISTRAL_API_KEY and model access.",
-            "gemma", "Verify GEMMA_API_KEY (or HTTP_GEMINI_API_KEY) and model access."
+            "gemini", "Verify GEMINI_API_KEY and model access.",
+            "mistral", "Verify MISTRAL_API_KEY and model access."
     );
 
     private final LlmRequestRateLimiter rateLimiter;
@@ -135,7 +139,11 @@ public class LlmCallPolicy {
         if (throwable instanceof WebClientResponseException webClientException) {
             Duration headerDelay = parseRetryAfter(webClientException);
             if (headerDelay != null && !headerDelay.isNegative() && !headerDelay.isZero()) {
-                return clampDelay(headerDelay);
+                return clampServerSuggestedDelay(headerDelay);
+            }
+            Duration bodyDelay = parseRetryDelayFromBody(webClientException);
+            if (bodyDelay != null && !bodyDelay.isNegative() && !bodyDelay.isZero()) {
+                return clampServerSuggestedDelay(bodyDelay);
             }
         }
 
@@ -147,6 +155,11 @@ public class LlmCallPolicy {
 
     private Duration clampDelay(Duration delay) {
         long clampedMs = Math.min(Math.max(1L, delay.toMillis()), rateLimiter.maxBackoffMs());
+        return Duration.ofMillis(clampedMs);
+    }
+
+    private Duration clampServerSuggestedDelay(Duration delay) {
+        long clampedMs = Math.min(Math.max(1L, delay.toMillis()), MAX_SERVER_RETRY_DELAY_MS);
         return Duration.ofMillis(clampedMs);
     }
 
@@ -170,6 +183,25 @@ public class LlmCallPolicy {
             return Duration.ofMillis(Math.max(0L, millis));
         } catch (DateTimeParseException ignored) {
             logger.debug("Unable to parse Retry-After header: {}", raw);
+            return null;
+        }
+    }
+
+    private Duration parseRetryDelayFromBody(WebClientResponseException exception) {
+        String body = exception.getResponseBodyAsString();
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        Matcher matcher = RETRY_DELAY_SECONDS_PATTERN.matcher(body);
+        if (!matcher.find()) {
+            return null;
+        }
+        try {
+            double seconds = Double.parseDouble(matcher.group(1));
+            long millis = Math.round(seconds * 1000.0d);
+            return Duration.ofMillis(Math.max(0L, millis));
+        } catch (NumberFormatException ignored) {
+            logger.debug("Unable to parse retryDelay seconds from response body: {}", matcher.group(1));
             return null;
         }
     }

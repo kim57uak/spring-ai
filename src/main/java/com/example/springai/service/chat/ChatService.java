@@ -1,7 +1,5 @@
 package com.example.springai.service.chat;
 
-import com.example.springai.service.ChatModelType;
-
 /**
  * 채팅 모델의 기본 인터페이스
  * ISP(Interface Segregation Principle) 준수 - 최소한의 공통 책임만 정의

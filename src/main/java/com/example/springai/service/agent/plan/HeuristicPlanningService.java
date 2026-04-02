@@ -7,6 +7,7 @@ import com.example.springai.mcp.McpClientFactory;
 import com.example.springai.mcp.StdioMcpClient;
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.model.agent.ToolPlan;
+import com.example.springai.service.agent.prompt.PromptRenderService;
 import com.example.springai.service.agent.runtime.AgentLlmRuntime;
 import com.example.springai.service.agent.security.PromptInjectionGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +45,7 @@ public class HeuristicPlanningService implements PlanningService {
     private final McpClientFactory mcpClientFactory;
     private final AgentLlmRuntime llmRuntime;
     private final PromptInjectionGuard promptInjectionGuard;
+    private final PromptRenderService promptRenderService;
     private final ObjectMapper objectMapper;
     private final ConcurrentMap<String, CachedToolSchema> toolSchemaCache = new ConcurrentHashMap<>();
 
@@ -53,6 +55,7 @@ public class HeuristicPlanningService implements PlanningService {
             McpClientFactory mcpClientFactory,
             AgentLlmRuntime llmRuntime,
             PromptInjectionGuard promptInjectionGuard,
+            PromptRenderService promptRenderService,
             ObjectMapper objectMapper
     ) {
         this.mcpProperties = mcpProperties;
@@ -60,6 +63,7 @@ public class HeuristicPlanningService implements PlanningService {
         this.mcpClientFactory = mcpClientFactory;
         this.llmRuntime = llmRuntime;
         this.promptInjectionGuard = promptInjectionGuard;
+        this.promptRenderService = promptRenderService;
         this.objectMapper = objectMapper;
     }
 
@@ -71,7 +75,16 @@ public class HeuristicPlanningService implements PlanningService {
      */
     @Override
     public List<ToolPlan> plan(PlanningContext context) {
-        String plannerOutput = llmRuntime.complete(buildToolPlanningPrompt(context), context.getModel());
+        String planningPrompt = buildToolPlanningPrompt(context);
+        PlannerDecision structured = readStructuredDecision(planningPrompt, context.getModel(), context.getSessionId());
+        if (structured != null) {
+            List<ToolPlan> decisions = parseStructuredDecision(structured);
+            if (!decisions.isEmpty()) {
+                return logResult(deduplicate(decisions));
+            }
+        }
+
+        String plannerOutput = llmRuntime.complete(planningPrompt, context.getModel(), context.getSessionId());
         if (isCompleteOutput(plannerOutput)) {
             return logResult(noToolSelection("LLM planner returned COMPLETE"));
         }
@@ -98,20 +111,22 @@ public class HeuristicPlanningService implements PlanningService {
         String protectedUserMessage = promptInjectionGuard.protectUserInput(context.getUserMessage());
         String dateHints = buildDateHints();
         String template = required(promptProperties.getToolPlanningPromptTemplate(), "prompts.tool-planning-prompt-template");
-        return template.formatted(
-                promptProperties.getAgentSystem(),
-                promptProperties.getToolChoice(),
-                serverCatalog,
-                protectedUserMessage,
-                dateHints,
-                executedTools,
-                latestResult
-        );
+        return promptRenderService.render(template, Map.of(
+                "agentSystem", promptProperties.getAgentSystem(),
+                "toolChoice", promptProperties.getToolChoice(),
+                "serverCatalog", serverCatalog,
+                "userMessage", protectedUserMessage,
+                "dateHints", dateHints,
+                "executedTools", executedTools,
+                "latestResult", latestResult
+        ));
     }
 
     private String buildPlannerRepairPrompt(String invalidOutput) {
         String template = required(promptProperties.getPlannerRepairPromptTemplate(), "prompts.planner-repair-prompt-template");
-        return template.formatted(invalidOutput == null ? "" : invalidOutput);
+        return promptRenderService.render(template, Map.of(
+                "invalidOutput", invalidOutput == null ? "" : invalidOutput
+        ));
     }
 
     private String buildServerCatalog() {
@@ -307,13 +322,11 @@ public class HeuristicPlanningService implements PlanningService {
         LocalDate nextWeekSunday = nextWeekMonday.plusDays(6);
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
         String template = required(promptProperties.getDateHintsTemplate(), "prompts.date-hints-template");
-        return template.formatted(
-                now.format(formatter),
-                nextWeekMonday.format(formatter),
-                nextWeekSunday.format(formatter),
-                nextWeekMonday.format(formatter),
-                nextWeekSunday.format(formatter)
-        );
+        return promptRenderService.render(template, Map.of(
+                "today", now.format(formatter),
+                "nextWeekStart", nextWeekMonday.format(formatter),
+                "nextWeekEnd", nextWeekSunday.format(formatter)
+        ));
     }
 
     private List<ToolPlan> parseWithRepair(String plannerOutput, PlanningContext context) {
@@ -322,7 +335,17 @@ public class HeuristicPlanningService implements PlanningService {
             return parsed;
         }
 
-        String repaired = llmRuntime.complete(buildPlannerRepairPrompt(plannerOutput), context.getModel());
+        String repairPrompt = buildPlannerRepairPrompt(plannerOutput);
+        PlannerDecision repairedStructured = readStructuredDecision(repairPrompt, context.getModel(), context.getSessionId());
+        if (repairedStructured != null) {
+            List<ToolPlan> repairedPlans = parseStructuredDecision(repairedStructured);
+            if (!repairedPlans.isEmpty()) {
+                logger.info("Tool selection repaired via structured output. raw={}", plannerOutput);
+                return repairedPlans;
+            }
+        }
+
+        String repaired = llmRuntime.complete(repairPrompt, context.getModel(), context.getSessionId());
         if (isCompleteOutput(repaired)) {
             return noToolSelection("LLM planner repaired to COMPLETE");
         }
@@ -347,6 +370,52 @@ public class HeuristicPlanningService implements PlanningService {
         return List.of(ToolPlan.noTool(reason));
     }
 
+    private PlannerDecision readStructuredDecision(String prompt, String model, String sessionId) {
+        if (!supportsStructuredPlanner(model)) {
+            return null;
+        }
+        try {
+            return llmRuntime.completeStructured(prompt, model, PlannerDecision.class, sessionId);
+        } catch (Exception e) {
+            logger.debug("Structured planner output unavailable: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean supportsStructuredPlanner(String model) {
+        return true;
+    }
+
+    private List<ToolPlan> parseStructuredDecision(PlannerDecision decision) {
+        if (decision == null) {
+            return List.of();
+        }
+        if (Boolean.TRUE.equals(decision.complete())) {
+            return noToolSelection("LLM planner returned COMPLETE");
+        }
+        List<PlannerToolSelection> selections = decision.plans();
+        if (selections == null || selections.isEmpty()) {
+            return List.of();
+        }
+
+        List<ToolPlan> plans = new ArrayList<>();
+        for (PlannerToolSelection item : selections) {
+            if (item == null) {
+                continue;
+            }
+            String server = safe(item.server());
+            if (server.isBlank() || !mcpProperties.getServers().containsKey(server)) {
+                continue;
+            }
+            String tool = safe(item.tool());
+            String reason = safe(item.reason()).isBlank() ? "LLM selected tool" : safe(item.reason());
+            String capability = resolveCapability(server);
+            Map<String, Object> arguments = item.arguments() == null ? Map.of() : item.arguments();
+            plans.add(new ToolPlan(capability, server, tool, reason, arguments, true));
+        }
+        return plans;
+    }
+
     private List<ToolPlan> logResult(List<ToolPlan> plans) {
         logger.info("Tool selection result: {}", plans);
         return plans;
@@ -357,6 +426,11 @@ public class HeuristicPlanningService implements PlanningService {
             String tool,
             String reason,
             Map<String, Object> arguments
+    ) {}
+
+    private record PlannerDecision(
+            Boolean complete,
+            List<PlannerToolSelection> plans
     ) {}
 
     private record CachedToolSchema(List<Map<String, Object>> tools, long expiresAtMs) {

@@ -42,7 +42,7 @@ public class AgentGraphState extends AgentState {
     }
 
     public String model() {
-        return value(MODEL).map(String.class::cast).orElse("mistral");
+        return value(MODEL).map(String.class::cast).orElse("openai");
     }
 
     @SuppressWarnings("unchecked")

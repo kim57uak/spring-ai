@@ -10,4 +10,8 @@ public interface SyncChatService extends ChatService {
      * 동기 방식으로 응답 생성
      */
     String generate(String message);
+
+    default String generate(String message, ChatRequestContext context) {
+        return generate(message);
+    }
 }

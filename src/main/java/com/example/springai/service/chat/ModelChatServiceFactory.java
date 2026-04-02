@@ -1,8 +1,5 @@
-package com.example.springai.service;
+package com.example.springai.service.chat;
 
-import com.example.springai.service.chat.ChatService;
-import com.example.springai.service.chat.StreamChatService;
-import com.example.springai.service.chat.SyncChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -61,6 +58,13 @@ public class ModelChatServiceFactory {
      */
     public StreamChatService resolveStream(ChatModelType modelType) {
         return resolveAs(modelType, StreamChatService.class, "stream");
+    }
+
+    /**
+     * 구조화 응답(entity) 호출 가능한 서비스로 안전 캐스팅하여 반환한다.
+     */
+    public StructuredChatService resolveStructured(ChatModelType modelType) {
+        return resolveAs(modelType, StructuredChatService.class, "structured");
     }
 
     private <T> T resolveAs(ChatModelType modelType, Class<T> expectedType, String mode) {

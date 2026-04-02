@@ -24,7 +24,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
     implementation 'org.bsc.langgraph4j:langgraph4j-core'
-    implementation 'org.bsc.langgraph4j:langgraph4j-spring-ai'
     implementation 'me.paulschwarz:spring-dotenv:4.0.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.awaitility:awaitility:4.2.0'
