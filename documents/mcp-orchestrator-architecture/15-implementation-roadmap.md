@@ -26,7 +26,7 @@
 
 ## Guardrail (All Phases)
 
-- LLM call: step당 기본 1회 + 실패 시 1회 재시도
+- LLM call: `LlmCallPolicy` + `llm.rate-limit.*` 설정 기반으로 최소 간격/재시도/백오프를 적용
 - tool allowlist 강제
 - raw prompt/token/session 내부값 로그 금지
 - 예외 응답은 `GlobalExceptionHandler`에서 일원화

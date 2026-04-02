@@ -14,7 +14,9 @@ participant "LangGraph4J CompiledGraph" as StateGraph
 participant "PlanningService" as Planner
 participant "ToolExecutionService" as Executor
 participant "ResponseComposeService" as Composer
-participant "Spring AI Runtime" as Runtime
+participant "DefaultAgentLlmRuntime" as Runtime
+participant "ModelChatServiceFactory" as ChatFactory
+participant "Provider ChatService" as ProviderChatService
 participant "MCP Server" as McpServer
 
 User -> Controller : chat stream request
@@ -36,7 +38,11 @@ else no tool required
 end
 
 Orchestrator -> Composer : streamCompose(context)
-Composer -> Runtime : stream final response
+Composer -> Runtime : stream(prompt, model, sessionId)
+Runtime -> ChatFactory : resolveStream(ChatModelType)
+ChatFactory --> Runtime : StreamChatService
+Runtime -> ProviderChatService : streamGenerate(prompt, context)
+ProviderChatService --> Runtime : tokens
 Runtime --> Composer : tokens
 Composer --> Orchestrator : chunks
 Orchestrator --> ChatService : chunks

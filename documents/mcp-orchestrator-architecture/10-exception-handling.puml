@@ -8,7 +8,12 @@ skinparam componentStyle rectangle
 class HttpChatController
 class HttpChatService
 class AgentOrchestrator
+class HeuristicPlanningService
+class LlmResponseComposeService
+class DefaultAgentLlmRuntime
+class ModelChatServiceFactory
 class LlmCallPolicy
+class SpringAiCompatibleChatService
 class GlobalExceptionHandler
 
 class ChatProcessingException
@@ -20,7 +25,13 @@ class McpValidationException
 
 HttpChatController --> HttpChatService
 HttpChatService --> AgentOrchestrator
-HttpChatService --> LlmCallPolicy
+AgentOrchestrator --> HeuristicPlanningService
+AgentOrchestrator --> LlmResponseComposeService
+HeuristicPlanningService --> DefaultAgentLlmRuntime
+LlmResponseComposeService --> DefaultAgentLlmRuntime
+DefaultAgentLlmRuntime --> ModelChatServiceFactory
+ModelChatServiceFactory --> SpringAiCompatibleChatService
+SpringAiCompatibleChatService --> LlmCallPolicy
 
 LlmCallPolicy --> ChatProcessingException : throw
 GlobalExceptionHandler --> ChatProcessingException : @ExceptionHandler

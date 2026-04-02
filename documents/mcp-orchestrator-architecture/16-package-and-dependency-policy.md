@@ -10,9 +10,13 @@
 - `advice.GlobalExceptionHandler`
 - `exception.*` (`ChatProcessingException`, `McpException` 계층)
 - `service.HttpChatService`
-- `service.chat.*` (`ChatService`, `SyncChatService`, `StreamChatService`, `LlmCallPolicy`)
-- `service.llm.*` + `service.parser.*`
+- `service.chat.*` (`ChatService`, `SyncChatService`, `StreamChatService`, `StructuredChatService`, `ModelChatServiceFactory`, `ChatModelType`, `ChatRequestContext`)
+- `service.chat.model.*` (`OpenAiModelChatService`, `GeminiModelChatService`, `GeminiLiteModelChatService`, `MistralModelChatService`)
+- `service.chat.advisor.*` (`PromptSanitizingAdvisor`, `SessionHistoryAdvisor`)
+- `service.chat.tool.McpToolCallbackProvider`
+- `service.llm.LlmCredentialValidator`
 - `mcp.*` (`McpClientFactory`, `ProcessManager`, `StdioMcpClient`)
+- `config.*` (`HttpLlmProperties`, `LlmRateLimitProperties`, `McpProperties`, `ObservationConfig`, `SpringAiChatAdvisorConfig`)
 
 ## To-Be (Agentic Layer)
 
@@ -42,7 +46,7 @@
 
 - `controller -> service(HttpChatService) -> orchestrator -> (plan/execute/compose/store/security/prompt/runtime)`
 - `controller/advice -> exception`
-- `plan/compose -> spring-ai runtime port`
+- `plan/compose -> runtime(AgentLlmRuntime) -> chat factory -> provider chat service`
 - `execute -> mcp client port`
 - `store -> redis implementation`
 - 상위 계층은 concrete class가 아니라 port(interface)에만 의존한다.
@@ -57,4 +61,5 @@
 
 ## LLM Cost Guardrail
 
-- step당 1회 호출 + 실패 시 1회 재시도만 허용한다.
+- 기본 정책은 `LlmCallPolicy` + `LlmRequestRateLimiter`로 통합한다.
+- 재시도/백오프는 `llm.rate-limit.*` 설정으로 운영 환경에서 조정한다.

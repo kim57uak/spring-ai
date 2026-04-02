@@ -14,6 +14,12 @@
 
 ```text
 src/main/java/com/example/springai
+├── config
+│   ├── HttpLlmProperties
+│   ├── LlmRateLimitProperties
+│   ├── McpProperties
+│   ├── ObservationConfig
+│   └── SpringAiChatAdvisorConfig
 ├── advice
 │   └── GlobalExceptionHandler
 ├── controller
@@ -24,9 +30,11 @@ src/main/java/com/example/springai
 │   └── McpException + subclasses
 ├── service
 │   ├── HttpChatService
-│   ├── chat/{ChatService, SyncChatService, StreamChatService, LlmCallPolicy}
-│   ├── llm/{LlmApiClient, ResponseParser}
-│   ├── parser/{AbstractResponseParser, OpenAiResponseParser, GeminiResponseParser, MistralResponseParser}
+│   ├── chat/{ChatService, SyncChatService, StreamChatService, StructuredChatService, ChatModelType, ChatRequestContext, ModelChatServiceFactory, SpringAiCompatibleChatService, LlmCallPolicy, LlmRequestRateLimiter}
+│   ├── chat/model/{OpenAiModelChatService, GeminiModelChatService, GeminiLiteModelChatService, MistralModelChatService}
+│   ├── chat/advisor/{PromptSanitizingAdvisor, SessionHistoryAdvisor}
+│   ├── chat/tool/{McpToolCallbackProvider}
+│   ├── llm/{LlmCredentialValidator}
 │   └── agent
 │       ├── orchestrator/AgentOrchestrator
 │       ├── graph/AgentStateGraphFactory
@@ -55,15 +63,18 @@ src/main/java/com/example/springai
 - `PlanningService#plan(PlanningContext): List<ToolPlan>`
 - `ToolExecutionService#execute(ToolPlan, PlanningContext)`
 - `ResponseComposeService#streamCompose(PlanningContext)`
+- `ModelChatServiceFactory#resolveSync/resolveStream/resolveStructured(ChatModelType)`
+- `AgentLlmRuntime#complete/completeStructured/stream(prompt, model, sessionId)`
+- `SpringAiCompatibleChatService#generate/streamGenerate/generateStructured(message, context)`
 - `ConversationStore#load/save(sessionId, history)`
 - `GraphCheckpointStore#loadCheckpoint/saveCheckpoint(sessionId, checkpoint)`
-- `AgentLlmRuntime#complete/stream(prompt, options)`
 
 ## Dependency Policy
 
 - `controller -> orchestrator -> ports(plan/execute/compose/store/runtime/security)`
 - `controller -> service(HttpChatService) -> orchestrator -> ports(plan/execute/compose/store/runtime/security/prompt)`
 - `advice -> exception`
+- `runtime(DefaultAgentLlmRuntime) -> chat(ModelChatServiceFactory -> provider ChatService)`
 - 구현체는 `impl` 또는 기능별 패키지에 둔다.
 - 상위 계층은 concrete class 의존 금지, interface 의존만 허용한다.
 - provider/tool/storage 변경 시 필요한 계층은 직접 수정/리팩토링할 수 있다.
@@ -72,7 +83,7 @@ src/main/java/com/example/springai
 
 - tool/server allowlist 필수
 - 인증/권한/입력 오류는 `HUMAN_MESSAGE`로 반환
-- LLM 호출 상한: step당 1회 + 재시도 1회
+- LLM 호출 정책은 `LlmCallPolicy` + `llm.rate-limit.*` 설정으로 운영 조정
 - raw prompt/token/internal key/full MCP payload 로그 금지
 
 ## Migration Rules

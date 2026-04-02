@@ -20,8 +20,10 @@ rectangle "spring-ai application" {
   [PlanningService] as PlanningService
   [ToolExecutionService] as ToolExecutionService
   [ResponseComposeService] as ResponseComposeService
+  [DefaultAgentLlmRuntime] as LlmRuntime
+  [ModelChatServiceFactory] as ChatFactory
+  [Provider ChatService] as ProviderChatService
   [McpClientFactory] as McpClientFactory
-  [LlmCallPolicy] as LlmPolicy
 }
 
 database "Redis" as Redis {
@@ -39,19 +41,21 @@ node "MCP Servers" {
 }
 
 User --> WebUi
-WebUi --> Controller : /api/http-chat, /stream
+WebUi --> Controller : /api/http-chat/stream, /clear, /status
 Controller --> ChatService
 Controller --> Advice : exception mapped to ErrorResponse
 ChatService --> Orchestrator
-ChatService --> LlmPolicy
 Orchestrator --> StateGraph
 Orchestrator --> PlanningService
 Orchestrator --> ToolExecutionService
 Orchestrator --> ResponseComposeService
 Orchestrator --> ConversationStore
 Orchestrator --> CheckpointStore
-PlanningService --> SpringAiRuntime
-ResponseComposeService --> SpringAiRuntime
+PlanningService --> LlmRuntime
+ResponseComposeService --> LlmRuntime
+LlmRuntime --> ChatFactory
+ChatFactory --> ProviderChatService
+ProviderChatService --> SpringAiRuntime
 ToolExecutionService --> McpClientFactory
 McpClientFactory --> McpA
 McpClientFactory --> McpB
