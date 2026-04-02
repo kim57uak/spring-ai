@@ -6,18 +6,14 @@ skinparam shadowing false
 
 [*] --> REQUEST_VALIDATED
 REQUEST_VALIDATED --> HISTORY_LOADED
-HISTORY_LOADED --> GRAPH_INVOKED
-GRAPH_INVOKED --> PLANNED
+HISTORY_LOADED --> PLANNED
 
 PLANNED --> EXECUTING : planRequired=true
 PLANNED --> COMPOSING : planRequired=false
 
-EXECUTING --> EXECUTING : additional tool plan (max iteration)
-EXECUTING --> COMPOSING : no more executable plan
+EXECUTING --> COMPOSING : execute loop finished
 
-COMPOSING --> PERSISTING
-PERSISTING --> STREAMING
-STREAMING --> COMPLETED
+COMPOSING --> COMPLETED
 
 COMPLETED --> [*]
 HUMAN_MESSAGE --> [*]
@@ -28,7 +24,7 @@ Tool loop is bounded
 - execute plan
 - append trace
 - re-plan
-- max iterations guard
+- max iterations guard (4)
 end note
 
 @enduml

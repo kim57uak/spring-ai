@@ -6,6 +6,7 @@
 
 - `mcp.servers.search-mcp-server`
 - `mcp.servers.search-economy-index`
+- `mcp.servers.hanatourApi`
 
 ## Recommended Shape (Platform-Neutral)
 

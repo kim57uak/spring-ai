@@ -13,7 +13,6 @@ package "entry" {
 package "service" {
   [HttpChatService] as ChatService
   [AgentOrchestrator] as Orchestrator
-  [LlmCallPolicy] as LlmPolicy
 }
 
 package "agent ports" {
@@ -39,13 +38,21 @@ package "agent impl" {
 package "runtime/integration" {
   interface "AgentLlmRuntime" as LlmRuntime
   [DefaultAgentLlmRuntime] as LlmRuntimeImpl
+  [ModelChatServiceFactory] as ChatFactory
+  [LlmCallPolicy] as LlmPolicy
+  [LlmRequestRateLimiter] as LlmRateLimiter
+  [McpToolCallbackProvider] as ToolCallbackProvider
+  [SpringAiCompatibleChatService] as SpringAiChatBase
+  [OpenAiModelChatService] as OpenAiChatService
+  [GeminiModelChatService] as GeminiChatService
+  [GeminiLiteModelChatService] as GeminiLiteChatService
+  [MistralModelChatService] as MistralChatService
   [McpClientFactory] as McpFactory
 }
 
 Controller --> ChatService
 Advice --> ChatService : error mapping boundary
 ChatService --> Orchestrator
-ChatService --> LlmPolicy
 
 Orchestrator --> PlanningPort
 Orchestrator --> ExecutePort
@@ -68,6 +75,15 @@ ComposeImpl --> LlmRuntime
 PlanningImpl --> LlmRuntime
 ExecuteImpl --> McpFactory
 LlmRuntime <|.. LlmRuntimeImpl
+LlmRuntimeImpl --> ChatFactory
+ChatFactory --> SpringAiChatBase
+SpringAiChatBase --> LlmPolicy
+LlmPolicy --> LlmRateLimiter
+SpringAiChatBase --> ToolCallbackProvider
+SpringAiChatBase <|-- OpenAiChatService
+SpringAiChatBase <|-- GeminiChatService
+SpringAiChatBase <|-- GeminiLiteChatService
+SpringAiChatBase <|-- MistralChatService
 
 note right of Orchestrator
 Depends on interfaces first

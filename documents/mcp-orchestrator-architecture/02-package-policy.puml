@@ -6,6 +6,14 @@ skinparam shadowing false
 skinparam packageStyle rectangle
 
 package "com.example.springai" {
+  package "config" {
+    class HttpLlmProperties
+    class LlmRateLimitProperties
+    class McpProperties
+    class ObservationConfig
+    class SpringAiChatAdvisorConfig
+  }
+
   package "advice" {
     class GlobalExceptionHandler
   }
@@ -21,26 +29,38 @@ package "com.example.springai" {
 
   package "service" {
     class HttpChatService
-    class ModelChatServiceFactory
-    class ChatModelType
 
     package "chat" {
+      enum ChatModelType
+      class ChatRequestContext
+      class ModelChatServiceFactory
+      class LlmCallPolicy
+      class LlmRequestRateLimiter
       interface ChatService
       interface SyncChatService
       interface StreamChatService
-      class LlmCallPolicy
+      interface StructuredChatService
+      abstract class SpringAiCompatibleChatService
+
+      package "advisor" {
+        class PromptSanitizingAdvisor
+        class SessionHistoryAdvisor
+      }
+
+      package "model" {
+        class OpenAiModelChatService
+        class GeminiModelChatService
+        class GeminiLiteModelChatService
+        class MistralModelChatService
+      }
+
+      package "tool" {
+        class McpToolCallbackProvider
+      }
     }
 
     package "llm" {
-      interface LlmApiClient
-      interface ResponseParser
-    }
-
-    package "parser" {
-      class AbstractResponseParser
-      class OpenAiResponseParser
-      class GeminiResponseParser
-      class MistralResponseParser
+      class LlmCredentialValidator
     }
 
     package "agent" {
@@ -96,7 +116,8 @@ Rules
 - controller/service는 API 진입과 조율 책임만 가진다
 - 예외 처리와 예외 타입은 advice/exception 패키지에서 분리한다
 - orchestrator는 포트(interface)에만 의존한다
-- parser는 ResponseParser 계약으로 교체 가능하도록 유지한다
+- 모델 라우팅은 ChatModelType + ModelChatServiceFactory로 일원화한다
+- MCP tool callback은 mcp 설정 allowlist를 준수한다
 end note
 
 @enduml

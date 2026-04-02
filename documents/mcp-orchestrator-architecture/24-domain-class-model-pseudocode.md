@@ -139,11 +139,13 @@ import java.util.Optional;
 public interface ConversationStore {
     List<String> load(String sessionId);
     void save(String sessionId, List<String> messages);
+    void clear(String sessionId);
 }
 
 public interface GraphCheckpointStore {
     Optional<String> loadCheckpoint(String sessionId);
     void saveCheckpoint(String sessionId, String checkpointPayload);
+    void clear(String sessionId);
 }
 ```
 

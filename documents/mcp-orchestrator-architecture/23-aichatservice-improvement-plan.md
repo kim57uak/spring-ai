@@ -8,7 +8,7 @@
 
 ## Reuse Strategy
 
-- `AgentOrchestrator`는 `McpClientFactory`를 직접 사용하거나 구조에 맞게 리팩토링해서 사용한다.
+- `AgentOrchestrator`는 `ToolExecutionService`를 통해 MCP 실행을 위임하고, 실제 MCP 연동은 `McpToolExecutionService` + `McpClientFactory`에서 처리한다.
 - 상태 관리는 `ConversationStore`/`GraphCheckpointStore` 기반 Redis 구조를 우선 사용한다.
 - 모델 호출은 `Spring AI` 기반 공통 runtime으로 통합한다.
 

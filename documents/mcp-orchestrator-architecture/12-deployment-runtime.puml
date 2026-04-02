@@ -15,8 +15,12 @@ node "Spring Boot App Runtime" {
   [HeuristicPlanningService] as PlanningService
   [McpToolExecutionService] as ToolExecutionService
   [LlmResponseComposeService] as ComposeService
+  [DefaultAgentLlmRuntime] as LlmRuntime
+  [ModelChatServiceFactory] as ChatFactory
+  [Provider ChatService] as ProviderChatService
   [McpClientFactory] as McpClientFactory
   [LlmCallPolicy] as LlmPolicy
+  [LlmRequestRateLimiter] as LlmRateLimiter
 }
 
 database "Redis" as Redis {
@@ -34,7 +38,6 @@ node "MCP Server Processes" as McpServers {
 Controller --> ChatService
 Controller --> Advice
 ChatService --> Orchestrator
-ChatService --> LlmPolicy
 Orchestrator --> GraphFactory
 GraphFactory --> CompiledGraph
 Orchestrator --> PlanningService
@@ -42,8 +45,13 @@ Orchestrator --> ToolExecutionService
 Orchestrator --> ComposeService
 Orchestrator --> ConversationStore
 Orchestrator --> CheckpointStore
-PlanningService --> Providers
-ComposeService --> Providers
+PlanningService --> LlmRuntime
+ComposeService --> LlmRuntime
+LlmRuntime --> ChatFactory
+ChatFactory --> ProviderChatService
+ProviderChatService --> LlmPolicy
+LlmPolicy --> LlmRateLimiter
+ProviderChatService --> Providers
 ToolExecutionService --> McpClientFactory
 McpClientFactory --> Mcp1
 McpClientFactory --> Mcp2

@@ -15,7 +15,9 @@ participant "PlanningService" as Planner
 participant "ToolExecutionService" as Executor
 participant "MCP Server" as McpServer
 participant "ResponseComposeService" as Composer
-participant "Spring AI Runtime" as Runtime
+participant "DefaultAgentLlmRuntime" as Runtime
+participant "ModelChatServiceFactory" as ChatFactory
+participant "Provider ChatService" as ProviderChatService
 
 User -> Controller : HTTP /api/http-chat/stream
 Controller -> ChatService : streamChat(sessionId, message, model)
@@ -32,7 +34,11 @@ Executor -> McpServer : callTool(tool, args)
 McpServer --> Executor : tool result
 
 Orchestrator -> Composer : streamCompose(context)
-Composer -> Runtime : stream final answer
+Composer -> Runtime : stream(prompt, model, sessionId)
+Runtime -> ChatFactory : resolveStream(ChatModelType.from(model))
+ChatFactory --> Runtime : StreamChatService
+Runtime -> ProviderChatService : streamGenerate(prompt, context)
+ProviderChatService --> Runtime : token chunks
 Runtime --> Composer : token chunks
 Composer --> Orchestrator : chunk
 Orchestrator --> ChatService : chunk

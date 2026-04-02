@@ -9,7 +9,9 @@ participant "HttpChatController" as Controller
 participant "HttpChatService" as ChatService
 participant "AgentOrchestrator" as Orchestrator
 participant "ResponseComposeService" as Composer
-participant "Spring AI Runtime" as Runtime
+participant "DefaultAgentLlmRuntime" as Runtime
+participant "ModelChatServiceFactory" as ChatFactory
+participant "Provider ChatService" as ProviderChatService
 participant "Conversation Store (Redis)" as HistoryRedis
 participant "Checkpoint Store (Redis)" as CheckpointRedis
 
@@ -21,9 +23,17 @@ Orchestrator --> Controller : first summary chunk
 Controller --> User : SSE data(summary)
 
 Orchestrator -> Composer : streamCompose(context)
-Composer -> Runtime : stream tokens
+Composer -> Runtime : stream(prompt, model, sessionId)
+Runtime -> ChatFactory : resolveStream(ChatModelType.from(model))
+ChatFactory --> Runtime : StreamChatService
+Runtime -> ProviderChatService : streamGenerate(prompt, context)
+ProviderChatService --> Runtime : Flux<String>
+Runtime --> Composer : Flux<String>
 
 loop token stream
+  Composer -> Runtime : request next chunk
+  Runtime -> ProviderChatService : next token
+  ProviderChatService --> Runtime : token
   Runtime --> Composer : token
   Composer --> Orchestrator : chunk(token)
   Orchestrator --> ChatService : chunk(token)

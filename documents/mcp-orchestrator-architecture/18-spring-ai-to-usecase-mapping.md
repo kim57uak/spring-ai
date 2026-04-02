@@ -2,6 +2,14 @@
 
 ## Core Runtime Mapping
 
+- `DefaultAgentLlmRuntime`
+  - agent 계층의 단일 LLM 포트이며, model 문자열을 `ChatModelType`으로 변환한다.
+- `ModelChatServiceFactory`
+  - `ChatModelType` 기반으로 sync/stream/structured 구현체를 라우팅한다.
+- `SpringAiCompatibleChatService` + `service.chat.model.*`
+  - OpenAI 호환 endpoint를 공통 호출하며 provider별(`openai`, `gemini`, `gemini-lite`, `mistral`) 설정을 캡슐화한다.
+- `LlmCallPolicy` / `LlmRequestRateLimiter`
+  - 최소 호출 간격, 429/5xx 재시도, 백오프 정책을 공통 적용한다.
 - `PlanningService`
   - Spring AI를 사용해 사용자 질의 + 최근 히스토리에서 다음 액션을 선택한다.
 - `ResponseComposeService`
@@ -32,6 +40,7 @@
 - planner 입력에는 최근 conversation history가 포함된다.
 - graph checkpoint는 Redis에 저장해 재시작 후 resume 가능해야 한다.
 - 상위 계층은 `ConversationStore`, `GraphCheckpointStore` 인터페이스만 의존한다.
+- 요청별 컨텍스트(`ChatRequestContext`)로 `sessionId`, `requestedModel`, `mcpToolCallbacksEnabled`를 전달한다.
 
 ## Handoff
 

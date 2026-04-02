@@ -14,6 +14,9 @@ participant "ToolExecutionService" as Executor
 participant "MCP Server (Market)" as MarketMcp
 participant "MCP Server (Action)" as ActionMcp
 participant "ResponseComposeService" as Composer
+participant "DefaultAgentLlmRuntime" as Runtime
+participant "ModelChatServiceFactory" as ChatFactory
+participant "Provider ChatService" as ProviderChatService
 
 User -> Controller : "지표 확인 후 실행까지 진행해줘"
 Controller -> ChatService : streamChat(...)
@@ -32,6 +35,12 @@ ActionMcp --> Executor : action result
 
 StateGraph --> Orchestrator : context(updated plans/results)
 Orchestrator -> Composer : streamCompose(context)
+Composer -> Runtime : stream(prompt, model, sessionId)
+Runtime -> ChatFactory : resolveStream(ChatModelType)
+ChatFactory --> Runtime : StreamChatService
+Runtime -> ProviderChatService : streamGenerate(prompt, context)
+ProviderChatService --> Runtime : chunks
+Runtime --> Composer : chunks
 Composer --> Orchestrator : response chunks
 Orchestrator --> ChatService : chunks
 ChatService --> Controller : chunks
