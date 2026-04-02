@@ -18,6 +18,6 @@ public record ChatRequest(
     }
 
     public ChatRequest(String message) {
-        this(message, "mistral");
+        this(message, "openai");
     }
 }

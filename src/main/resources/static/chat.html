@@ -662,15 +662,17 @@
             <select id="model-select">
                 <optgroup label="Configured Providers">
                     <option value="mistral">Mistral</option>
+                    <option value="mistral-large">Mistral Large</option>
                     <option value="gemini">Gemini</option>
+                    <option value="gemini-lite">Gemini Lite</option>
                     <option value="openai">OpenAI</option>
-                    <option value="gemma">Gemma</option>
                 </optgroup>
                 <optgroup label="Model Aliases">
                     <option value="mistral-medium-latest">Mistral Medium Latest</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
+                    <option value="mistral-large-latest">Mistral Large Latest</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gemma-3-27b-it">Gemma 3 27B IT</option>
                 </optgroup>
             </select>
         </div>
@@ -785,8 +787,9 @@
         if (!modelSelect) return 'mistral';
 
         const value = (modelSelect.value || '').toLowerCase();
+        if (value.includes('mistral-large') || value === 'mistral-large') return 'mistral-large-latest';
+        if (value.includes('flash-lite') || value === 'gemini-lite') return 'gemini-lite';
         if (value.includes('gemini')) return 'gemini';
-        if (value.includes('gemma')) return 'gemma';
         if (value.includes('openai') || value.includes('gpt')) return 'openai';
         if (value.includes('mistral')) return 'mistral';
         return 'mistral';

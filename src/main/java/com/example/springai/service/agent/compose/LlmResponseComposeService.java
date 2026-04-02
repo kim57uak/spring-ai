@@ -39,7 +39,7 @@ public class LlmResponseComposeService implements ResponseComposeService {
     public Flux<String> streamCompose(PlanningContext context) {
         String prompt = promptTemplateService.buildComposePrompt(context);
         String traceSummary = traceSummaryFormatter.format(context);
-        Flux<String> answerStream = llmRuntime.stream(prompt, context.getModel())
+        Flux<String> answerStream = llmRuntime.stream(prompt, context.getModel(), context.getSessionId())
                 .filter(chunk -> chunk != null && !chunk.isBlank())
                 .bufferTimeout(24, Duration.ofMillis(120))
                 .filter(buffer -> !buffer.isEmpty())

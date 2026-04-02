@@ -6,7 +6,7 @@ spring:
     import: "optional:classpath:systemPrompt.yml"
   ai:
     model:
-      chat: none
+      chat: openai
       embedding: none
       image: none
       moderation: none
@@ -14,6 +14,12 @@ spring:
         # Prevent OpenAI audio beans from auto-starting when no OpenAI key is configured.
         speech: none
         transcription: none
+    openai:
+      api-key: ${http-llm.openai.api-key}
+      chat:
+        options:
+          model: ${http-llm.openai.model:gpt-4o-mini}
+          max-tokens: ${http-llm.openai.max-tokens:16384}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -33,9 +39,14 @@ spring:
 
 http-llm:
   gemini:
-    api-key: ${HTTP_GEMINI_API_KEY}
-    model: gemini-3-flash-preview
-    base-url: https://generativelanguage.googleapis.com/v1beta/models
+    api-key: ${GEMINI_API_KEY}
+    model: gemini-2.5-flash
+    base-url: ${HTTP_GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
+    max-tokens: 30000
+  gemini-lite:
+    api-key: ${GEMINI_API_KEY}
+    model: gemini-2.5-flash-lite
+    base-url: ${HTTP_GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
     max-tokens: 30000
   mistral:
     api-key: ${MISTRAL_API_KEY}
@@ -46,11 +57,6 @@ http-llm:
     api-key: ${OPENAI_API_KEY:${HTTP_OPENAI_API_KEY:}}
     model: gpt-4o-mini
     base-url: https://api.openai.com/v1/chat/completions
-    max-tokens: 16384
-  gemma:
-    api-key: ${GEMMA_API_KEY:${HTTP_GEMINI_API_KEY:}}
-    model: gemma-3-27b-it
-    base-url: ${GEMMA_BASE_URL:https://generativelanguage.googleapis.com/v1beta/models}
     max-tokens: 16384
 
 llm:

@@ -6,6 +6,7 @@ import com.example.springai.service.agent.security.PromptInjectionGuard;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
@@ -13,13 +14,16 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
 
     private final PromptProperties promptProperties;
     private final PromptInjectionGuard promptInjectionGuard;
+    private final PromptRenderService promptRenderService;
 
     public DefaultPromptTemplateService(
             PromptProperties promptProperties,
-            PromptInjectionGuard promptInjectionGuard
+            PromptInjectionGuard promptInjectionGuard,
+            PromptRenderService promptRenderService
     ) {
         this.promptProperties = promptProperties;
         this.promptInjectionGuard = promptInjectionGuard;
+        this.promptRenderService = promptRenderService;
     }
 
     /**
@@ -38,7 +42,14 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
         String composeRules = required(promptProperties.getComposeRules(), "prompts.compose-rules");
         String baseSystem = resolveBaseSystemPrompt();
         String template = required(promptProperties.getComposePromptTemplate(), "prompts.compose-prompt-template");
-        return template.formatted(baseSystem, promptProperties.getFinalAnswer(), composeRules, protectedUserMessage, protectedHistory, toolResult);
+        return promptRenderService.render(template, Map.of(
+                "baseSystem", baseSystem,
+                "finalAnswer", promptProperties.getFinalAnswer(),
+                "composeRules", composeRules,
+                "userMessage", protectedUserMessage,
+                "history", protectedHistory,
+                "toolResult", toolResult
+        ));
     }
 
     private String resolveBaseSystemPrompt() {

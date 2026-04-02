@@ -1,4 +1,4 @@
-package com.example.springai.service;
+package com.example.springai.service.chat;
 
 import java.util.Locale;
 import java.util.Map;
@@ -8,11 +8,11 @@ import java.util.stream.Stream;
 
 public enum ChatModelType {
     GEMINI("gemini"),
-    GEMMA("gemma"),
+    GEMINI_LITE("gemini-lite"),
     MISTRAL("mistral"),
     OPENAI("openai");
 
-    private static final ChatModelType DEFAULT_MODEL = MISTRAL;
+    private static final ChatModelType DEFAULT_MODEL = OPENAI;
     private static final Map<String, ChatModelType> LOOKUP = Stream.of(values())
             .collect(Collectors.toUnmodifiableMap(ChatModelType::value, Function.identity()));
     private final String value;
@@ -31,15 +31,21 @@ public enum ChatModelType {
         }
 
         String normalized = rawModel.trim().toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("gpt")) {
-            return OPENAI;
-        }
-        if (normalized.startsWith("gemma")) {
-            return GEMMA;
-        }
         ChatModelType direct = LOOKUP.get(normalized);
         if (direct != null) {
             return direct;
+        }
+        if (normalized.startsWith("gpt")) {
+            return OPENAI;
+        }
+        if (normalized.startsWith("gemini-2.5-flash-lite")) {
+            return GEMINI_LITE;
+        }
+        if (normalized.startsWith("gemini")) {
+            return GEMINI;
+        }
+        if (normalized.startsWith("mistral")) {
+            return MISTRAL;
         }
         throw new IllegalArgumentException("Unsupported model: " + rawModel);
     }
