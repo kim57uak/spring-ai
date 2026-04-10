@@ -2,11 +2,12 @@
 
 ## Current Source Shape
 
-현재는 `application.yml`에 MCP 설정이 있으나, 리팩토링 기준선에서는 `mcp.yml`로 분리한다.
+현재 구현은 MCP 설정을 `mcp.yml`로 분리했고, `application.yml`에서 `spring.config.import`로 로드한다.
 
 - `mcp.servers.search-mcp-server`
 - `mcp.servers.search-economy-index`
-- `mcp.servers.hanatourApi`
+- `mcp.servers.sale-product`
+- `mcp.servers.reservation`
 
 ## Recommended Shape (mcp.yml)
 
@@ -72,5 +73,5 @@ agent:
 - HttpChatController: unrestricted MCP access
 - Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
 - `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
-- MCP settings split: `application.yml` -> `mcp.yml`
+- MCP settings split 완료: `application.yml` imports `mcp.yml`
 - Tool schema loading: reconnect-first, cache-second, unique composite cache key

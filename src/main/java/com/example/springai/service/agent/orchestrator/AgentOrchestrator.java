@@ -1,9 +1,12 @@
 package com.example.springai.service.agent.orchestrator;
 
+import com.example.springai.a2a.context.A2aExecutionContext;
+import com.example.springai.a2a.lifecycle.A2aLifecycleService;
 import com.example.springai.model.agent.AgentChatRequest;
 import com.example.springai.model.agent.AgentGraphState;
 import com.example.springai.model.agent.AgentScope;
 import com.example.springai.model.agent.PlanningContext;
+import com.example.springai.a2a.task.A2aTaskStatus;
 import com.example.springai.service.agent.compose.ResponseComposeService;
 import com.example.springai.service.agent.graph.AgentStateGraphFactory;
 import com.example.springai.service.agent.security.HumanMessageService;
@@ -23,7 +26,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 에이전트 실행 전체 흐름(그래프 실행, 응답 생성, 상태 저장)을 조율하는 오케스트레이터.
+ */
 @Component
 public class AgentOrchestrator {
 
@@ -32,19 +39,22 @@ public class AgentOrchestrator {
     private final AgentStateGraphFactory graphFactory;
     private final ResponseComposeService responseComposeService;
     private final HumanMessageService humanMessageService;
+    private final A2aLifecycleService a2aLifecycleService;
 
     public AgentOrchestrator(
             ConversationStore conversationStore,
             GraphCheckpointStore checkpointStore,
             AgentStateGraphFactory graphFactory,
             ResponseComposeService responseComposeService,
-            HumanMessageService humanMessageService
+            HumanMessageService humanMessageService,
+            A2aLifecycleService a2aLifecycleService
     ) {
         this.conversationStore = conversationStore;
         this.checkpointStore = checkpointStore;
         this.graphFactory = graphFactory;
         this.responseComposeService = responseComposeService;
         this.humanMessageService = humanMessageService;
+        this.a2aLifecycleService = a2aLifecycleService;
     }
 
     /**
@@ -66,15 +76,41 @@ public class AgentOrchestrator {
                 Mono.fromCallable(() -> invokeGraph(request))
                         .subscribeOn(Schedulers.boundedElastic())
                         .flatMapMany(context -> {
+                            if (isCanceled(request.a2aContext())) {
+                                return Flux.just("요청이 취소되었습니다.");
+                            }
                             StringBuilder assistantResponse = new StringBuilder();
+                            AtomicBoolean failed = new AtomicBoolean(false);
+                            AtomicBoolean canceled = new AtomicBoolean(false);
                             return responseComposeService.streamCompose(context)
+                                    .<String>handle((chunk, sink) -> {
+                                        if (isCanceled(request.a2aContext())) {
+                                            canceled.set(true);
+                                            sink.next("요청이 취소되었습니다.");
+                                            sink.complete();
+                                            return;
+                                        }
+                                        sink.next(chunk);
+                                    })
                                     .index()
-                                    .onErrorResume(error -> Flux.just(Tuples.of(1L, humanMessageService.fromException(error))))
+                                    .onErrorResume(error -> {
+                                        failed.set(true);
+                                        markA2aFailed(request, error);
+                                        return Flux.just(Tuples.of(1L, humanMessageService.fromException(error)));
+                                    })
                                     .doOnNext(indexedChunk -> appendFinalAnswerOnly(assistantResponse, indexedChunk))
                                     .map(Tuple2::getT2)
-                                    .doFinally(signalType -> persist(context, assistantResponse.toString()));
+                                    .doFinally(signalType -> {
+                                        persist(context, assistantResponse.toString());
+                                        if (!failed.get() && !canceled.get()) {
+                                            markA2aCompleted(request, assistantResponse.toString());
+                                        }
+                                    });
                         })
-                        .onErrorResume(error -> Flux.just(humanMessageService.fromException(error)))
+                        .onErrorResume(error -> {
+                            markA2aFailed(request, error);
+                            return Flux.just(humanMessageService.fromException(error));
+                        })
         );
     }
 
@@ -83,10 +119,16 @@ public class AgentOrchestrator {
         checkpointStore.clear(sessionId);
     }
 
+    /**
+     * 세션 대화 이력의 메시지 수를 반환한다.
+     */
     public int getMessageCount(String sessionId) {
         return conversationStore.load(sessionId).size();
     }
 
+    /**
+     * 실행 완료 후 사용자/어시스턴트 발화를 대화 저장소와 체크포인트 저장소에 반영한다.
+     */
     private void persist(PlanningContext context, String assistantResponse) {
         List<String> updated = new ArrayList<>(context.getHistory());
         updated.add("user: " + context.getUserMessage());
@@ -159,9 +201,50 @@ public class AgentOrchestrator {
         return request.scope();
     }
 
+    /**
+     * 스코프 허용 도구 맵을 불변 복사본으로 변환한다.
+     */
     private Map<String, List<String>> toScopeMap(AgentScope scope) {
         Map<String, List<String>> mapped = new LinkedHashMap<>();
         scope.allowedToolsByServer().forEach((server, tools) -> mapped.put(server, List.copyOf(tools)));
         return mapped;
+    }
+
+    /**
+     * A2A 요청인 경우 작업을 완료 상태로 마킹한다.
+     */
+    private void markA2aCompleted(AgentChatRequest request, String response) {
+        A2aExecutionContext context = request.a2aContext();
+        if (context == null || context.taskId() == null || context.taskId().isBlank()) {
+            return;
+        }
+        if (isCanceled(context)) {
+            return;
+        }
+        a2aLifecycleService.markCompleted(context.taskId(), context.scopeName(), response == null ? "" : response);
+    }
+
+    /**
+     * A2A 요청인 경우 작업을 실패 상태로 마킹한다.
+     */
+    private void markA2aFailed(AgentChatRequest request, Throwable error) {
+        A2aExecutionContext context = request.a2aContext();
+        if (context == null || context.taskId() == null || context.taskId().isBlank()) {
+            return;
+        }
+        String message = error == null ? "A2A task failed" : error.getMessage();
+        a2aLifecycleService.markFailed(context.taskId(), context.scopeName(), "INTERNAL_ERROR", message);
+    }
+
+    /**
+     * A2A task가 취소 상태인지 조회한다.
+     */
+    private boolean isCanceled(A2aExecutionContext context) {
+        if (context == null || context.taskId() == null || context.taskId().isBlank()) {
+            return false;
+        }
+        return a2aLifecycleService.get(context.taskId(), context.scopeName())
+                .map(snapshot -> snapshot.status() == A2aTaskStatus.CANCELED)
+                .orElse(false);
     }
 }

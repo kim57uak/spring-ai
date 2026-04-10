@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 01. Agentic AI System Context (Refactoring Baseline)
+title 01. Agentic AI System Context (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -16,10 +16,15 @@ rectangle "spring-ai application" {
   [ProductAgentController] as ProductController
   [ReservationAgentController] as ReservationController
   [SearchAgentController] as SearchController
+  [ProductA2AController] as ProductA2AController
+  [ReservationA2AController] as ReservationA2AController
+  [SearchA2AController] as SearchA2AController
+  [AgentCardController] as AgentCardController
   [GlobalExceptionHandler] as Advice
   [HttpChatService] as HttpChatService
   [ScopedAgentChatService] as ScopedChatService
   [AgentScopeResolver] as ScopeResolver
+  [AgentScopeActivationService] as ScopeActivationService
   [AgentOrchestrator] as Orchestrator
   [LangGraph4J CompiledGraph] as StateGraph
   [PlanningService] as PlanningService
@@ -30,6 +35,9 @@ rectangle "spring-ai application" {
   [Provider ChatService] as ProviderChatService
   [McpClientFactory] as McpClientFactory
   [ToolSchemaRegistry] as ToolSchemaRegistry
+  [A2ATaskStore] as A2ATaskStore
+  [A2aLifecycleService] as A2aLifecycleService
+  [AgentCardRegistry] as AgentCardRegistry
 }
 
 database "Redis" as Redis {
@@ -53,12 +61,21 @@ WebUi --> HttpController : /api/http-chat/*
 WebUi --> ProductController : /api/product-agent/*
 WebUi --> ReservationController : /api/reservation-agent/*
 WebUi --> SearchController : /api/search-agent/*
+WebUi --> ProductA2AController : /a2a/product
+WebUi --> ReservationA2AController : /a2a/reservation
+WebUi --> SearchA2AController : /a2a/search
+WebUi --> AgentCardController : /.well-known/agent.json
 HttpController --> HttpChatService
 ProductController --> ScopedChatService
 ReservationController --> ScopedChatService
 SearchController --> ScopedChatService
+ProductA2AController --> ScopedChatService
+ReservationA2AController --> ScopedChatService
+SearchA2AController --> ScopedChatService
 ScopedChatService --> ScopeResolver
 ScopeResolver --> McpYml
+AgentCardController --> ScopeActivationService
+AgentCardController --> AgentCardRegistry
 HttpController --> Advice : exception mapped to ErrorResponse
 HttpChatService --> Orchestrator
 ScopedChatService --> Orchestrator
@@ -68,6 +85,8 @@ Orchestrator --> ToolExecutionService
 Orchestrator --> ResponseComposeService
 Orchestrator --> ConversationStore
 Orchestrator --> CheckpointStore
+Orchestrator --> A2aLifecycleService
+A2aLifecycleService --> A2ATaskStore
 PlanningService --> LlmRuntime
 ResponseComposeService --> LlmRuntime
 LlmRuntime --> ChatFactory
@@ -88,6 +107,14 @@ Graph flow
 - execute (optional, iterative)
 - compose stream
 - persist
+- if A2A context exists:
+  update task lifecycle
+end note
+
+note right of ScopeActivationService
+A2A/AgentCard exposure control
+- enabled scopes from agent.cards.enabled-scopes
+- fallback to configured agent.scopes
 end note
 
 note bottom of Redis

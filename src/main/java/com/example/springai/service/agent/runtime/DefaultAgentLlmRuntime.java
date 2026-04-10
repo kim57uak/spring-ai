@@ -9,6 +9,11 @@ import com.example.springai.service.chat.SyncChatService;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
+/**
+ * 모델 타입 해석과 ChatService 선택을 담당하는 기본 LLM 런타임 구현.
+ * <p>
+ * 호출 모드(동기/구조화/스트림)에 따라 적합한 서비스 인터페이스를 선택한다.
+ */
 @Component
 public class DefaultAgentLlmRuntime implements AgentLlmRuntime {
 
@@ -29,6 +34,11 @@ public class DefaultAgentLlmRuntime implements AgentLlmRuntime {
         return chatService.generate(prompt, ChatRequestContext.of(sessionId, false, model));
     }
 
+    /**
+     * 구조화 응답이 가능한 모델 서비스로 라우팅해 지정 타입으로 역직렬화한다.
+     * <p>
+     * 모델 문자열은 ChatModelType으로 정규화한 뒤 사용한다.
+     */
     @Override
     public <T> T completeStructured(String prompt, String model, Class<T> type, String sessionId) {
         ChatModelType modelType = ChatModelType.from(model);

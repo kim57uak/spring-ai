@@ -1,0 +1,68 @@
+@startuml
+!pragma layout smetana
+title 04. Host Agent Domain Class Model
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+
+class HostAgentRequest {
+  +sessionId: String
+  +message: String
+  +model: String
+}
+
+class HostPlanningContext {
+  +sessionId: String
+  +userMessage: String
+  +model: String
+  +history: List<String>
+  +routingPlans: List<RoutingPlan>
+  +results: List<DownstreamCallResult>
+  +checkpointId: String
+}
+
+class RoutingPlan {
+  +agentKey: String
+  +method: String
+  +reason: String
+  +priority: int
+  +arguments: Map<String, Object>
+}
+
+class DownstreamCallResult {
+  +agentKey: String
+  +taskId: String
+  +status: String
+  +payload: String
+  +errorCode: String
+  +errorMessage: String
+}
+
+class HostGraphState {
+  +SESSION_ID
+  +USER_MESSAGE
+  +MODEL
+  +HISTORY
+  +ROUTING_PLANS
+  +DOWNSTREAM_RESULTS
+  +CURRENT_NODE
+}
+
+interface HostPlanningService {
+  +plan(context): List<RoutingPlan>
+}
+
+interface A2AInvocationService {
+  +invoke(plan, context): DownstreamCallResult
+}
+
+interface HostResponseComposeService {
+  +streamCompose(context): Flux<String>
+}
+
+HostAgentRequest --> HostPlanningContext
+HostPlanningContext --> RoutingPlan
+HostPlanningContext --> DownstreamCallResult
+HostGraphState --> HostPlanningContext
+
+@enduml

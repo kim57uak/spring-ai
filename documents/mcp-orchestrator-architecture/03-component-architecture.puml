@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 03. Agentic MCP Component Architecture (Refactoring Target)
+title 03. Agentic MCP Component Architecture (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -10,6 +10,10 @@ package "entry" {
   [ProductAgentController\n(restricted)] as ProductController
   [ReservationAgentController\n(restricted)] as ReservationController
   [SearchAgentController\n(restricted)] as SearchController
+  [ProductA2AController\n(restricted)] as ProductA2AController
+  [ReservationA2AController\n(restricted)] as ReservationA2AController
+  [SearchA2AController\n(restricted)] as SearchA2AController
+  [AgentCardController] as AgentCardController
   [GlobalExceptionHandler] as Advice
 }
 
@@ -18,6 +22,7 @@ package "service" {
   [ScopedAgentChatService] as ScopedChatService
   [AgentOrchestrator] as Orchestrator
   [AgentScopeResolver] as ScopeResolver
+  [AgentScopeActivationService] as ScopeActivationService
 }
 
 package "agent ports" {
@@ -27,6 +32,7 @@ package "agent ports" {
   interface "ConversationStore" as ConversationStorePort
   interface "GraphCheckpointStore" as CheckpointStorePort
   interface "AgentStateGraphFactory" as GraphFactoryPort
+  interface "A2ATaskStore" as A2aTaskStorePort
 }
 
 package "agent impl" {
@@ -38,6 +44,10 @@ package "agent impl" {
   [RedisGraphCheckpointStore] as CheckpointStoreImpl
   [PromptInjectionGuard] as PromptGuard
   [HumanMessageService] as HumanMessageService
+  [A2aLifecycleService] as A2aLifecycleService
+  [InMemoryA2ATaskStore] as A2aTaskStoreImpl
+  [AgentCardRegistry] as AgentCardRegistry
+  [A2AResponseMapper] as A2aResponseMapper
 }
 
 package "runtime/integration" {
@@ -66,8 +76,16 @@ HttpChatService --> Orchestrator : all servers/tools scope
 ProductController --> ScopedChatService
 ReservationController --> ScopedChatService
 SearchController --> ScopedChatService
+ProductA2AController --> ScopedChatService
+ReservationA2AController --> ScopedChatService
+SearchA2AController --> ScopedChatService
+ProductA2AController --> ScopeActivationService
+ReservationA2AController --> ScopeActivationService
+SearchA2AController --> ScopeActivationService
 ScopedChatService --> ScopeResolver
 ScopedChatService --> Orchestrator : restricted scope
+AgentCardController --> ScopeActivationService
+AgentCardController --> AgentCardRegistry
 
 ScopeResolver --> McpYml : load allowedServers/allowedToolsByServer
 
@@ -78,6 +96,8 @@ Orchestrator --> ConversationStorePort
 Orchestrator --> CheckpointStorePort
 Orchestrator --> GraphFactoryPort
 Orchestrator --> HumanMessageService
+Orchestrator --> A2aLifecycleService
+A2aLifecycleService --> A2aTaskStorePort
 
 PlanningPort <|.. PlanningImpl
 ExecutePort <|.. ExecuteImpl
@@ -85,6 +105,7 @@ ComposePort <|.. ComposeImpl
 GraphFactoryPort <|.. GraphFactoryImpl
 ConversationStorePort <|.. ConversationStoreImpl
 CheckpointStorePort <|.. CheckpointStoreImpl
+A2aTaskStorePort <|.. A2aTaskStoreImpl
 
 PlanningImpl --> PromptGuard
 ExecuteImpl --> PromptGuard
@@ -113,6 +134,13 @@ McpYml --> ToolSchemaRegistry : cache key fields
 note right of HttpController
 Backward compatibility:
 HttpChatController keeps unrestricted MCP access.
+end note
+
+note right of ProductA2AController
+A2A compatibility:
+- additive controller layer
+- same scope policy as existing controllers
+- no cross-controller forwarding
 end note
 
 note bottom of ToolSchemaRegistry

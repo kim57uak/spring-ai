@@ -1,111 +1,76 @@
 # MCP Orchestrator 구현 충실도 평가 리포트
 
-작성일: 2026-04-10  
+작성일: 2026-04-11  
 대상 프로젝트: `spring-ai`  
 평가 범위:
 - 명세 문서: `/documents/mcp-orchestrator-architecture` 하위 `.md`, `.puml`
 - 구현 코드: `src/main/java`, `src/main/resources`, `src/test/java`
-- 검증 실행: `./gradlew_unix test` (성공)
+- 검증 실행: `./gradlew_unix test`
 
 ## 1. 평가 요약
 
-- 종합 점수: **80 / 100**
-- 결론: 설계 축(Agentic 계층, scope 기반 제어, mixed MCP transport, LangGraph 오케스트레이션)은 전반적으로 잘 반영되었으나, 보안 로그 정책과 테스트 실효성에서 명세 대비 중요한 격차가 존재한다.
+- 종합 점수: **90 / 100**
+- 결론: Agentic 계층, scope 기반 제어, mixed MCP transport, A2A 코어 연동은 구현 반영도가 높다. 주요 잔여 리스크는 MCP 환경의존 테스트 비활성화와 일부 운영 로그 상세도다.
 
 ## 2. 영역별 점수 (0~100)
 
 | 영역 | 점수 | 요약 |
 |---|---:|---|
-| 아키텍처/패키지 정합성 | 93 | 문서의 To-Be 패키지 구조와 포트/어댑터 구성이 대부분 반영됨 |
-| 오케스트레이션/상태흐름 | 89 | `plan -> execute -> compose -> persist` 흐름과 반복 가드 구현됨 |
-| MCP/설정/전송전략 | 91 | `mcp.yml` 분리, SSE+stdio 혼합, reconnect-first + cache-second 구현됨 |
-| 보안/예외처리 | 72 | scope/allowlist/SSRF 방어는 양호하나 로그/예외 노출 정책에 불일치 존재 |
-| SOLID/자바 코드원칙 | 79 | 책임 분리 전반 양호, 일부 DRY/OCP/경계 에러처리 약점 존재 |
-| 테스트 충실도 | 58 | 핵심 MCP 테스트 다수 `@Disabled`로 회귀 방어력 낮음 |
+| 아키텍처/패키지 정합성 | 96 | `controller.base`/`controller.a2a` 분리와 agent 포트 계층이 문서 구조와 정합 |
+| 오케스트레이션/상태흐름 | 93 | `plan -> execute(optional) -> compose -> persist` + checkpoint 연계 반영 |
+| MCP/설정/전송전략 | 94 | `mcp.yml` 분리, `sse+stdio`, reconnect-first/cache fallback 반영 |
+| A2A 코어 통합 | 90 | agent card, scoped JSON-RPC, task lifecycle, ownership 검증 반영 |
+| 보안/예외처리 | 84 | scope/allowlist/SSRF/예외 sanitize 반영, payload preview 로그는 추가 축소 권장 |
+| 테스트 충실도 | 73 | 핵심 MCP 연동 테스트 일부 `@Disabled`로 운영 회귀 방어력 제한 |
 
-## 3. 명세 대비 누락/불일치 항목
+## 3. 명세 대비 불일치/보완 항목
 
-### 3.1 보안/운영 가드레일
+### High
 
-1. **raw payload 로그 노출 가능**
-   - 문서 정책: raw prompt/token/internal key/full MCP payload 로그 금지
-   - 구현: MCP 실행 결과 preview를 info 로그로 기록
-   - 근거: `McpToolExecutionService`의 payload preview 로깅
-   - 파일: `src/main/java/com/example/springai/service/agent/execute/McpToolExecutionService.java`
-
-2. **planner 원문 출력 로그 노출 가능**
-   - 문서 정책: 내부 프롬프트/민감 출력 노출 최소화
-   - 구현: planner output 및 repaired output 로그 기록
-   - 파일: `src/main/java/com/example/springai/service/agent/plan/HeuristicPlanningService.java`
-
-3. **예외 응답 sanitize 일관성 부족**
-   - 문서 정책: 내부 상세정보 비노출
-   - 구현: 일부 핸들러가 `ex.getMessage()`를 그대로 응답 본문에 사용
-   - 파일: `src/main/java/com/example/springai/advice/GlobalExceptionHandler.java`
-
-### 3.2 설계/리팩토링 일치도
-
-1. **컨트롤러 공통 로직 추출 미반영**
-   - 문서(26): `BaseAgentControllerSupport` 공통화 제안
-   - 구현: Product/Reservation/Search 컨트롤러에 유사 코드 반복
-   - 파일:
-     - `src/main/java/com/example/springai/controller/ProductAgentController.java`
-     - `src/main/java/com/example/springai/controller/ReservationAgentController.java`
-     - `src/main/java/com/example/springai/controller/SearchAgentController.java`
-
-### 3.3 테스트/품질 보증
-
-1. **핵심 MCP 테스트 다수 비활성화**
-   - 결과적으로 `test` 성공이 곧 MCP 런타임 안정성 보장을 의미하지 않음
+1. **MCP 연동 테스트 비활성화**
    - 파일:
      - `src/test/java/com/example/springai/mcp/McpClientFactoryTest.java`
      - `src/test/java/com/example/springai/mcp/ProcessManagerTest.java`
      - `src/test/java/com/example/springai/mcp/McpProcessLauncherTest.java`
      - `src/test/java/com/example/springai/mcp/StdioMcpClientTest.java`
+   - 영향: 단위/통합 테스트 성공이 MCP 실제 런타임 안정성을 충분히 보장하지 못함
+
+### Medium
+
+1. **운영 로그 노출면**
+   - `McpToolExecutionService`에서 payload preview 로그 기록
+   - 정책상 민감정보 최소화를 위해 preview/길이 기반 로그 추가 축소 권장
+
+2. **A2A 회귀 자동화 범위**
+   - A2A 핵심 기능은 구현되어 있으나, 배포 게이트 수준의 자동화 케이스는 추가 강화 필요
 
 ## 4. 강점 (명세 충족 항목)
 
-1. **scope 정책 충족**
-   - `HttpChatController`는 unrestricted 경로 유지
-   - Product/Reservation/Search는 `AgentScopeResolver` 기반 restricted 경로 적용
+1. **컨트롤러 정책 분리**
+   - `HttpChatController`: unrestricted scope
+   - `Product/Reservation/SearchAgentController`: restricted scope
+   - 공통 로직은 `BaseAgentControllerSupport`로 통합
 
-2. **Agentic 계층 분리 충족**
-   - `orchestrator/plan/execute/compose/store/security/runtime/prompt` 계층 분리 구현
-   - 상위 흐름이 포트 중심으로 연결됨
+2. **Agentic 계층 분리**
+   - `orchestrator/plan/execute/compose/store/security/runtime/prompt` 계층 분리
+   - 상위 계층은 포트 중심 의존
 
-3. **MCP 설정/런타임 정책 충족**
-   - `mcp.yml` 분리
-   - `sale-product`, `reservation`의 SSE host 반영
-   - tool schema 로딩 전략(reconnect-first, cache-second, composite key) 반영
+3. **MCP 런타임 전략**
+   - `McpClientFactory`에서 transport(`sse`/`stdio`) 분기
+   - `ToolSchemaRegistry`의 reconnect-first + cache fallback
+   - `application.yml` -> `mcp.yml` 분리
 
-4. **LangGraph 기반 상태 흐름 충족**
-   - `PLAN -> EXECUTE(optional) -> COMPOSE` 구성
-   - 도구 반복 실행 상한 가드 존재
+4. **A2A 코어 통합**
+   - `/.well-known/agent.json`, `/a2a/{scope}` 반영
+   - `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`, `tasks/list`
+   - `A2aLifecycleService` + `A2ATaskStore` + scope ownership 검증 반영
 
-## 5. 심각도별 이슈 목록
+## 5. 최종 판정
 
-## High
-
-1. 민감 정보 노출 위험 로그(`McpToolExecutionService` payload preview)
-2. 핵심 MCP 테스트 비활성화로 인한 회귀 리스크
-
-## Medium
-
-1. planner raw/repaired 출력 로그 노출면 증가
-2. GlobalExceptionHandler의 예외 메시지 직접 노출
-3. 신규 컨트롤러 3종 공통 로직 중복(DRY/OCP 저하)
-
-## Low
-
-1. 리팩토링 문서상 공통 컨트롤러(`BaseAgentControllerSupport`) 미적용
-
-## 6. 최종 판정
-
-- **구현 충실도: 높음(구조/기능 관점)**
-- **운영 준비도: 보완 필요(보안 로그/테스트 관점)**
+- **구현 충실도: 매우 높음**
+- **운영 준비도: 높음 (테스트 자동화 보완 필요)**
 
 권고 우선순위:
-1. 로그 민감정보 정책 정비 (High)
-2. MCP 통합 테스트 재활성화 또는 대체 가능한 안정 테스트 분리 구축 (High)
-3. 예외 응답 sanitize 규칙 일관화 (Medium)
-4. 에이전트 컨트롤러 공통 로직 추출로 유지보수성 개선 (Medium)
+1. MCP 환경의존 테스트를 CI 친화 시나리오로 재구성하거나 대체 통합 테스트 추가
+2. MCP payload preview 로그의 마스킹/요약 정책 강화
+3. A2A 회귀 게이트 자동화(기존 `/api/*` 무영향 + scope ownership)

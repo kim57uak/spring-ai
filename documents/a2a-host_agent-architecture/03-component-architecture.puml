@@ -1,0 +1,85 @@
+@startuml
+!pragma layout smetana
+title 03. A2A Host Agent Component Architecture
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+package "entry" {
+  [HostA2AController] as HostA2AController
+  [GlobalExceptionHandler] as Advice
+}
+
+package "application" {
+  [HostAgentService] as HostService
+  [HostAgentOrchestrator] as HostOrchestrator
+}
+
+package "ports" {
+  interface "HostPlanningService" as PlanningPort
+  interface "A2AInvocationService" as InvocationPort
+  interface "HostResponseComposeService" as ComposePort
+  interface "HostStateGraphFactory" as GraphFactoryPort
+  interface "ConversationStore" as ConversationStorePort
+  interface "GraphCheckpointStore" as CheckpointStorePort
+}
+
+package "impl" {
+  [LlmHostPlanningService] as PlanningImpl
+  [DefaultA2AInvocationService] as InvocationImpl
+  [LlmHostResponseComposeService] as ComposeImpl
+  [LangGraphHostStateGraphFactory] as GraphFactoryImpl
+  [RedisConversationStore] as ConversationStoreImpl
+  [RedisGraphCheckpointStore] as CheckpointStoreImpl
+  [A2AClientRegistry] as A2ARegistry
+  [A2AJsonRpcClient] as A2AJsonRpcClient
+}
+
+package "runtime/integration" {
+  [DefaultAgentLlmRuntime] as LlmRuntime
+  [ModelChatServiceFactory] as ChatFactory
+  [LlmCallPolicy] as LlmPolicy
+  [a2a-host.yml] as HostConfig
+  [Product Agent A2A] as ProductAgent
+  [Reservation Agent A2A] as ReservationAgent
+  [Search Agent A2A] as SearchAgent
+}
+
+HostA2AController --> HostService
+HostA2AController --> Advice
+HostService --> HostOrchestrator
+
+HostOrchestrator --> PlanningPort
+HostOrchestrator --> InvocationPort
+HostOrchestrator --> ComposePort
+HostOrchestrator --> GraphFactoryPort
+HostOrchestrator --> ConversationStorePort
+HostOrchestrator --> CheckpointStorePort
+
+PlanningPort <|.. PlanningImpl
+InvocationPort <|.. InvocationImpl
+ComposePort <|.. ComposeImpl
+GraphFactoryPort <|.. GraphFactoryImpl
+ConversationStorePort <|.. ConversationStoreImpl
+CheckpointStorePort <|.. CheckpointStoreImpl
+
+PlanningImpl --> LlmRuntime
+ComposeImpl --> LlmRuntime
+LlmRuntime --> ChatFactory
+ChatFactory --> LlmPolicy
+
+InvocationImpl --> A2ARegistry
+InvocationImpl --> A2AJsonRpcClient
+A2ARegistry --> HostConfig
+A2AJsonRpcClient --> ProductAgent
+A2AJsonRpcClient --> ReservationAgent
+A2AJsonRpcClient --> SearchAgent
+
+note right of InvocationImpl
+No sub-agent internals
+- routing key -> A2A endpoint
+- JSON-RPC request/response normalization
+- timeout/retry/circuit-breaker
+end note
+
+@enduml

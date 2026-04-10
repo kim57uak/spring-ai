@@ -8,6 +8,9 @@ import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 
+/**
+ * PlanningContext를 최종 사용자 응답 스트림으로 변환하는 컴포넌트.
+ */
 @Component
 public class LlmResponseComposeService implements ResponseComposeService {
 
@@ -48,6 +51,9 @@ public class LlmResponseComposeService implements ResponseComposeService {
         return Flux.concat(Flux.just(traceSummary), answerStream);
     }
 
+    /**
+     * LLM 스트림이 비어 있을 때 도구 실행 결과를 기반으로 대체 응답을 생성한다.
+     */
     private String toolFallback(PlanningContext context) {
         if (!context.getExecutionResult().executed()) {
             return "요청을 처리했지만 응답 생성이 비어 있습니다. 다시 시도해 주세요.";

@@ -16,6 +16,10 @@ EXECUTING --> TOOL_SCHEMA_REFRESHED : reconnect-first
 TOOL_SCHEMA_REFRESHED --> COMPOSING : execute loop finished
 
 COMPOSING --> COMPLETED
+COMPOSING --> A2A_TASK_COMPLETED : if a2aCtx exists && success
+COMPOSING --> A2A_TASK_FAILED : if a2aCtx exists && error
+A2A_TASK_COMPLETED --> COMPLETED
+A2A_TASK_FAILED --> COMPLETED
 
 COMPLETED --> [*]
 HUMAN_MESSAGE --> [*]
@@ -32,6 +36,12 @@ end note
 note right of SCOPE_RESOLVED
 HttpChatController: unrestricted scope
 Product/Reservation/Search: restricted scope
+A2A Product/Reservation/Search: same restricted scope
+end note
+
+note left
+A2A_TASK_RUNNING is marked before orchestrator execute
+at BaseA2AControllerSupport(createAndMarkRunning).
 end note
 
 @enduml

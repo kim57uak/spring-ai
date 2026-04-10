@@ -1,0 +1,39 @@
+@startuml
+!pragma layout smetana
+title 05. Host Agent LangGraph4J Orchestration
+
+skinparam shadowing false
+
+start
+
+:Request validated;
+:Load history/checkpoint;
+:Build HostGraphState;
+:Invoke CompiledGraph;
+
+:PLAN_INTENT node;
+:SELECT_DOWNSTREAM node;
+
+if (routing plan exists?) then (yes)
+  :CALL_A2A node;
+  if (more plans?) then (yes)
+    :loop next routing plan;
+  endif
+else (no)
+endif
+
+:MERGE_RESULTS node;
+:COMPOSE_RESPONSE node;
+:Persist history/checkpoint;
+
+stop
+
+note right
+Graph contract
+- nodes: plan, select, invoke, merge, compose
+- edge: select -> (invoke|compose)
+- invoke loop has max iteration guard
+- downstream call boundary is A2A only
+end note
+
+@enduml

@@ -135,6 +135,14 @@ public class LlmCallPolicy {
         return false;
     }
 
+    /**
+     * 서버 힌트(Retry-After/retryDelay)를 우선 사용하고, 없으면 지수 백오프+jitter를 계산한다.
+     * <p>
+     * 계산 순서:
+     * - Retry-After 헤더를 파싱한다.
+     * - 응답 본문의 retryDelay 필드를 파싱한다.
+     * - 둘 다 없으면 재시도 횟수 기반 지수 백오프를 계산한다.
+     */
     private Duration resolveRetryDelay(Throwable throwable, long retryCount) {
         if (throwable instanceof WebClientResponseException webClientException) {
             Duration headerDelay = parseRetryAfter(webClientException);
@@ -163,6 +171,11 @@ public class LlmCallPolicy {
         return Duration.ofMillis(clampedMs);
     }
 
+    /**
+     * Retry-After 헤더(초 또는 RFC1123 날짜)를 파싱해 재시도 지연으로 변환한다.
+     * <p>
+     * 파싱 실패 시 null을 반환해 다음 지연 계산 단계로 넘어간다.
+     */
     private Duration parseRetryAfter(WebClientResponseException exception) {
         String retryAfter = exception.getHeaders().getFirst("Retry-After");
         if (retryAfter == null || retryAfter.isBlank()) {
@@ -187,6 +200,11 @@ public class LlmCallPolicy {
         }
     }
 
+    /**
+     * 공급사별 오류 본문에 포함된 retryDelay 필드를 파싱한다.
+     * <p>
+     * 형식이 맞지 않거나 값 해석에 실패하면 null을 반환한다.
+     */
     private Duration parseRetryDelayFromBody(WebClientResponseException exception) {
         String body = exception.getResponseBodyAsString();
         if (body == null || body.isBlank()) {

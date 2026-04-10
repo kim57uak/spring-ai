@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * Mistral 공급사 설정을 사용하는 ChatService 구현체.
+ */
 @Service
 public class MistralModelChatService extends SpringAiCompatibleChatService {
 

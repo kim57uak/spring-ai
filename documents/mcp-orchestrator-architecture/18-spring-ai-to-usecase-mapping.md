@@ -47,11 +47,29 @@
 - handoff는 multi-agent 전환이 아니라 다음 tool group 노드 이동이다.
 - 이동 조건은 `LangGraph4j` conditional edge로 관리한다.
 
+## A2A Mapping (Doc 28)
+
+- `Product/Reservation/SearchA2AController`
+  - A2A JSON-RPC 입력을 `AgentScopeName`별 실행 컨텍스트로 변환
+- `ScopedAgentChatService`
+  - A2A 컨텍스트 유무에 따라 동일 orchestrator 경로 재사용
+- `AgentOrchestrator`
+  - lifecycle 훅에서 `A2ATaskStore` 상태 전이(RUNNING/COMPLETED/FAILED/CANCELED)
+- `A2ATaskStore`
+  - taskId lifecycle 저장 + scope ownership 검증
+- 핵심 원칙
+  - A2A 미사용 요청은 기존 경로와 동일 동작
+  - A2A 요청은 동일 core runtime을 공유하되 프로토콜 계층만 분리
+
 ## 2026-04-10 Alignment (Doc 26)
 
 - HttpChatController: unrestricted MCP access
 - Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
 - `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
-- MCP settings split: `application.yml` -> `mcp.yml`
+- MCP settings split 완료: `application.yml` imports `mcp.yml`
 - Tool schema loading: reconnect-first, cache-second, unique composite cache key
 
+## 2026-04-10 A2A Runtime Alignment (Doc 28)
+
+- 현재 버전 라인(Spring AI `1.0.3`) 기준으로 런타임 매핑 유지
+- A2A는 컨트롤러/DTO/TaskStore 계층 추가 후 코어 lifecycle 연동

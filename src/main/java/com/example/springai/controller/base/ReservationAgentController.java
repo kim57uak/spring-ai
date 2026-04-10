@@ -1,4 +1,4 @@
-package com.example.springai.controller;
+package com.example.springai.controller.base;
 
 import com.example.springai.model.agent.AgentScopeName;
 import com.example.springai.service.AgentScopeResolver;
@@ -11,32 +11,34 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
 @RestController
-public class ProductAgentController extends BaseAgentControllerSupport {
+@RequestMapping("/api/reservation-agent")
+public class ReservationAgentController extends BaseAgentControllerSupport {
 
-    public ProductAgentController(ScopedAgentChatService chatService, AgentScopeResolver scopeResolver) {
-        super(chatService, scopeResolver, AgentScopeName.PRODUCT);
+    public ReservationAgentController(ScopedAgentChatService chatService, AgentScopeResolver scopeResolver) {
+        super(chatService, scopeResolver, AgentScopeName.RESERVATION);
     }
 
-    @PostMapping(value = "/api/product-agent/stream", produces = MediaType.TEXT_PLAIN_VALUE)
+    @PostMapping(value = "/stream", produces = MediaType.TEXT_PLAIN_VALUE)
     public Flux<String> streamChat(@Valid @RequestBody ChatRequest request, HttpSession session) {
         return super.streamChat(request, session);
     }
 
-    @PostMapping("/api/product-agent/chat")
+    @PostMapping("/chat")
     public ChatResponse chat(@Valid @RequestBody ChatRequest request, HttpSession session) {
         return super.chat(request, session);
     }
 
-    @PostMapping("/api/product-agent/clear")
+    @PostMapping("/clear")
     public void clearHistory(HttpSession session) {
         super.clearHistory(session);
     }
 
-    @GetMapping("/api/product-agent/status")
+    @GetMapping("/status")
     public ChatResponse getStatus(HttpSession session) {
         return super.getStatus(session);
     }

@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * Gemini Lite 공급사 설정을 사용하는 ChatService 구현체.
+ */
 @Service
 public class GeminiLiteModelChatService extends SpringAiCompatibleChatService {
 

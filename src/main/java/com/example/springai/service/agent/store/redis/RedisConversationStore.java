@@ -14,6 +14,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 대화 히스토리를 Redis에 저장하는 ConversationStore 구현체.
+ * Redis 장애 시 로컬 메모리 폴백을 사용한다.
+ */
 @Component
 public class RedisConversationStore implements ConversationStore {
 
@@ -30,6 +34,9 @@ public class RedisConversationStore implements ConversationStore {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Redis에서 히스토리를 조회하고, 실패 시 로컬 폴백 값을 반환한다.
+     */
     @Override
     public List<String> load(String sessionId) {
         return runOrDefault(() -> {
@@ -43,6 +50,9 @@ public class RedisConversationStore implements ConversationStore {
         }, localCopy(sessionId), "load conversation", sessionId);
     }
 
+    /**
+     * Redis와 로컬 폴백에 히스토리를 함께 저장한다.
+     */
     @Override
     public void save(String sessionId, List<String> messages) {
         List<String> safeMessages = messages == null ? Collections.emptyList() : messages;
@@ -53,6 +63,9 @@ public class RedisConversationStore implements ConversationStore {
         }, "save conversation", sessionId);
     }
 
+    /**
+     * Redis/로컬 폴백의 세션 히스토리를 함께 삭제한다.
+     */
     @Override
     public void clear(String sessionId) {
         localFallback.remove(sessionId);

@@ -27,6 +27,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * 계획 결과를 바탕으로 MCP 도구를 실제 실행하고 결과를 표준 형태로 정규화한다.
+ * 서버/도구 스코프 검증과 URL 안전성 검증을 함께 수행한다.
+ */
 @Component
 public class McpToolExecutionService implements ToolExecutionService {
 
@@ -56,6 +60,14 @@ public class McpToolExecutionService implements ToolExecutionService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 도구 실행 메인 흐름.
+     * <p>
+     * 처리 순서:
+     * - 스코프/서버/도구 허용 여부를 검증한다.
+     * - 실행 파라미터를 구성한다.
+     * - MCP 호출 결과를 텍스트 중심 페이로드로 정규화한다.
+     */
     @Override
     public ToolExecutionResult execute(ToolPlan plan, PlanningContext context) {
         if (plan == null || !plan.toolRequired()) {
@@ -111,6 +123,7 @@ public class McpToolExecutionService implements ToolExecutionService {
             String serverName,
             List<Map<String, Object>> availableTools
     ) {
+        // 우선순위: 요청된 도구 > allowTools > 서버별 선호 도구 > query 지원 도구 > 임의 사용 가능 도구
         if (requestedTool != null && !requestedTool.isBlank()) {
             if (isAllowedAndPresent(client, config, requestedTool)) {
                 return requestedTool;
@@ -166,6 +179,7 @@ public class McpToolExecutionService implements ToolExecutionService {
             String userMessage,
             List<Map<String, Object>> availableTools
     ) {
+        // 스키마 기반으로 최소 파라미터를 구성해 도구 호출 성공 확률을 높인다.
         Map<String, Object> schema = findToolSchema(toolName, availableTools);
         Set<String> fields = extractInputFields(schema);
 
@@ -282,6 +296,7 @@ public class McpToolExecutionService implements ToolExecutionService {
 
     private boolean isPublicHost(String host) {
         try {
+            // DNS 결과가 하나라도 사설/루프백이면 SSRF 위험으로 차단한다.
             InetAddress[] addresses = InetAddress.getAllByName(host);
             if (addresses.length == 0) {
                 return false;
@@ -323,6 +338,7 @@ public class McpToolExecutionService implements ToolExecutionService {
             return "";
         }
         try {
+            // MCP content[].text 구조를 우선 병합하고, 파싱 실패 시 원문을 그대로 사용한다.
             JsonNode root = objectMapper.readTree(payload);
             JsonNode content = root.path("content");
             if (content.isArray() && !content.isEmpty()) {

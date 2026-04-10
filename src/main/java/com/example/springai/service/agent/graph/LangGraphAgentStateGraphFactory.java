@@ -179,10 +179,12 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
     }
 
     private String signature(ToolPlan plan) {
+        // 동일 도구 중복 실행 방지를 위한 식별자.
         return plan.serverName() + "|" + plan.toolName() + "|" + plan.arguments();
     }
 
     private AsyncNodeAction<AgentGraphState> composeNode() {
+        // 실제 응답 생성은 오케스트레이터의 compose 서비스가 수행하므로 상태 마킹만 수행한다.
         return state -> CompletableFuture.completedFuture(Map.of(
                 AgentGraphState.CURRENT_NODE, "COMPOSING"
         ));

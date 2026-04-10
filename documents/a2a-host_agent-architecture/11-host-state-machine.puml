@@ -1,0 +1,31 @@
+@startuml
+!pragma layout smetana
+title 11. Host Agent State Machine
+
+skinparam shadowing false
+
+[*] --> REQUEST_VALIDATED
+REQUEST_VALIDATED --> HISTORY_LOADED
+HISTORY_LOADED --> PLANNED
+PLANNED --> ROUTING_SELECTED
+
+ROUTING_SELECTED --> A2A_CALLING : plans exist
+ROUTING_SELECTED --> COMPOSING : no plan
+
+A2A_CALLING --> A2A_RESULT_MERGED : call success
+A2A_CALLING --> HUMAN_MESSAGE : call failed and unrecoverable
+A2A_RESULT_MERGED --> ROUTING_SELECTED : next plan exists
+A2A_RESULT_MERGED --> COMPOSING : all plans done
+
+COMPOSING --> COMPLETED
+HUMAN_MESSAGE --> COMPLETED
+COMPLETED --> [*]
+
+note right of A2A_CALLING
+Per-call policy
+- endpoint allowlist check
+- timeout/retry
+- circuit breaker
+end note
+
+@enduml

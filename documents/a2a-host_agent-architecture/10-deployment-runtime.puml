@@ -1,0 +1,54 @@
+@startuml
+!pragma layout smetana
+title 10. Host Agent Deployment Runtime
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+node "Host Agent Spring Boot Runtime" {
+  [HostA2AController] as HostA2AController
+  [HostAgentService] as HostService
+  [HostAgentOrchestrator] as HostOrchestrator
+  [LangGraphHostStateGraphFactory] as GraphFactory
+  [LlmHostPlanningService] as Planner
+  [DefaultA2AInvocationService] as Invoker
+  [LlmHostResponseComposeService] as Composer
+  [A2AClientRegistry] as Registry
+  [A2AJsonRpcClient] as A2AClient
+  [DefaultAgentLlmRuntime] as LlmRuntime
+}
+
+database "Redis" as Redis {
+  [RedisConversationStore] as ConversationStore
+  [RedisGraphCheckpointStore] as CheckpointStore
+}
+
+cloud "LLM Providers" as LlmProviders
+
+node "Downstream A2A Agents" {
+  [Product Agent] as ProductAgent
+  [Reservation Agent] as ReservationAgent
+  [Search Agent] as SearchAgent
+}
+
+artifact "a2a-host.yml" as HostConfig
+
+HostA2AController --> HostService
+HostService --> HostOrchestrator
+HostOrchestrator --> GraphFactory
+HostOrchestrator --> Planner
+HostOrchestrator --> Invoker
+HostOrchestrator --> Composer
+HostOrchestrator --> ConversationStore
+HostOrchestrator --> CheckpointStore
+Planner --> LlmRuntime
+Composer --> LlmRuntime
+LlmRuntime --> LlmProviders
+Invoker --> Registry
+Registry --> HostConfig
+Invoker --> A2AClient
+A2AClient --> ProductAgent
+A2AClient --> ReservationAgent
+A2AClient --> SearchAgent
+
+@enduml

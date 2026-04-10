@@ -24,7 +24,7 @@ participant "SSE MCP Server\n10.225.18.50:8080" as SseMcp
 participant "stdio MCP Server\nsearch-mcp-server" as StdioMcp
 
 User -> Controller : chat stream request
-Controller -> ScopeResolver : resolve scope
+Controller -> ScopeResolver : resolve scope (scoped controller only)
 Controller -> ChatService : streamChat(...)
 ChatService -> Orchestrator : execute(request)
 
@@ -67,8 +67,8 @@ Orchestrator -> CheckpointRedis : save checkpoint
 
 note right of Runtime
 Cost guardrail
-- per step: 1 call
-- retry once on failure
+- LlmCallPolicy + LlmRequestRateLimiter 적용
+- retry/backoff는 llm.rate-limit.* 설정 기반
 end note
 
 @enduml

@@ -34,10 +34,22 @@ public class HttpChatService {
         );
     }
 
+    /**
+     * 세션 상태를 초기화한다.
+     * <p>
+     * 초기화 대상:
+     * - 대화 히스토리
+     * - 그래프 체크포인트
+     */
     public void clearSession(String sessionId) {
         agentOrchestrator.clearSession(sessionId);
     }
 
+    /**
+     * 세션 메시지 개수를 조회한다.
+     * <p>
+     * 반환 값은 저장소 기준 현재 메시지 건수다.
+     */
     public int getMessageCount(String sessionId) {
         return agentOrchestrator.getMessageCount(sessionId);
     }
