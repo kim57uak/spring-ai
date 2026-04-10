@@ -59,6 +59,15 @@ public class ToolSchemaRegistry {
         schemaRefreshExecutor.shutdownNow();
     }
 
+    /**
+     * 서버 도구 목록 조회 진입점.
+     * <p>
+     * 조회 순서:
+     * - scope-cache를 확인한다.
+     * - server-cache를 확인하고 필요 시 백그라운드 갱신을 예약한다.
+     * - 캐시 미스 시 원격 갱신을 비동기로 예약한다.
+     * - 즉시 반환 가능한 데이터가 없으면 정적 allow-tools 설정으로 폴백한다.
+     */
     public List<Map<String, Object>> loadTools(String serverName, AgentScope scope) {
         AgentScope safeScope = scope == null ? AgentScope.unrestricted() : scope;
         McpProperties.ServerConfig config = mcpProperties.getServers().get(serverName);
@@ -156,6 +165,7 @@ public class ToolSchemaRegistry {
         if (config == null) {
             return "unknown|" + serverName;
         }
+        // 전송 방식/엔드포인트/허용도구/스코프 제약이 바뀌면 별도 캐시 엔트리로 분리한다.
         String transport = config.getTransport().toLowerCase();
         String endpointOrCommandSignature = "sse".equals(transport)
                 ? (config.getHost() + config.getEndpoint())
@@ -182,6 +192,11 @@ public class ToolSchemaRegistry {
         return transport + "|" + serverName + "|" + endpointOrCommandSignature + "|" + toolSetHash;
     }
 
+    /**
+     * 동일 키에 대한 중복 원격 조회를 방지하면서 비동기 갱신 작업을 등록한다.
+     * <p>
+     * refreshInFlight 맵으로 동시성 중복 실행을 차단한다.
+     */
     private void scheduleRefresh(String serverName, AgentScope scope) {
         String taskKey = buildCacheKey(serverName, scope);
         if (refreshInFlight.putIfAbsent(taskKey, Boolean.TRUE) != null) {
@@ -196,12 +211,18 @@ public class ToolSchemaRegistry {
         });
     }
 
+    /**
+     * MCP 원격 listTools 결과를 받아 캐시에 반영한다.
+     * <p>
+     * 성공 시 scope/server 캐시를 함께 갱신하고, 실패 시 기존 캐시는 유지한다.
+     */
     private void refreshFromRemote(String serverName, AgentScope scope) {
         McpProperties.ServerConfig config = mcpProperties.getServers().get(serverName);
         if (config == null) {
             return;
         }
         try {
+            // 원격 조회 성공 시 scope/server 캐시를 동시에 갱신한다.
             McpClient client = mcpClientFactory.createClient(serverName);
             List<Map<String, Object>> remoteTools = normalizeTools(client.listTools());
             List<Map<String, Object>> filtered = filterByAllowTools(remoteTools, config.getAllowTools());

@@ -12,6 +12,10 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
+/**
+ * 그래프 체크포인트를 Redis에 저장하는 GraphCheckpointStore 구현체.
+ * Redis 장애 시 로컬 메모리 폴백을 사용한다.
+ */
 @Component
 public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
@@ -26,6 +30,9 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
         this.redisTemplate = redisTemplate;
     }
 
+    /**
+     * Redis에서 체크포인트를 조회하고, 실패 시 로컬 폴백을 반환한다.
+     */
     @Override
     public Optional<String> loadCheckpoint(String sessionId) {
         return runOrDefault(
@@ -42,6 +49,9 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
         );
     }
 
+    /**
+     * Redis와 로컬 폴백에 체크포인트를 함께 저장한다.
+     */
     @Override
     public void saveCheckpoint(String sessionId, String payload) {
         if (payload != null) {
@@ -50,6 +60,9 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
         runSafely(() -> redisTemplate.opsForValue().set(key(sessionId), payload, TTL), "save checkpoint", sessionId);
     }
 
+    /**
+     * Redis/로컬 폴백의 체크포인트를 함께 삭제한다.
+     */
     @Override
     public void clear(String sessionId) {
         localFallback.remove(sessionId);

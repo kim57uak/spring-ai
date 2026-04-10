@@ -1,0 +1,48 @@
+@startuml
+!pragma layout smetana
+title 09. Host Agent Security Model
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+rectangle "Input Guard" {
+  [HostA2AController] as HostA2AController
+  [PromptInjectionGuard] as PromptGuard
+}
+
+rectangle "Routing & Invocation Guard" {
+  [A2AClientRegistry] as Registry
+  [Endpoint Allowlist] as Allowlist
+  [A2AInvocationService] as Invoker
+  [Timeout/Retry Policy] as TimeoutRetry
+  [Circuit Breaker] as CircuitBreaker
+  [Payload Size Guard] as PayloadGuard
+}
+
+rectangle "Error Safety" {
+  [GlobalExceptionHandler] as ErrorHandler
+}
+
+HostA2AController --> PromptGuard : sanitize user text
+Invoker --> Registry : resolve target
+Registry --> Allowlist : validate agent key/endpoint
+Invoker --> TimeoutRetry : bounded call
+Invoker --> CircuitBreaker : fail-fast on repeated errors
+Invoker --> PayloadGuard : truncate/validate payload
+ErrorHandler --> Invoker : sanitize exception mapping
+
+note right of Allowlist
+Host agent can call only
+- product A2A endpoint
+- reservation A2A endpoint
+- search A2A endpoint
+end note
+
+note bottom of ErrorHandler
+No sensitive leak
+- internal stack
+- downstream raw headers/body
+- credentials
+end note
+
+@enduml

@@ -8,6 +8,9 @@ skinparam componentStyle rectangle
 rectangle "Input/Prompt Security" {
   [HttpChatController\n(unrestricted)] as HttpController
   [Product/Reservation/Search Controllers\n(scoped)] as ScopedControllers
+  [Product/Reservation/Search A2A Controllers\n(scoped)] as A2AControllers
+  [HeuristicPlanningService] as Planner
+  [LlmResponseComposeService] as Composer
   [PromptInjectionGuard] as PromptGuard
   [HumanMessageService] as HumanMsg
 }
@@ -24,8 +27,11 @@ rectangle "Error Safety" {
   [ChatProcessingException] as ChatException
 }
 
-HttpController --> PromptGuard : sanitize user/tool text
-ScopedControllers --> PromptGuard : sanitize user/tool text
+HttpController --> Planner : user input to planning path
+ScopedControllers --> Planner : user input to planning path
+A2AControllers --> Planner : JSON-RPC message input path
+Planner --> PromptGuard : protect user/tool text
+Composer --> PromptGuard : protect tool result text
 ToolExec --> AllowList : server/tool allow check
 ToolExec --> AgentScope : scope enforcement
 ToolExec --> UrlValidator : block localhost/internal/private host

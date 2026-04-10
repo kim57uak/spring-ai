@@ -1,4 +1,4 @@
-package com.example.springai.controller;
+package com.example.springai.controller.base;
 
 import com.example.springai.dto.ChatRequest;
 import com.example.springai.dto.ChatResponse;

@@ -10,12 +10,20 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * 계획/실행 이력을 사람이 읽기 쉬운 요약 문자열로 변환하는 포매터.
+ */
 @Component
 public class AgentTraceSummaryFormatter {
 
     public AgentTraceSummaryFormatter() {
     }
 
+    /**
+     * 사용자에게 노출할 판단 요약/선택 도구 섹션을 구성한다.
+     * <p>
+     * 반환 형식은 고정 헤더를 가진 멀티라인 텍스트다.
+     */
     public String format(PlanningContext context) {
         String thinkingSummary = buildThinkingSummary(context);
         String selectedTools = buildSelectedTools(context);
@@ -30,6 +38,12 @@ public class AgentTraceSummaryFormatter {
                 """.formatted(thinkingSummary, selectedTools);
     }
 
+    /**
+     * 사고 요약 섹션을 생성한다.
+     * <p>
+     * 실행 이력이 있으면 실제 실행 근거를 우선 사용하고,
+     * 없으면 planner 결과를 기반으로 설명을 구성한다.
+     */
     private String buildThinkingSummary(PlanningContext context) {
         List<String> executedTrace = context.getToolTrace();
         if (executedTrace != null && !executedTrace.isEmpty()) {
@@ -62,6 +76,11 @@ public class AgentTraceSummaryFormatter {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * 선택된 도구 섹션을 생성한다.
+     * <p>
+     * 실행 이력이 있으면 중복을 제거한 실제 호출 내역을 사용한다.
+     */
     private String buildSelectedTools(PlanningContext context) {
         List<String> executedTrace = context.getToolTrace();
         if (executedTrace != null && !executedTrace.isEmpty()) {
@@ -94,6 +113,9 @@ public class AgentTraceSummaryFormatter {
         return value == null || value.isBlank() ? "n/a" : value;
     }
 
+    /**
+     * 실행 trace 문자열에서 호출/인자/사유를 구조화 형태로 분해한다.
+     */
     private List<ExecutedStep> parseExecutedSteps(List<String> executedTrace) {
         List<ExecutedStep> steps = new ArrayList<>();
         for (String raw : executedTrace) {

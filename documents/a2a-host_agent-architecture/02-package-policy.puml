@@ -1,0 +1,76 @@
+@startuml
+!pragma layout smetana
+title 02. Host Agent Package Policy (com.example.springai.host)
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "com.example.springai.host" {
+  package "config" {
+    class HostAgentProperties
+    class A2aHostRoutingProperties
+    class HostObservationConfig
+  }
+
+  package "controller" {
+    class HostA2AController
+  }
+
+  package "advice" {
+    class HostExceptionHandler
+  }
+
+  package "service" {
+    class HostAgentService
+    class HostAgentOrchestrator
+  }
+
+  package "service.agent" {
+    package "plan" {
+      interface HostPlanningService
+      class LlmHostPlanningService
+    }
+    package "invoke" {
+      interface A2AInvocationService
+      class DefaultA2AInvocationService
+      class A2AClientRegistry
+    }
+    package "compose" {
+      interface HostResponseComposeService
+      class LlmHostResponseComposeService
+    }
+    package "graph" {
+      interface HostStateGraphFactory
+      class LangGraphHostStateGraphFactory
+    }
+    package "store" {
+      interface ConversationStore
+      interface GraphCheckpointStore
+    }
+  }
+
+  package "model" {
+    class HostAgentRequest
+    class HostPlanningContext
+    class RoutingPlan
+    class DownstreamCallResult
+    class HostGraphState
+  }
+
+  package "a2a" {
+    class A2AJsonRpcClient
+    class A2ARequestMapper
+    class A2AResponseMapper
+  }
+}
+
+note bottom
+Rules
+- Host agent는 하위 agent 내부 구현에 의존하지 않는다
+- 하위 agent 연동은 오직 A2A(JSON-RPC/SSE) 경계로 처리한다
+- HostA2AController는 orchestration 세부를 알지 않는다
+- orchestrator는 포트(interface)에만 의존한다
+- Spring AI + LangGraph4J + Redis 구성은 기존 정책과 동일하게 유지한다
+end note
+
+@enduml

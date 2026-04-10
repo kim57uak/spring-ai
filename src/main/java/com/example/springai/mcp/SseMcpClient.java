@@ -29,8 +29,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * HTTP(SSE) MCP 클라이언트.
- * 서버와의 메시지 교환은 JSON-RPC over HTTP POST를 사용하며,
- * transport 유형은 설정에서 sse로 표기해 분기한다.
+ * <p>
+ * 동작 방식:
+ * - 요청은 JSON-RPC over HTTP POST로 전송한다.
+ * - 필요 시 SSE 채널로 비동기 응답을 수신한다.
+ * - transport 설정값 `sse`를 기준으로 선택된다.
  */
 public class SseMcpClient implements McpClient {
 
@@ -118,8 +121,17 @@ public class SseMcpClient implements McpClient {
         return mapped;
     }
 
+    /**
+     * SSE MCP 초기화 시퀀스를 수행한다.
+     * <p>
+     * 처리 순서:
+     * - SSE 세션을 연다.
+     * - initialize 요청을 전송한다.
+     * - initialized 알림을 보낸다.
+     */
     private void initialize() {
         try {
+            // SSE 세션 수립 후 initialize/initialized 핸드셰이크를 수행한다.
             openSseSession();
             Map<String, Object> initParams = new HashMap<>();
             initParams.put("protocolVersion", "2024-11-05");
@@ -174,6 +186,13 @@ public class SseMcpClient implements McpClient {
         httpClient.send(request, HttpResponse.BodyHandlers.discarding());
     }
 
+    /**
+     * JSON-RPC 요청을 전송하고 응답을 기다린다.
+     * <p>
+     * 처리 전략:
+     * - HTTP 동기 응답을 우선 사용한다.
+     * - 즉시 응답이 불충분하면 SSE 비동기 응답으로 폴백한다.
+     */
     private Map<String, Object> sendRequest(String method, Object params) throws IOException, InterruptedException {
         long id = requestId.getAndIncrement();
         CompletableFuture<Map<String, Object>> responseFuture = new CompletableFuture<>();
@@ -247,6 +266,11 @@ public class SseMcpClient implements McpClient {
         return host;
     }
 
+    /**
+     * SSE 세션을 열고 message endpoint를 결정한다.
+     * <p>
+     * endpoint 공지 이벤트가 없으면 fallback RPC endpoint를 사용한다.
+     */
     private void openSseSession() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(sseEndpointUri)
                 .timeout(REQUEST_TIMEOUT)
@@ -269,7 +293,7 @@ public class SseMcpClient implements McpClient {
             logger.warn("SSE MCP endpoint event missing; fallback endpoint={}", messageEndpointUri);
         }
 
-        // Keep SSE stream open for servers that require session-bound message channel.
+        // 세션 바인딩 채널이 필요한 서버를 위해 SSE 스트림을 지속 유지한다.
         sseReaderThread = new Thread(() -> drainSse(reader), "mcp-sse-reader");
         sseReaderThread.setDaemon(true);
         sseReaderThread.start();
@@ -307,6 +331,11 @@ public class SseMcpClient implements McpClient {
         return messageEndpointUri == null ? fallbackRpcEndpointUri : messageEndpointUri;
     }
 
+    /**
+     * SSE 수신 루프.
+     * <p>
+     * 빈 줄 단위 이벤트 블록을 경계로 data 라인을 병합해 dispatch 한다.
+     */
     private void drainSse(BufferedReader reader) {
         try {
             StringBuilder dataBuffer = new StringBuilder();
@@ -329,6 +358,9 @@ public class SseMcpClient implements McpClient {
         }
     }
 
+    /**
+     * SSE data payload를 파싱해 pending 응답 future로 라우팅한다.
+     */
     private void dispatchSseData(String data) {
         if (data == null || data.isBlank()) {
             return;
@@ -345,7 +377,7 @@ public class SseMcpClient implements McpClient {
                 pending.complete(message);
             }
         } catch (Exception ignored) {
-            // endpoint announcement and non-JSON data are expected on SSE stream.
+            // endpoint 공지 및 비 JSON 데이터가 섞일 수 있어 무시한다.
         }
     }
 

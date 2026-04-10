@@ -10,6 +10,13 @@ class AgentChatRequest {
   +message: String
   +model: String
   +scope: AgentScope
+  +a2aContext: A2aExecutionContext
+}
+
+class A2aExecutionContext {
+  +taskId: String
+  +scopeName: AgentScopeName
+  +method: String
 }
 
 class AgentScope {
@@ -112,6 +119,7 @@ AgentStateGraphFactory <|.. LangGraphAgentStateGraphFactory
 
 AgentChatRequest --> PlanningContext
 AgentChatRequest --> AgentScope
+AgentChatRequest --> A2aExecutionContext
 PlanningContext --> ToolPlan
 PlanningContext --> ToolExecutionResult
 PlanningContext --> AgentScope

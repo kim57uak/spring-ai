@@ -6,15 +6,17 @@
 
 ## As-Is (Current Source)
 
-- `controller.HttpChatController`
-- `controller.ProductAgentController`
-- `controller.ReservationAgentController`
-- `controller.SearchAgentController`
+- `controller.base.HttpChatController`
+- `controller.base.ProductAgentController`
+- `controller.base.ReservationAgentController`
+- `controller.base.SearchAgentController`
+- `controller.a2a.*` (`BaseA2AControllerSupport`, `ProductA2AController`, `ReservationA2AController`, `SearchA2AController`, `AgentCardController`)
 - `advice.GlobalExceptionHandler`
 - `exception.*` (`ChatProcessingException`, `McpException` 계층)
 - `service.HttpChatService`
 - `service.ScopedAgentChatService`
 - `service.AgentScopeResolver`
+- `service.AgentScopeActivationService`
 - `service.chat.*` (`ChatService`, `SyncChatService`, `StreamChatService`, `StructuredChatService`, `ModelChatServiceFactory`, `ChatModelType`, `ChatRequestContext`)
 - `service.chat.model.*` (`OpenAiModelChatService`, `GeminiModelChatService`, `GeminiLiteModelChatService`, `MistralModelChatService`)
 - `service.chat.advisor.*` (`PromptSanitizingAdvisor`, `SessionHistoryAdvisor`)
@@ -25,10 +27,11 @@
 
 ## To-Be (Agentic Layer)
 
-- `controller.HttpChatController` (unrestricted entry)
-- `controller.ProductAgentController` (scoped entry)
-- `controller.ReservationAgentController` (scoped entry)
-- `controller.SearchAgentController` (scoped entry)
+- `controller.base.HttpChatController` (unrestricted entry)
+- `controller.base.ProductAgentController` (scoped entry)
+- `controller.base.ReservationAgentController` (scoped entry)
+- `controller.base.SearchAgentController` (scoped entry)
+- `controller.a2a.*` (`ProductA2AController`, `ReservationA2AController`, `SearchA2AController`, `AgentCardController`)
 - `service.agent.orchestrator.AgentOrchestrator`
 - `service.agent.graph.AgentStateGraphFactory`
 - `service.agent.plan.PlanningService`
@@ -39,6 +42,10 @@
 - `service.agent.security.HumanMessageService`
 - `service.agent.security.PromptInjectionGuard`
 - `model.agent.*` (`AgentChatRequest`, `PlanningContext`, `ToolPlan`, `ToolExecutionResult`, `ChunkType`, `AgentGraphState`)
+- `a2a.dto.*` (JSON-RPC contracts)
+- `a2a.task.*` (`A2ATaskStore`, task lifecycle/ownership)
+- `a2a.registry.*` (`AgentCardRegistry`)
+- `a2a.mapper.*` (A2A response mapping)
 
 ## Design Rules
 
@@ -55,11 +62,19 @@
 
 - `controller -> service(HttpChatService) -> orchestrator -> (plan/execute/compose/store/security/prompt/runtime)`
 - `controller -> service(ScopedAgentChatService) -> scopeResolver -> orchestrator -> (plan/execute/compose/store/security/prompt/runtime)`
+- `controller.a2a -> service(ScopedAgentChatService) -> scopeResolver -> orchestrator -> (plan/execute/compose/store/security/prompt/runtime) + a2a.task`
 - `controller/advice -> exception`
 - `plan/compose -> runtime(AgentLlmRuntime) -> chat factory -> provider chat service`
 - `execute -> mcp client port`
 - `store -> redis implementation`
 - 상위 계층은 concrete class가 아니라 port(interface)에만 의존한다.
+
+## A2A Dependency Rules (Doc 28)
+
+- A2A 컨트롤러는 반드시 scoped service 경로만 사용한다.
+- `tasks/get|cancel|list`는 `A2ATaskStore`를 통해 동일 scope task만 허용한다.
+- 하위 에이전트 내부에서 다른 에이전트/컨트롤러로 원격 포워딩하지 않는다.
+- A2A 미사용 경로(`api/*`)는 기존 동작을 그대로 유지한다.
 
 ## Security Rules
 
@@ -79,5 +94,10 @@
 - HttpChatController: unrestricted MCP access
 - Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
 - `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
-- MCP settings split: `application.yml` -> `mcp.yml`
+- MCP settings split 완료: `application.yml` imports `mcp.yml`
 - Tool schema loading: reconnect-first, cache-second, unique composite cache key
+
+## 2026-04-10 A2A Package Alignment (Doc 28)
+
+- 추가 패키지: `controller.a2a`, `a2a.dto`, `a2a.task`, `a2a.registry`, `a2a.mapper`
+- 기존 패키지 계약은 유지하고, A2A는 additive 방식으로 확장한다.

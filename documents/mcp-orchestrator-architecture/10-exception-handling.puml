@@ -9,6 +9,10 @@ class HttpChatController
 class ProductAgentController
 class ReservationAgentController
 class SearchAgentController
+class BaseA2AControllerSupport
+class ProductA2AController
+class ReservationA2AController
+class SearchA2AController
 class HttpChatService
 class ScopedAgentChatService
 class AgentOrchestrator
@@ -31,6 +35,10 @@ HttpChatController --> HttpChatService
 ProductAgentController --> ScopedAgentChatService
 ReservationAgentController --> ScopedAgentChatService
 SearchAgentController --> ScopedAgentChatService
+ProductA2AController --> BaseA2AControllerSupport
+ReservationA2AController --> BaseA2AControllerSupport
+SearchA2AController --> BaseA2AControllerSupport
+BaseA2AControllerSupport --> ScopedAgentChatService
 ScopedAgentChatService --> AgentOrchestrator
 HttpChatService --> AgentOrchestrator
 AgentOrchestrator --> HeuristicPlanningService
@@ -48,6 +56,7 @@ GlobalExceptionHandler --> IllegalStateException : @ExceptionHandler
 GlobalExceptionHandler --> MethodArgumentNotValidException : @ExceptionHandler
 GlobalExceptionHandler --> ConstraintViolationException : @ExceptionHandler
 GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
+GlobalExceptionHandler --> HttpMessageNotReadableException : @ExceptionHandler
 
 McpException <|-- McpClientCreationException
 McpException <|-- McpProcessLaunchException
@@ -55,7 +64,9 @@ McpException <|-- McpToolCallException
 McpException <|-- McpValidationException
 
 note bottom of GlobalExceptionHandler
-Return ErrorResponse with sanitized message
+Return sanitized envelope by path
+- /api/* -> ErrorResponse
+- /a2a/* -> JsonRpcResponse(error)
 - no stack trace
 - no token/secret
 - no internal payload leak

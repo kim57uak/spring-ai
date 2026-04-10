@@ -1,14 +1,17 @@
 @startuml
 !pragma layout smetana
-title 09. Streaming Response Sequence (Unified Controllers)
+title 09. Streaming Response Sequence (API + A2A Controllers)
 
 skinparam shadowing false
 
 actor User
 participant "Agent Controller\n(Http/Product/Reservation/Search)" as Controller
+participant "A2A Controller\n(Product/Reservation/Search)" as A2AController
 participant "Chat Service\n(HttpChatService/ScopedAgentChatService)" as ChatService
 participant "AgentScopeResolver" as ScopeResolver
 participant "AgentOrchestrator" as Orchestrator
+participant "A2aLifecycleService" as A2ALifecycle
+participant "A2ATaskStore" as A2ATaskStore
 participant "ResponseComposeService" as Composer
 participant "DefaultAgentLlmRuntime" as Runtime
 participant "ModelChatServiceFactory" as ChatFactory
@@ -16,13 +19,26 @@ participant "Provider ChatService" as ProviderChatService
 participant "Conversation Store (Redis)" as HistoryRedis
 participant "Checkpoint Store (Redis)" as CheckpointRedis
 
-User -> Controller : HTTP stream request
-Controller -> ScopeResolver : resolve scope
-Controller -> ChatService : streamChat(...)
+alt Existing API path
+  User -> Controller : HTTP stream request (/api/*)
+  Controller -> ScopeResolver : resolve scope (scoped controller only)
+  Controller -> ChatService : streamChat(...)
+else A2A path
+  User -> A2AController : JSON-RPC message/stream (/a2a/{scope})
+  A2AController -> ScopeResolver : resolve scope
+  A2AController -> A2ALifecycle : create task + mark RUNNING
+  A2ALifecycle -> A2ATaskStore : create/markRunning
+  A2AController -> ChatService : streamChat(..., a2aCtx)
+end
 ChatService -> Orchestrator : execute(request)
 
-Orchestrator --> Controller : first summary chunk
-Controller --> User : SSE data(summary)
+alt Existing API path
+  Orchestrator --> Controller : first summary chunk
+  Controller --> User : SSE data(summary)
+else A2A path
+  Orchestrator --> A2AController : first summary chunk
+  A2AController --> User : SSE/data chunk
+end
 
 Orchestrator -> Composer : streamCompose(context)
 Composer -> Runtime : stream(prompt, model, sessionId)
@@ -39,17 +55,29 @@ loop token stream
   Runtime --> Composer : token
   Composer --> Orchestrator : chunk(token)
   Orchestrator --> ChatService : chunk(token)
-  ChatService --> Controller : chunk(token)
-  Controller --> User : SSE data(token)
+  alt Existing API path
+    ChatService --> Controller : chunk(token)
+    Controller --> User : SSE data(token)
+  else A2A path
+    ChatService --> A2AController : chunk(token)
+    A2AController --> User : SSE/data chunk
+  end
 end
 
 Orchestrator -> HistoryRedis : save history
 Orchestrator -> CheckpointRedis : save checkpoint
-Controller --> User : SSE complete
+alt Existing API path
+  Controller --> User : SSE complete
+else A2A path
+  Orchestrator -> A2ALifecycle : mark COMPLETED/FAILED
+  A2ALifecycle -> A2ATaskStore : markCompleted/markFailed
+  A2AController --> User : stream complete
+end
 
 note right of ScopeResolver
 HttpChatController -> unrestricted scope
 Product/Reservation/Search -> restricted scope
+A2A Product/Reservation/Search -> same restricted scope
 end note
 
 @enduml

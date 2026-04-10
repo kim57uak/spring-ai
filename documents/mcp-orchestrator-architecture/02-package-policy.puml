@@ -7,6 +7,8 @@ skinparam packageStyle rectangle
 
 package "com.example.springai" {
   package "config" {
+    class AgentCardProperties
+    class AgentScopeProperties
     class HttpLlmProperties
     class LlmRateLimitProperties
     class McpProperties
@@ -19,10 +21,21 @@ package "com.example.springai" {
   }
 
   package "controller" {
-    class HttpChatController
-    class ProductAgentController
-    class ReservationAgentController
-    class SearchAgentController
+    package "base" {
+      class BaseAgentControllerSupport
+      class HttpChatController
+      class ProductAgentController
+      class ReservationAgentController
+      class SearchAgentController
+    }
+
+    package "a2a" {
+      class BaseA2AControllerSupport
+      class ProductA2AController
+      class ReservationA2AController
+      class SearchA2AController
+      class AgentCardController
+    }
   }
 
   package "exception" {
@@ -34,6 +47,7 @@ package "com.example.springai" {
     class HttpChatService
     class ScopedAgentChatService
     class AgentScopeResolver
+    class AgentScopeActivationService
 
     package "chat" {
       enum ChatModelType
@@ -117,6 +131,29 @@ package "com.example.springai" {
     class ToolExecutionResult
     class AgentGraphState
   }
+
+  package "a2a" {
+    package "dto" {
+      class JsonRpcRequest
+      class JsonRpcResponse
+    }
+    package "task" {
+      interface A2ATaskStore
+      class InMemoryA2ATaskStore
+    }
+    package "context" {
+      class A2aExecutionContext
+    }
+    package "lifecycle" {
+      class A2aLifecycleService
+    }
+    package "registry" {
+      class AgentCardRegistry
+    }
+    package "mapper" {
+      class A2AResponseMapper
+    }
+  }
 }
 
 note bottom
@@ -124,10 +161,12 @@ Rules
 - controller/service는 API 진입과 조율 책임만 가진다
 - HttpChatController는 unrestricted MCP 접근을 유지한다
 - Product/Reservation/Search controller는 scoped MCP 접근을 사용한다
+- Product/Reservation/Search A2A controller는 동일 scope 정책을 사용한다
 - 예외 처리와 예외 타입은 advice/exception 패키지에서 분리한다
 - orchestrator는 포트(interface)에만 의존한다
 - 모델 라우팅은 ChatModelType + ModelChatServiceFactory로 일원화한다
 - MCP tool callback은 mcp 설정 allowlist를 준수한다
+- A2A task는 scope ownership 검증을 통과한 경우에만 get/cancel/list 허용
 end note
 
 @enduml

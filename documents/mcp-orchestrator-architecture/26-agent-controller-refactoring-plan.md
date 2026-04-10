@@ -53,7 +53,7 @@
 - Planning: `HeuristicPlanningService`가 MCP 서버/툴 카탈로그를 LLM에 전달 후 ToolPlan 생성
 - Execution: `McpToolExecutionService`가 실제 MCP 툴 호출
 
-현재는 요청 단위의 "허용 서버/허용 툴 스코프" 개념이 없다.
+현재는 요청 단위의 "허용 서버/허용 툴 스코프" 개념이 `AgentScope`로 구현되어 있다.
 
 ## 3.1 신규 3개 에이전트 구조 원칙
 
@@ -168,7 +168,7 @@ MCP 서버 특성상 서버가 수시 재시작될 수 있으므로, 함수정�
 3. `HeuristicPlanningService`에 scope 필터 적용
 4. `McpToolExecutionService`에 scope 강제 검증 추가
 5. MCP 함수정보 조회 로직을 "재연결 우선 + 캐시 보조" 방식으로 보강
-6. `mcp` 설정을 `application.yml` -> `mcp.yml` 분리
+6. `mcp` 설정을 `application.yml` -> `mcp.yml` 분리 (완료)
 7. `ScopedAgentChatService` 생성 및 sync/stream 공통 처리
 8. 신규 컨트롤러 3종 생성 + `clear/status` 포함
 9. 기존 `HttpChatController` 회귀 보장(변경 최소화)
@@ -205,11 +205,11 @@ MCP 서버 특성상 서버가 수시 재시작될 수 있으므로, 함수정�
 ## 9.1 MCP 전송 방식 확인 필요
 
 요구사항 기준으로 `sale-product`, `reservation`는 `SSE` 방식(`host: http://10.225.18.50:8080`)으로 확정한다.  
-현재 코드베이스는 `StdioMcpClient` 중심이므로 `SSE MCP 클라이언트` 구현이 필요하다.
+현재 코드베이스는 `McpClientFactory`에서 `SseMcpClient`/`StdioMcpClient`를 transport로 분기한다.
 
-1. `McpClient` 구현체 추가: `SseMcpClient`(가칭)
-2. `McpClientFactory`가 `transport` 값(`stdio`/`sse`)으로 구현체 선택
-3. 연결 끊김/서버 재기동 대응 재연결 정책 포함
+1. `SseMcpClient` 구현체 반영 완료
+2. `McpClientFactory` transport 분기 반영 완료
+3. `ToolSchemaRegistry`에 재연결 우선 + 캐시 폴백 정책 반영 완료
 
 ## 9.2 성능/캐시
 

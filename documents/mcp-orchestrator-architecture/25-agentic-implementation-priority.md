@@ -73,6 +73,17 @@
 - 완료 기준
   - 핵심 경로 테스트 통과
 
+### P6. A2A 코어 통합 (현재 버전 기준)
+
+- A2A 컨트롤러 3종 + agent card endpoint 추가
+- A2A JSON-RPC DTO/매퍼 추가
+- `A2ATaskStore` 도입 + scope ownership 검증
+- orchestrator lifecycle와 task 상태 동기화
+- 완료 기준
+  - `message/send`, `tasks/get`, `tasks/cancel`, `tasks/list` 정상 동작
+  - 기존 `/api/*-agent/*` 회귀 100% 통과
+  - 배포 게이트 기준 충족
+
 ## 구현 순서 (실행)
 
 1. P0 구조 추가
@@ -81,15 +92,23 @@
 4. P3 MCP + 보안 가드레일
 5. P4 UI 계약 검증
 6. P5 테스트 실행/수정
+7. P6 A2A 코어 통합 + 호환성 게이트 검증
 
 ## 이번 턴 범위
 
-- 현재 소스 기준으로 P0~P4는 반영되었고, P5는 환경 의존 테스트를 분리해 안정 실행 가능한 범위를 유지한다.
+- 현재 소스 기준으로 P0~P4는 반영 완료.
+- P5는 MCP 프로세스 연동 테스트 일부가 `@Disabled` 상태로, 안정형 대체 테스트 확장이 필요.
+- P6(A2A 코어 통합)는 1차 반영 완료이며, 잔여 과제는 회귀/호환성 게이트 자동화다.
 
 ## 2026-04-10 Alignment (Doc 26)
 
 - HttpChatController: unrestricted MCP access
 - Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
 - `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
-- MCP settings split: `application.yml` -> `mcp.yml`
+- MCP settings split 완료: `application.yml` imports `mcp.yml`
 - Tool schema loading: reconnect-first, cache-second, unique composite cache key
+
+## 2026-04-10 A2A Priority Alignment (Doc 28)
+
+- 버전 업그레이드 없이 현재 라인에서 A2A 통합을 우선 수행
+- 기존 경로 무영향을 배포 게이트로 강제

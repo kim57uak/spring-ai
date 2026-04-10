@@ -1,0 +1,42 @@
+@startuml
+!pragma layout smetana
+title 08. Host Agent Exception Handling
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+class HostA2AController
+class HostAgentService
+class HostAgentOrchestrator
+class DefaultA2AInvocationService
+class A2AJsonRpcClient
+class GlobalExceptionHandler
+
+class ChatProcessingException
+class DownstreamA2AException
+class A2ARoutingException
+class WebClientResponseException
+
+HostA2AController --> HostAgentService
+HostAgentService --> HostAgentOrchestrator
+HostAgentOrchestrator --> DefaultA2AInvocationService
+DefaultA2AInvocationService --> A2AJsonRpcClient
+
+A2AJsonRpcClient --> DownstreamA2AException : throw
+DefaultA2AInvocationService --> A2ARoutingException : throw
+HostAgentOrchestrator --> ChatProcessingException : throw
+
+GlobalExceptionHandler --> ChatProcessingException : @ExceptionHandler
+GlobalExceptionHandler --> DownstreamA2AException : @ExceptionHandler
+GlobalExceptionHandler --> A2ARoutingException : @ExceptionHandler
+GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
+GlobalExceptionHandler --> IllegalArgumentException : @ExceptionHandler
+GlobalExceptionHandler --> IllegalStateException : @ExceptionHandler
+
+note bottom of GlobalExceptionHandler
+Return sanitized response
+- /a2a/host/* -> JsonRpcResponse(error)
+- no downstream raw payload leak
+end note
+
+@enduml

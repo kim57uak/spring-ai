@@ -282,6 +282,7 @@ public class HeuristicPlanningService implements PlanningService {
     }
 
     private String buildDateHints() {
+        // 날짜 상대 표현(오늘/다음주)을 정규화해 planner가 명시적 날짜를 선택하도록 돕는다.
         LocalDate now = LocalDate.now(ZoneId.of("Asia/Seoul"));
         LocalDate nextWeekMonday = now.with(TemporalAdjusters.next(DayOfWeek.MONDAY));
         LocalDate nextWeekSunday = nextWeekMonday.plusDays(6);
@@ -295,6 +296,7 @@ public class HeuristicPlanningService implements PlanningService {
     }
 
     private List<ToolPlan> parseWithRepair(String plannerOutput, PlanningContext context) {
+        // 1차 파싱 실패 시 repair 프롬프트로 한 번 더 교정한다.
         List<ToolPlan> parsed = parsePlans(plannerOutput, context);
         if (!parsed.isEmpty()) {
             return parsed;

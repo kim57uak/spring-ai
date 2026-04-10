@@ -1,0 +1,43 @@
+@startuml
+!pragma layout smetana
+title 07. Host Agent Streaming Response Sequence
+
+skinparam shadowing false
+
+actor User
+participant "HostA2AController" as Controller
+participant "HostAgentService" as Service
+participant "HostAgentOrchestrator" as Orchestrator
+participant "HostResponseComposeService" as Composer
+participant "DefaultAgentLlmRuntime" as Runtime
+participant "ModelChatServiceFactory" as Factory
+participant "Provider ChatService" as Provider
+participant "Conversation Store" as ConversationStore
+participant "Checkpoint Store" as CheckpointStore
+
+User -> Controller : stream request
+Controller -> Service : streamChat(...)
+Service -> Orchestrator : execute(request)
+Orchestrator --> Controller : preface summary chunk
+Controller --> User : SSE(summary)
+
+Orchestrator -> Composer : streamCompose(context)
+Composer -> Runtime : stream(prompt, model, sessionId)
+Runtime -> Factory : resolveStream(model)
+Factory --> Runtime : StreamChatService
+Runtime -> Provider : streamGenerate
+Provider --> Runtime : Flux<String>
+Runtime --> Composer : Flux<String>
+
+loop token chunks
+  Composer --> Orchestrator : chunk
+  Orchestrator --> Service : chunk
+  Service --> Controller : chunk
+  Controller --> User : SSE(token)
+end
+
+Orchestrator -> ConversationStore : save history
+Orchestrator -> CheckpointStore : save checkpoint
+Controller --> User : SSE complete
+
+@enduml

@@ -134,6 +134,11 @@ public abstract class SpringAiCompatibleChatService implements SyncChatService, 
         });
     }
 
+    /**
+     * 공통 ChatClient 요청 스펙을 구성한다.
+     * <p>
+     * 모델 오버라이드, advisor 컨텍스트, MCP tool callback 옵션을 반영한다.
+     */
     private ChatClient.ChatClientRequestSpec request(String message, ChatRequestContext context) {
         ChatClient.ChatClientRequestSpec spec = chatClient.prompt().user(message);
         String modelOverride = resolveModelOverride(context);
@@ -152,6 +157,11 @@ public abstract class SpringAiCompatibleChatService implements SyncChatService, 
         return spec;
     }
 
+    /**
+     * 요청 모델 문자열을 공급사별 실제 모델명으로 정규화한다.
+     * <p>
+     * 공급사 키워드(openai/gemini 등)는 override로 사용하지 않고 null을 반환한다.
+     */
     private String resolveModelOverride(ChatRequestContext context) {
         if (context == null || !context.hasRequestedModel()) {
             return null;
@@ -175,6 +185,9 @@ public abstract class SpringAiCompatibleChatService implements SyncChatService, 
                 .lowCardinalityKeyValue("mode", mode);
     }
 
+    /**
+     * OpenAI 호환 endpoint 설정으로 ChatClient를 생성한다.
+     */
     private ChatClient createChatClient(
             OpenAiChatModel baseOpenAiChatModel,
             String apiKey,
@@ -212,6 +225,9 @@ public abstract class SpringAiCompatibleChatService implements SyncChatService, 
         return new ChatProcessingException("API call failed: " + throwable.getMessage(), throwable);
     }
 
+    /**
+     * completion endpoint URL을 baseUrl과 completionsPath로 분해한다.
+     */
     private record EndpointConfig(String baseUrl, String completionsPath) {
         static EndpointConfig from(String endpointUrl) {
             if (endpointUrl == null || endpointUrl.isBlank()) {

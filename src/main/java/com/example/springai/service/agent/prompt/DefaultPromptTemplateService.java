@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * compose 단계 프롬프트를 구성하는 기본 템플릿 서비스 구현체.
+ */
 @Component
 public class DefaultPromptTemplateService implements PromptTemplateService {
 
@@ -53,6 +56,7 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
     }
 
     private String resolveBaseSystemPrompt() {
+        // agentSystem이 설정되면 우선 사용하고, 없으면 기본 system 프롬프트로 폴백한다.
         String agentSystem = promptProperties.getAgentSystem();
         if (agentSystem != null && !agentSystem.isBlank()) {
             return agentSystem;
@@ -74,6 +78,7 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
     }
 
     private String required(String value, String key) {
+        // 프롬프트 설정 누락을 조기에 실패시켜 런타임 오작동을 방지한다.
         if (value == null || value.isBlank()) {
             throw new IllegalStateException("Missing required prompt property: " + key);
         }

@@ -2,7 +2,7 @@
 
 ## Final Choice
 
-- `Spring AI + LangGraph4j + Redis`
+- `Spring AI + LangGraph4j + Redis + A2A SDK(spec/core)`
 
 ## Decision Context (Current Source)
 
@@ -33,14 +33,20 @@
 ## Scope
 
 - As-Is: `http-chat + agent + mcp` 통합 구조 운영
-- To-Be: agent 계층 고도화(관찰성/승인노드/재시도 전략)
-- 필수 구성요소: `Spring AI`, `LangGraph4j`, `Redis`
+- To-Be: agent 계층 고도화 + A2A 프로토콜 계층 통합
+- 필수 구성요소: `Spring AI`, `LangGraph4j`, `Redis`, `A2A SDK(spec/core)`
 
 ## 2026-04-10 Alignment (Doc 26)
 
 - HttpChatController: unrestricted MCP access
 - Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
 - `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
-- MCP settings split: `application.yml` -> `mcp.yml`
+- MCP settings split 완료: `application.yml` imports `mcp.yml`
 - Tool schema loading: reconnect-first, cache-second, unique composite cache key
 
+## 2026-04-10 A2A Core Integration (Doc 28)
+
+- 기존 `/api/*-agent/*` 경로는 유지하고 `/a2a/*`를 병행 추가한다.
+- 하위 에이전트에서 원격 포워딩/취소 전달은 도입하지 않는다.
+- task lifecycle는 `A2ATaskStore`로 관리하고 scope ownership을 강제한다.
+- 현재 버전 라인(`Spring AI 1.0.3`, `LangGraph4j 1.8.10`) 유지 전략을 채택한다.

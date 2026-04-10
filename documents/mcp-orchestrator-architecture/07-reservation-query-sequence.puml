@@ -26,11 +26,11 @@ ChatService -> Orchestrator : execute(request+scope)
 Orchestrator -> StateGraph : invoke(state)
 
 StateGraph -> Planner : plan(context + scope)
-Planner -> SchemaRegistry : loadTools(reservation)
+Planner -> SchemaRegistry : loadTools(reservation, scope)
 SchemaRegistry -> McpFactory : createClient(transport=sse)
 
 StateGraph -> Executor : execute(plan, context + scope)
-Executor -> SchemaRegistry : loadTools(reservation)
+Executor -> SchemaRegistry : loadTools(reservation, scope)
 Executor -> McpFactory : createClient(transport=sse)
 Executor -> ReservationMcp : callTool(createReservation, args) via SSE
 ReservationMcp --> Executor : reservation result

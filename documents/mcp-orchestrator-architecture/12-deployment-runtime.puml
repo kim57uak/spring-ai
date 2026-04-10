@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 12. Deployment Runtime (Refactoring Baseline)
+title 12. Deployment Runtime (Current Source)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -10,10 +10,15 @@ node "Spring Boot App Runtime" {
   [ProductAgentController] as ProductController
   [ReservationAgentController] as ReservationController
   [SearchAgentController] as SearchController
+  [ProductA2AController] as ProductA2AController
+  [ReservationA2AController] as ReservationA2AController
+  [SearchA2AController] as SearchA2AController
+  [AgentCardController] as AgentCardController
   [GlobalExceptionHandler] as Advice
   [HttpChatService] as HttpChatService
   [ScopedAgentChatService] as ScopedChatService
   [AgentScopeResolver] as ScopeResolver
+  [AgentScopeActivationService] as ScopeActivationService
   [AgentOrchestrator] as Orchestrator
   [LangGraphAgentStateGraphFactory] as GraphFactory
   [LangGraph4J CompiledGraph] as CompiledGraph
@@ -29,6 +34,9 @@ node "Spring Boot App Runtime" {
   [StdioMcpClient] as StdioMcpClient
   [LlmCallPolicy] as LlmPolicy
   [LlmRequestRateLimiter] as LlmRateLimiter
+  [A2aLifecycleService] as A2aLifecycleService
+  [A2ATaskStore] as A2ATaskStore
+  [AgentCardRegistry] as AgentCardRegistry
 }
 
 database "Redis" as Redis {
@@ -49,6 +57,11 @@ HttpController --> HttpChatService
 ProductController --> ScopedChatService
 ReservationController --> ScopedChatService
 SearchController --> ScopedChatService
+ProductA2AController --> ScopedChatService
+ReservationA2AController --> ScopedChatService
+SearchA2AController --> ScopedChatService
+AgentCardController --> ScopeActivationService
+AgentCardController --> AgentCardRegistry
 HttpController --> Advice
 ProductController --> Advice
 ReservationController --> Advice
@@ -64,6 +77,8 @@ Orchestrator --> ToolExecutionService
 Orchestrator --> ComposeService
 Orchestrator --> ConversationStore
 Orchestrator --> CheckpointStore
+Orchestrator --> A2aLifecycleService
+A2aLifecycleService --> A2ATaskStore
 PlanningService --> LlmRuntime
 ComposeService --> LlmRuntime
 LlmRuntime --> ChatFactory
@@ -86,6 +101,11 @@ State persistence
 - conversation messages
 - graph checkpoint
 TTL-based cleanup
+end note
+
+note right of A2ATaskStore
+A2A task lifecycle is managed in-memory
+by InMemoryA2ATaskStore (current source).
 end note
 
 note bottom of McpServers

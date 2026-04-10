@@ -16,7 +16,9 @@ import jakarta.validation.constraints.NotBlank;
 public record AgentChatRequest(
         @NotBlank String sessionId,
         @NotBlank String message,
-        String model
+        String model,
+        AgentScope scope,
+        A2aExecutionContext a2aContext
 ) {
 }
 ```
@@ -170,6 +172,5 @@ public class AgentOrchestrator {
 - HttpChatController: unrestricted MCP access
 - Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
 - `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
-- MCP settings split: `application.yml` -> `mcp.yml`
+- MCP settings split 완료: `application.yml` imports `mcp.yml`
 - Tool schema loading: reconnect-first, cache-second, unique composite cache key
-

@@ -24,15 +24,15 @@ public class McpProcessLauncher {
 
     private static final Logger logger = LoggerFactory.getLogger(McpProcessLauncher.class);
 
-    // Allowed executables whitelist
+    // 실행 허용 바이너리 화이트리스트
     private static final Set<String> ALLOWED_EXECUTABLES = Set.of(
             "node", "python", "python3", "java", "sh", "bash"
     );
 
-    // Dangerous characters in paths
+    // 명령/인자에서 차단할 위험 특수문자
     private static final Pattern DANGEROUS_PATTERN = Pattern.compile("[;&|`$()<>]");
 
-    // Environment variable key validation
+    // 환경변수 키 포맷 검증용 패턴
     private static final Pattern ENV_KEY_PATTERN = Pattern.compile("^[A-Z_][A-Z0-9_]*$");
 
     private final McpProperties mcpProperties;
@@ -53,15 +53,15 @@ public class McpProcessLauncher {
             throw new IllegalArgumentException("MCP server command is missing: " + serverName);
         }
 
-        // Validate command
+        // command 검증
         validateCommand(config.getCommand(), serverName);
 
-        // Validate arguments
+        // 인자 검증
         if (config.getArgs() != null) {
             validateArguments(config.getArgs(), serverName);
         }
 
-        // Validate environment variables
+        // 환경변수 검증
         if (config.getEnv() != null) {
             validateEnvironmentVariables(config.getEnv(), serverName);
         }
@@ -73,7 +73,7 @@ public class McpProcessLauncher {
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(command);
-        processBuilder.redirectErrorStream(false); // Separate error stream for better logging
+        processBuilder.redirectErrorStream(false); // 오류 스트림 분리로 장애 원인 추적 용이
 
         if (config.getEnv() != null) {
             processBuilder.environment().putAll(config.getEnv());
@@ -91,16 +91,16 @@ public class McpProcessLauncher {
      * - 단순 실행명은 화이트리스트 허용
      */
     private void validateCommand(String command, String serverName) {
-        // Check for dangerous characters
+        // 위험 문자 차단
         if (DANGEROUS_PATTERN.matcher(command).find()) {
             throw new McpValidationException("command",
                     "Command contains dangerous characters for server '" + serverName + "': " + command);
         }
 
-        // Extract executable name (handle both absolute paths and simple names)
+        // 실행 파일명 추출(절대경로/단순명 모두 처리)
         String executable = Paths.get(command).getFileName().toString();
 
-        // For absolute paths, check if file exists and is executable
+        // 경로 실행인 경우 파일 존재/실행 권한 검증
         if (command.startsWith("/") || command.startsWith("./")) {
             Path commandPath = Paths.get(command);
             if (!Files.exists(commandPath)) {
@@ -112,7 +112,7 @@ public class McpProcessLauncher {
                         "Command file is not executable for server '" + serverName + "': " + command);
             }
         } else {
-            // For simple executable names, check whitelist
+            // 단순 실행명은 화이트리스트로 제한
             if (!ALLOWED_EXECUTABLES.contains(executable)) {
                 throw new McpValidationException("command",
                         "Command executable is not in whitelist for server '" + serverName + "': " + executable +
@@ -131,13 +131,13 @@ public class McpProcessLauncher {
                 continue;
             }
 
-            // Check for dangerous characters in arguments
+            // 인자 내 위험 문자 차단
             if (DANGEROUS_PATTERN.matcher(arg).find()) {
                 throw new McpValidationException("argument",
                         "Argument contains dangerous characters for server '" + serverName + "': " + arg);
             }
 
-            // If argument is a file path, validate it exists
+            // 스크립트 경로 인자면 파일 존재 여부 확인
             if ((arg.startsWith("/") || arg.startsWith("./")) && (arg.endsWith(".js") || arg.endsWith(".py"))) {
                 Path argPath = Paths.get(arg);
                 if (!Files.exists(argPath)) {
@@ -156,14 +156,14 @@ public class McpProcessLauncher {
             String key = entry.getKey();
             String value = entry.getValue();
 
-            // Validate key format
+            // 키 포맷 검증
             if (!ENV_KEY_PATTERN.matcher(key).matches()) {
                 throw new McpValidationException("environment",
                         "Invalid environment variable key for server '" + serverName + "': " + key +
                                 ". Must match pattern: " + ENV_KEY_PATTERN.pattern());
             }
 
-            // Check for dangerous characters in values
+            // 값 내 위험 문자 차단
             if (value != null && DANGEROUS_PATTERN.matcher(value).find()) {
                 throw new McpValidationException("environment",
                         "Environment variable value contains dangerous characters for server '" + serverName +

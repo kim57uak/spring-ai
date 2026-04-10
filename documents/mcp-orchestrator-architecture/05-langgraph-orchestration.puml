@@ -12,6 +12,11 @@ start
 :Build AgentGraphState;
 :Invoke CompiledGraph;
 
+if (A2A context exists?) then (yes)
+  :task already marked RUNNING at A2A controller;
+else (no)
+endif
+
 :PLAN node;
 if (PLAN_REQUIRED?) then (yes)
   :EXECUTE node;
@@ -26,6 +31,15 @@ endif
 :ResponseComposeService stream;
 :Persist history/checkpoint;
 
+if (A2A context exists?) then (yes)
+  if (success?) then (yes)
+    :mark task COMPLETED;
+  else (no)
+    :mark task FAILED;
+  endif
+else (no)
+endif
+
 note right
 Graph implementation
 - StateGraph<AgentGraphState>
@@ -35,6 +49,8 @@ Graph implementation
 - checkpoint id is injected through RunnableConfig
 - planning/execution must enforce AgentScope
 - tool schema loading: reconnect-first, cache-second
+- if A2A is used, lifecycle state is synchronized
+  (COMPLETED/FAILED in orchestrator, CANCELED check each chunk)
 end note
 
 stop

@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 06. Scoped Agent MCP Sequence (Refactoring Target)
+title 06. Scoped Agent MCP Sequence (Current Source)
 
 skinparam shadowing false
 
@@ -25,10 +25,10 @@ participant "ModelChatServiceFactory" as ChatFactory
 participant "Provider ChatService" as ProviderChatService
 
 User -> Controller : HTTP /api/*/stream
-Controller -> ChatService : streamChat(sessionId, message, model)
 Controller -> ScopeResolver : resolveScope(controllerType)
 ScopeResolver -> McpYml : read allowedServers/allowedToolsByServer
 ScopeResolver --> Controller : AgentScope
+Controller -> ChatService : streamChat(sessionId, message, model, scope)
 ChatService -> Orchestrator : execute(AgentChatRequest)
 Orchestrator --> Controller : preface chunk("[생각의 과정 요약] ...")
 

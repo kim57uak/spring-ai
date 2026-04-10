@@ -1,0 +1,68 @@
+@startuml
+!pragma layout smetana
+title 01. A2A Host Agent System Context
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+actor User
+
+rectangle "Client Channel" {
+  [Web UI / API Client] as Client
+}
+
+rectangle "Host Agent (spring-ai)" {
+  [HostA2AController] as HostA2AController
+  [HostAgentService] as HostService
+  [HostAgentOrchestrator] as HostOrchestrator
+  [LangGraph4J CompiledGraph] as StateGraph
+  [HostPlanningService] as Planner
+  [A2AInvocationService] as A2AInvocationService
+  [ResponseComposeService] as Composer
+  [DefaultAgentLlmRuntime] as LlmRuntime
+  [A2AClientRegistry] as A2ARegistry
+  [GlobalExceptionHandler] as Advice
+}
+
+database "Redis" as Redis {
+  [Conversation Store] as ConversationStore
+  [Graph Checkpoint Store] as CheckpointStore
+}
+
+cloud "Downstream A2A Agents" {
+  [Product Agent A2A] as ProductAgent
+  [Reservation Agent A2A] as ReservationAgent
+  [Search Agent A2A] as SearchAgent
+}
+
+artifact "a2a-host.yml" as HostYml
+
+User --> Client
+Client --> HostA2AController : /a2a/host/*
+HostA2AController --> HostService
+HostA2AController --> Advice
+HostService --> HostOrchestrator
+HostOrchestrator --> StateGraph
+HostOrchestrator --> Planner
+HostOrchestrator --> A2AInvocationService
+HostOrchestrator --> Composer
+Planner --> LlmRuntime
+Composer --> LlmRuntime
+A2AInvocationService --> A2ARegistry
+A2ARegistry --> HostYml
+A2AInvocationService --> ProductAgent
+A2AInvocationService --> ReservationAgent
+A2AInvocationService --> SearchAgent
+HostOrchestrator --> ConversationStore
+HostOrchestrator --> CheckpointStore
+
+note right of HostOrchestrator
+Host flow
+- intent planning
+- downstream agent selection
+- A2A call (sync/stream)
+- result compose
+- history/checkpoint persist
+end note
+
+@enduml

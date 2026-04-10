@@ -17,6 +17,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * MCP 도구 스키마를 Spring AI ToolCallback으로 변환해 제공하는 컴포넌트.
+ * <p>
+ * 도구 목록 조회 결과를 일정 시간 캐시해 콜백 재생성 비용을 줄인다.
+ */
 @Component
 public class McpToolCallbackProvider implements ToolCallbackProvider {
 
@@ -37,6 +42,11 @@ public class McpToolCallbackProvider implements ToolCallbackProvider {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 도구 콜백 배열을 캐시 기반으로 반환한다.
+     * <p>
+     * 캐시 만료 전에는 기존 콜백을 재사용하고, 만료 시 동기화 구간에서 재구성한다.
+     */
     @Override
     public ToolCallback[] getToolCallbacks() {
         long now = System.currentTimeMillis();
@@ -55,6 +65,11 @@ public class McpToolCallbackProvider implements ToolCallbackProvider {
         }
     }
 
+    /**
+     * 서버별 도구 스키마를 순회해 실행 가능한 콜백 목록을 생성한다.
+     * <p>
+     * allow-tools 설정이 있으면 화이트리스트 기반으로 필터링한다.
+     */
     private ToolCallback[] buildCallbacks() {
         List<ToolCallback> callbacks = new ArrayList<>();
         mcpProperties.getServers().forEach((serverName, serverConfig) -> {
@@ -74,6 +89,11 @@ public class McpToolCallbackProvider implements ToolCallbackProvider {
         return callbacks.toArray(ToolCallback[]::new);
     }
 
+    /**
+     * 단일 MCP 도구를 Spring AI FunctionToolCallback으로 변환한다.
+     * <p>
+     * callback 이름은 `server__tool` 규칙을 사용한다.
+     */
     private ToolCallback buildCallback(String serverName, String toolName, Map<String, Object> toolSchema) {
         String callbackName = serverName + "__" + toolName;
         String description = "[server=%s] %s".formatted(serverName, stringValue(toolSchema.get("description")));
@@ -103,6 +123,7 @@ public class McpToolCallbackProvider implements ToolCallbackProvider {
     }
 
     private List<Map<String, Object>> loadTools(String serverName) {
+        // 외부 구현체의 키 타입 차이를 제거하기 위해 String 키 맵으로 정규화한다.
         McpClient client = mcpClientFactory.createClient(serverName);
         List<Map<String, Object>> list = client.listTools();
         List<Map<String, Object>> tools = new ArrayList<>();
