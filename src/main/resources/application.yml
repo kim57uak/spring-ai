@@ -1,9 +1,12 @@
 server:
+  address: 0.0.0.0
   port: 8082
 
 spring:
   config:
-    import: "optional:classpath:systemPrompt.yml"
+    import:
+      - "optional:classpath:systemPrompt.yml"
+      - "optional:classpath:mcp.yml"
   ai:
     model:
       chat: openai
@@ -54,7 +57,7 @@ http-llm:
     base-url: https://api.mistral.ai/v1/chat/completions
     max-tokens: 30000
   openai:
-    api-key: ${OPENAI_API_KEY:${HTTP_OPENAI_API_KEY:}}
+    api-key: ${OPENAI_API_KEY:}
     model: gpt-4o-mini
     base-url: https://api.openai.com/v1/chat/completions
     max-tokens: 16384
@@ -67,32 +70,3 @@ llm:
     max-retries: 3
     initial-backoff-ms: 1000
     max-backoff-ms: 15000
-
-mcp:
-  servers:
-    search-mcp-server:
-      command: ${MCP_NODE_PATH:/opt/homebrew/bin/node}
-      args:
-        - ${MCP_SEARCH_SERVER_PATH:/Users/dolpaks/Downloads/project/search-mcp-server/src/server.js}
-      env:
-        PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY}
-      capabilities:
-        - knowledge-retrieval
-      allow-tools: []
-    search-economy-index:
-      command: ${MCP_ECONOMY_PYTHON_PATH:/Users/dolpaks/Downloads/project/search-economy-index/venv/bin/python}
-      args:
-        - ${MCP_ECONOMY_SERVER_PATH:/Users/dolpaks/Downloads/project/search-economy-index/run_server.py}
-      env:
-        PYTHONPATH: ${MCP_ECONOMY_PYTHONPATH:/Users/dolpaks/Downloads/project/search-economy-index/src}
-      capabilities:
-        - live-data-query
-      allow-tools: []
-    hanatourApi:
-      command: ${MCP_HANATOUR_NODE_PATH:node}
-      args:
-        - ${MCP_HANATOUR_SERVER_PATH:/Users/dolpaks/Downloads/project/api-mcp-server/src/server.js}
-      env: {}
-      capabilities:
-        - action-execution
-      allow-tools: []

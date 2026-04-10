@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class RedisConversationStore implements ConversationStore {
@@ -21,6 +23,7 @@ public class RedisConversationStore implements ConversationStore {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Map<String, List<String>> localFallback = new ConcurrentHashMap<>();
 
     public RedisConversationStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
@@ -32,15 +35,18 @@ public class RedisConversationStore implements ConversationStore {
         return runOrDefault(() -> {
             String raw = redisTemplate.opsForValue().get(key(sessionId));
             if (raw == null || raw.isBlank()) {
-                return List.of();
+                return localCopy(sessionId);
             }
-            return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
-        }, List.of(), "load conversation", sessionId);
+            List<String> loaded = objectMapper.readValue(raw, new TypeReference<List<String>>() {});
+            localFallback.put(sessionId, List.copyOf(loaded));
+            return loaded;
+        }, localCopy(sessionId), "load conversation", sessionId);
     }
 
     @Override
     public void save(String sessionId, List<String> messages) {
         List<String> safeMessages = messages == null ? Collections.emptyList() : messages;
+        localFallback.put(sessionId, List.copyOf(safeMessages));
         runSafely(() -> {
             String payload = objectMapper.writeValueAsString(safeMessages);
             redisTemplate.opsForValue().set(key(sessionId), payload, TTL);
@@ -49,11 +55,17 @@ public class RedisConversationStore implements ConversationStore {
 
     @Override
     public void clear(String sessionId) {
+        localFallback.remove(sessionId);
         runSafely(() -> redisTemplate.delete(key(sessionId)), "clear conversation", sessionId);
     }
 
     private String key(String sessionId) {
         return KEY_PREFIX + sessionId;
+    }
+
+    private List<String> localCopy(String sessionId) {
+        List<String> local = localFallback.get(sessionId);
+        return local == null ? List.of() : List.copyOf(local);
     }
 
     private <T> T runOrDefault(ThrowingSupplier<T> action, T defaultValue, String actionName, String sessionId) {

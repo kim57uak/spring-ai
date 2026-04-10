@@ -44,6 +44,8 @@ public class DefaultAgentLlmRuntime implements AgentLlmRuntime {
     public Flux<String> stream(String prompt, String model, String sessionId) {
         ChatModelType modelType = ChatModelType.from(model);
         StreamChatService chatService = serviceFactory.resolveStream(modelType);
-        return chatService.streamGenerate(prompt, ChatRequestContext.of(sessionId, true, model));
+        // Agent flow는 Planning/Execution 단계에서만 도구를 호출해야 한다.
+        // Compose 단계에서 모델의 직접 tool-calling을 허용하면 scope 우회 호출이 발생할 수 있다.
+        return chatService.streamGenerate(prompt, ChatRequestContext.of(sessionId, false, model));
     }
 }

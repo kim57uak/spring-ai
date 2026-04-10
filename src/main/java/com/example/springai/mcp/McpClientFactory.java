@@ -1,6 +1,7 @@
 package com.example.springai.mcp;
 
 import com.example.springai.exception.McpClientCreationException;
+import com.example.springai.config.McpProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
@@ -17,11 +18,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public class McpClientFactory {
     
     private final ObjectMapper objectMapper;
+    private final McpProperties mcpProperties;
     private final ProcessManager processManager;
     private final Map<String, McpClient> clients = new ConcurrentHashMap<>();
     
-    public McpClientFactory(ObjectMapper objectMapper, ProcessManager processManager) {
+    public McpClientFactory(ObjectMapper objectMapper, McpProperties mcpProperties, ProcessManager processManager) {
         this.objectMapper = objectMapper;
+        this.mcpProperties = mcpProperties;
         this.processManager = processManager;
     }
     
@@ -38,6 +41,13 @@ public class McpClientFactory {
      */
     private McpClient createNewClient(String serverName) {
         try {
+            McpProperties.ServerConfig config = mcpProperties.getServers().get(serverName);
+            if (config == null) {
+                throw new McpClientCreationException(serverName, "Missing MCP server config");
+            }
+            if ("sse".equalsIgnoreCase(config.getTransport())) {
+                return new SseMcpClient(config, objectMapper);
+            }
             Process process = processManager.getOrCreateProcess(serverName);
             return new StdioMcpClient(process, objectMapper);
         } catch (RuntimeException e) {

@@ -20,6 +20,9 @@ package "com.example.springai" {
 
   package "controller" {
     class HttpChatController
+    class ProductAgentController
+    class ReservationAgentController
+    class SearchAgentController
   }
 
   package "exception" {
@@ -29,6 +32,8 @@ package "com.example.springai" {
 
   package "service" {
     class HttpChatService
+    class ScopedAgentChatService
+    class AgentScopeResolver
 
     package "chat" {
       enum ChatModelType
@@ -100,10 +105,13 @@ package "com.example.springai" {
     class McpClientFactory
     class ProcessManager
     class StdioMcpClient
+    class SseMcpClient
+    class ToolSchemaRegistry
   }
 
   package "model.agent" {
     class AgentChatRequest
+    class AgentScope
     class PlanningContext
     class ToolPlan
     class ToolExecutionResult
@@ -114,6 +122,8 @@ package "com.example.springai" {
 note bottom
 Rules
 - controller/service는 API 진입과 조율 책임만 가진다
+- HttpChatController는 unrestricted MCP 접근을 유지한다
+- Product/Reservation/Search controller는 scoped MCP 접근을 사용한다
 - 예외 처리와 예외 타입은 advice/exception 패키지에서 분리한다
 - orchestrator는 포트(interface)에만 의존한다
 - 모델 라우팅은 ChatModelType + ModelChatServiceFactory로 일원화한다

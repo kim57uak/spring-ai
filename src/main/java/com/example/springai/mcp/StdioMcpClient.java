@@ -128,6 +128,12 @@ public class StdioMcpClient implements McpClient {
         return false;
     }
 
+    @Override
+    public List<Map<String, Object>> listTools() {
+        loadToolsSchema();
+        return toolList();
+    }
+
     public Map<String, Object> getToolsSchema() {
         return toolsSchema.get();
     }

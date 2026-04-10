@@ -1,7 +1,6 @@
 package com.example.springai.config;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -27,8 +26,13 @@ public class McpProperties {
     @Validated
     public static class ServerConfig {
 
-        @NotBlank(message = "MCP server command cannot be blank")
+        private String transport = "stdio";
+
         private String command;
+
+        private String host;
+
+        private String endpoint = "/mcp";
 
         private List<String> args = Collections.emptyList();
 
@@ -38,12 +42,36 @@ public class McpProperties {
 
         private List<String> allowTools = Collections.emptyList();
 
+        public String getTransport() {
+            return transport == null || transport.isBlank() ? "stdio" : transport;
+        }
+
+        public void setTransport(String transport) {
+            this.transport = transport;
+        }
+
         public String getCommand() {
             return command;
         }
 
         public void setCommand(String command) {
             this.command = command;
+        }
+
+        public String getHost() {
+            return host;
+        }
+
+        public void setHost(String host) {
+            this.host = host;
+        }
+
+        public String getEndpoint() {
+            return endpoint == null || endpoint.isBlank() ? "/mcp" : endpoint;
+        }
+
+        public void setEndpoint(String endpoint) {
+            this.endpoint = endpoint;
         }
 
         public List<String> getArgs() {

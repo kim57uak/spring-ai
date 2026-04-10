@@ -63,6 +63,13 @@ public class ProcessManager {
      */
     private Process createProcess(String serverName) throws IOException {
         try {
+            McpProperties.ServerConfig config = mcpProperties.getServers().get(serverName);
+            if (config == null) {
+                throw new McpProcessLaunchException(serverName, "Missing MCP server config");
+            }
+            if (!"stdio".equalsIgnoreCase(config.getTransport())) {
+                throw new McpProcessLaunchException(serverName, "Non-stdio server does not use local process launch");
+            }
             return processLauncher.launch(serverName);
         } catch (RuntimeException | IOException e) {
             throw new McpProcessLaunchException(serverName, e.getMessage(), e);

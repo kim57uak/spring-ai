@@ -5,6 +5,8 @@
 - `puml`/`md` 설계 기준으로 Agentic AI Phase 1(`plan -> execute -> compose -> persist`)를 우선 구현한다.
 - Redis는 로컬 Docker 컨테이너를 사용한다.
 - UI는 `static/design_v7.html` 계약(`/api/http-chat/stream`)을 유지한다.
+- 신규 3개 컨트롤러 대응 UI(`product/reservation/search-agent-chat.html`)를 제공한다.
+- MCP 설정은 `application.yml`에서 `mcp.yml`로 분리한다.
 - SOLID, 유지보수성, 가독성을 우선한다.
 
 ## 작업 우선순위
@@ -45,7 +47,9 @@
 ### P3. MCP 연동 + 보안 가드레일
 
 - 기존 `McpClientFactory` 재사용
+- `SSE(sale-product/reservation)` + `stdio(search-mcp-server)` 혼합 전송 지원
 - 서버/툴 allowlist 적용
+- HttpChatController는 unrestricted, 신규 3개 컨트롤러는 scoped 접근 적용
 - 실패 시 사용자 메시지 표준화(`HUMAN_MESSAGE`)
 - 로그 마스킹 원칙 적용(토큰/raw payload 미노출)
 - 완료 기준
@@ -55,6 +59,7 @@
 ### P4. UI 계약 검증 (design_v7.html)
 
 - `design_v7.html`가 사용하는 요청/응답 포맷 유지
+- 신규 HTML 클라이언트 3종이 각 컨트롤러 endpoint와 연결되는지 검증
 - 스트리밍 실패 처리 메시지 일관화
 - 완료 기준
   - 프론트 수정 최소화로 기존 화면에서 정상 대화 가능
@@ -80,3 +85,11 @@
 ## 이번 턴 범위
 
 - 현재 소스 기준으로 P0~P4는 반영되었고, P5는 환경 의존 테스트를 분리해 안정 실행 가능한 범위를 유지한다.
+
+## 2026-04-10 Alignment (Doc 26)
+
+- HttpChatController: unrestricted MCP access
+- Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
+- `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
+- MCP settings split: `application.yml` -> `mcp.yml`
+- Tool schema loading: reconnect-first, cache-second, unique composite cache key

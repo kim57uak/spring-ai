@@ -9,6 +9,12 @@ class AgentChatRequest {
   +sessionId: String
   +message: String
   +model: String
+  +scope: AgentScope
+}
+
+class AgentScope {
+  +allowedServers: Set<String>
+  +allowedToolsByServer: Map<String, Set<String>>
 }
 
 class PlanningContext {
@@ -22,6 +28,7 @@ class PlanningContext {
   +plans: List<ToolPlan>
   +toolTrace: List<String>
   +executionResult: ToolExecutionResult
+  +scope: AgentScope
 }
 
 class AgentGraphState {
@@ -32,6 +39,7 @@ class AgentGraphState {
   +CURRENT_NODE
   +PLAN_*
   +EXEC_*
+  +SCOPE_*
 }
 
 enum ChunkType {
@@ -103,8 +111,10 @@ ResponseComposeService <|.. LlmResponseComposeService
 AgentStateGraphFactory <|.. LangGraphAgentStateGraphFactory
 
 AgentChatRequest --> PlanningContext
+AgentChatRequest --> AgentScope
 PlanningContext --> ToolPlan
 PlanningContext --> ToolExecutionResult
+PlanningContext --> AgentScope
 AgentGraphState --> PlanningContext
 
 note bottom of PlanningContext

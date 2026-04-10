@@ -3,7 +3,6 @@ package com.example.springai.service.chat.tool;
 import com.example.springai.config.McpProperties;
 import com.example.springai.mcp.McpClient;
 import com.example.springai.mcp.McpClientFactory;
-import com.example.springai.mcp.StdioMcpClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -105,22 +104,12 @@ public class McpToolCallbackProvider implements ToolCallbackProvider {
 
     private List<Map<String, Object>> loadTools(String serverName) {
         McpClient client = mcpClientFactory.createClient(serverName);
-        if (!(client instanceof StdioMcpClient stdio)) {
-            return List.of();
-        }
-
-        Object rawTools = stdio.getToolsSchema().get("tools");
-        if (!(rawTools instanceof List<?> list)) {
-            return List.of();
-        }
-
+        List<Map<String, Object>> list = client.listTools();
         List<Map<String, Object>> tools = new ArrayList<>();
-        for (Object item : list) {
-            if (item instanceof Map<?, ?> map) {
-                Map<String, Object> converted = new HashMap<>();
-                map.forEach((k, v) -> converted.put(String.valueOf(k), v));
-                tools.add(converted);
-            }
+        for (Map<String, Object> map : list) {
+            Map<String, Object> converted = new HashMap<>();
+            map.forEach((k, v) -> converted.put(String.valueOf(k), v));
+            tools.add(converted);
         }
         return tools;
     }

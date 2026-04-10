@@ -15,9 +15,11 @@ import reactor.core.publisher.Flux;
 @Service
 public class HttpChatService {
     private final AgentOrchestrator agentOrchestrator;
+    private final AgentScopeResolver scopeResolver;
 
-    public HttpChatService(AgentOrchestrator agentOrchestrator) {
+    public HttpChatService(AgentOrchestrator agentOrchestrator, AgentScopeResolver scopeResolver) {
         this.agentOrchestrator = agentOrchestrator;
+        this.scopeResolver = scopeResolver;
     }
 
     /**
@@ -27,7 +29,9 @@ public class HttpChatService {
      * 즉, 실제 지연(그래프 실행, 모델 호출, 도구 호출)은 AgentOrchestrator 아래에서 발생한다.
      */
     public Flux<String> streamChat(String sessionId, String message, String modelType) {
-        return agentOrchestrator.execute(new AgentChatRequest(sessionId, message, modelType));
+        return agentOrchestrator.execute(
+                new AgentChatRequest(sessionId, message, modelType, scopeResolver.resolveUnrestricted())
+        );
     }
 
     public void clearSession(String sessionId) {

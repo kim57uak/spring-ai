@@ -1,12 +1,13 @@
 @startuml
 !pragma layout smetana
-title 19. Spring AI Agentic Sequence (Current Source)
+title 19. Spring AI Agentic Sequence (Scoped + Mixed MCP Transport)
 
 skinparam shadowing false
 
 actor User
-participant "HttpChatController" as Controller
-participant "HttpChatService" as ChatService
+participant "Agent Controller\n(Http/Product/Reservation/Search)" as Controller
+participant "Chat Service\n(HttpChatService/ScopedAgentChatService)" as ChatService
+participant "AgentScopeResolver" as ScopeResolver
 participant "AgentOrchestrator" as Orchestrator
 participant "Conversation Store (Redis)" as HistoryRedis
 participant "Graph Checkpoint Store (Redis)" as CheckpointRedis
@@ -17,9 +18,13 @@ participant "ResponseComposeService" as Composer
 participant "DefaultAgentLlmRuntime" as Runtime
 participant "ModelChatServiceFactory" as ChatFactory
 participant "Provider ChatService" as ProviderChatService
-participant "MCP Server" as McpServer
+participant "ToolSchemaRegistry" as SchemaRegistry
+participant "McpClientFactory" as McpFactory
+participant "SSE MCP Server\n10.225.18.50:8080" as SseMcp
+participant "stdio MCP Server\nsearch-mcp-server" as StdioMcp
 
 User -> Controller : chat stream request
+Controller -> ScopeResolver : resolve scope
 Controller -> ChatService : streamChat(...)
 ChatService -> Orchestrator : execute(request)
 
@@ -28,11 +33,19 @@ Orchestrator -> CheckpointRedis : load checkpoint
 Orchestrator -> StateGraph : invoke(state)
 StateGraph -> Planner : plan(context)
 Planner -> Runtime : complete(planning prompt)
+Planner -> SchemaRegistry : loadTools(server, scope)
 
 alt tool required
   StateGraph -> Executor : execute(plan, context)
-  Executor -> McpServer : call tool
-  McpServer --> Executor : tool result
+  Executor -> SchemaRegistry : loadTools(server, scope)
+  Executor -> McpFactory : createClient(transport)
+  alt transport=sse
+    Executor -> SseMcp : call tool
+    SseMcp --> Executor : tool result
+  else transport=stdio
+    Executor -> StdioMcp : call tool
+    StdioMcp --> Executor : tool result
+  end
 else no tool required
   StateGraph --> Orchestrator : skip execution
 end

@@ -14,6 +14,9 @@ public class AgentGraphState extends AgentState {
     public static final String CHECKPOINT_ID = "checkpointId";
     public static final String CURRENT_NODE = "currentNode";
     public static final String PLANS = "plans";
+    public static final String SCOPE_ALLOWED_SERVERS = "scopeAllowedServers";
+    public static final String SCOPE_ALLOWED_TOOLS = "scopeAllowedTools";
+    public static final String SCOPE_UNRESTRICTED = "scopeUnrestricted";
 
     public static final String PLAN_CAPABILITY = "planCapability";
     public static final String PLAN_SERVER = "planServer";
@@ -63,6 +66,7 @@ public class AgentGraphState extends AgentState {
         context.replaceHistory(history());
         context.setCheckpointId(checkpointId());
         context.setCurrentNode(value(CURRENT_NODE).map(String.class::cast).orElse("COMPOSING"));
+        context.setScope(readScope());
 
         ToolPlan plan = new ToolPlan(
                 value(PLAN_CAPABILITY).map(String.class::cast).orElse("none"),
@@ -87,6 +91,53 @@ public class AgentGraphState extends AgentState {
             context.addToolTrace(trace);
         }
         return context;
+    }
+
+    @SuppressWarnings("unchecked")
+    private AgentScope readScope() {
+        if (value(SCOPE_UNRESTRICTED).map(Boolean.class::cast).orElse(false)) {
+            return AgentScope.unrestricted();
+        }
+        Object serversRaw = value(SCOPE_ALLOWED_SERVERS).orElse(List.of());
+        java.util.Set<String> allowedServers = new java.util.LinkedHashSet<>();
+        if (serversRaw instanceof List<?> list) {
+            for (Object item : list) {
+                if (item != null) {
+                    String server = String.valueOf(item).trim();
+                    if (!server.isBlank()) {
+                        allowedServers.add(server);
+                    }
+                }
+            }
+        }
+
+        Object toolsRaw = value(SCOPE_ALLOWED_TOOLS).orElse(Map.of());
+        Map<String, java.util.Set<String>> allowedToolsByServer = new java.util.LinkedHashMap<>();
+        if (toolsRaw instanceof Map<?, ?> map) {
+            map.forEach((serverKey, toolsValue) -> {
+                String server = String.valueOf(serverKey);
+                if (server.isBlank()) {
+                    return;
+                }
+                java.util.Set<String> tools = new java.util.LinkedHashSet<>();
+                if (toolsValue instanceof List<?> toolList) {
+                    for (Object tool : toolList) {
+                        if (tool != null) {
+                            String toolName = String.valueOf(tool).trim();
+                            if (!toolName.isBlank()) {
+                                tools.add(toolName);
+                            }
+                        }
+                    }
+                }
+                allowedToolsByServer.put(server, tools);
+            });
+        }
+
+        if (allowedServers.isEmpty() && allowedToolsByServer.isEmpty()) {
+            return AgentScope.unrestricted();
+        }
+        return AgentScope.restricted(allowedServers, allowedToolsByServer);
     }
 
     @SuppressWarnings("unchecked")

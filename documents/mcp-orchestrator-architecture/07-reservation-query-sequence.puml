@@ -1,49 +1,44 @@
 @startuml
 !pragma layout smetana
-title 07. Iterative Handoff Sequence (Plan -> Execute -> Re-plan)
+title 07. Reservation Agent Sequence (Scoped + SSE MCP)
 
 skinparam shadowing false
 
 actor User
-participant "HttpChatController" as Controller
-participant "HttpChatService" as ChatService
+participant "ReservationAgentController" as Controller
+participant "ScopedAgentChatService" as ChatService
+participant "AgentScopeResolver" as ScopeResolver
 participant "AgentOrchestrator" as Orchestrator
 participant "LangGraph4J CompiledGraph" as StateGraph
 participant "PlanningService" as Planner
+participant "ToolSchemaRegistry" as SchemaRegistry
 participant "ToolExecutionService" as Executor
-participant "MCP Server (Market)" as MarketMcp
-participant "MCP Server (Action)" as ActionMcp
+participant "McpClientFactory" as McpFactory
+participant "SSE MCP Server\nhttp://10.225.18.50:8080" as ReservationMcp
 participant "ResponseComposeService" as Composer
 participant "DefaultAgentLlmRuntime" as Runtime
-participant "ModelChatServiceFactory" as ChatFactory
-participant "Provider ChatService" as ProviderChatService
 
-User -> Controller : "지표 확인 후 실행까지 진행해줘"
-Controller -> ChatService : streamChat(...)
-ChatService -> Orchestrator : execute(request)
+User -> Controller : "예약 생성해줘" (/api/reservation-agent/stream)
+Controller -> ScopeResolver : resolve(reservation scope)
+ScopeResolver --> Controller : allowedServers={reservation},\nallowedTools={createReservation}
+Controller -> ChatService : streamChat(sessionId, message, model, scope)
+ChatService -> Orchestrator : execute(request+scope)
 Orchestrator -> StateGraph : invoke(state)
 
-StateGraph -> Planner : plan #1
-StateGraph -> Executor : execute #1
-Executor -> MarketMcp : read market data
-MarketMcp --> Executor : market result
+StateGraph -> Planner : plan(context + scope)
+Planner -> SchemaRegistry : loadTools(reservation)
+SchemaRegistry -> McpFactory : createClient(transport=sse)
 
-StateGraph -> Planner : re-plan #2 (with tool result)
-StateGraph -> Executor : execute #2
-Executor -> ActionMcp : submit action
-ActionMcp --> Executor : action result
+StateGraph -> Executor : execute(plan, context + scope)
+Executor -> SchemaRegistry : loadTools(reservation)
+Executor -> McpFactory : createClient(transport=sse)
+Executor -> ReservationMcp : callTool(createReservation, args) via SSE
+ReservationMcp --> Executor : reservation result
 
-StateGraph --> Orchestrator : context(updated plans/results)
+StateGraph --> Orchestrator : context(updated)
 Orchestrator -> Composer : streamCompose(context)
 Composer -> Runtime : stream(prompt, model, sessionId)
-Runtime -> ChatFactory : resolveStream(ChatModelType)
-ChatFactory --> Runtime : StreamChatService
-Runtime -> ProviderChatService : streamGenerate(prompt, context)
-ProviderChatService --> Runtime : chunks
-Runtime --> Composer : chunks
-Composer --> Orchestrator : response chunks
-Orchestrator --> ChatService : chunks
-ChatService --> Controller : chunks
+Runtime --> Controller : response chunks
 Controller --> User : SSE stream
 
 @enduml

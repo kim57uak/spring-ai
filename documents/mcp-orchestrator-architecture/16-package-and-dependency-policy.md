@@ -7,20 +7,28 @@
 ## As-Is (Current Source)
 
 - `controller.HttpChatController`
+- `controller.ProductAgentController`
+- `controller.ReservationAgentController`
+- `controller.SearchAgentController`
 - `advice.GlobalExceptionHandler`
 - `exception.*` (`ChatProcessingException`, `McpException` 계층)
 - `service.HttpChatService`
+- `service.ScopedAgentChatService`
+- `service.AgentScopeResolver`
 - `service.chat.*` (`ChatService`, `SyncChatService`, `StreamChatService`, `StructuredChatService`, `ModelChatServiceFactory`, `ChatModelType`, `ChatRequestContext`)
 - `service.chat.model.*` (`OpenAiModelChatService`, `GeminiModelChatService`, `GeminiLiteModelChatService`, `MistralModelChatService`)
 - `service.chat.advisor.*` (`PromptSanitizingAdvisor`, `SessionHistoryAdvisor`)
 - `service.chat.tool.McpToolCallbackProvider`
 - `service.llm.LlmCredentialValidator`
-- `mcp.*` (`McpClientFactory`, `ProcessManager`, `StdioMcpClient`)
+- `mcp.*` (`McpClientFactory`, `ProcessManager`, `StdioMcpClient`, `SseMcpClient`, `ToolSchemaRegistry`)
 - `config.*` (`HttpLlmProperties`, `LlmRateLimitProperties`, `McpProperties`, `ObservationConfig`, `SpringAiChatAdvisorConfig`)
 
 ## To-Be (Agentic Layer)
 
-- `controller.HttpChatController` (entry)
+- `controller.HttpChatController` (unrestricted entry)
+- `controller.ProductAgentController` (scoped entry)
+- `controller.ReservationAgentController` (scoped entry)
+- `controller.SearchAgentController` (scoped entry)
 - `service.agent.orchestrator.AgentOrchestrator`
 - `service.agent.graph.AgentStateGraphFactory`
 - `service.agent.plan.PlanningService`
@@ -34,7 +42,8 @@
 
 ## Design Rules
 
-- `HttpChatController`를 단일 진입점으로 사용한다.
+- `HttpChatController`는 하위호환을 위해 unrestricted MCP 접근을 유지한다.
+- 신규 Product/Reservation/Search 컨트롤러는 scoped MCP 접근을 사용한다.
 - 예외 응답은 `GlobalExceptionHandler`에서 일원화한다.
 - 오케스트레이터는 인터페이스에만 의존한다.
 - `LangGraph4j StateGraph` 조립 책임은 `graph` 계층으로 고정한다.
@@ -45,6 +54,7 @@
 ## Dependency Rules
 
 - `controller -> service(HttpChatService) -> orchestrator -> (plan/execute/compose/store/security/prompt/runtime)`
+- `controller -> service(ScopedAgentChatService) -> scopeResolver -> orchestrator -> (plan/execute/compose/store/security/prompt/runtime)`
 - `controller/advice -> exception`
 - `plan/compose -> runtime(AgentLlmRuntime) -> chat factory -> provider chat service`
 - `execute -> mcp client port`
@@ -63,3 +73,11 @@
 
 - 기본 정책은 `LlmCallPolicy` + `LlmRequestRateLimiter`로 통합한다.
 - 재시도/백오프는 `llm.rate-limit.*` 설정으로 운영 환경에서 조정한다.
+
+## 2026-04-10 Alignment (Doc 26)
+
+- HttpChatController: unrestricted MCP access
+- Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
+- `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
+- MCP settings split: `application.yml` -> `mcp.yml`
+- Tool schema loading: reconnect-first, cache-second, unique composite cache key

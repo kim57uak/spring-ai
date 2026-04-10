@@ -3,7 +3,7 @@ package com.example.springai.service.agent.execute;
 import com.example.springai.config.McpProperties;
 import com.example.springai.mcp.McpClient;
 import com.example.springai.mcp.McpClientFactory;
-import com.example.springai.mcp.StdioMcpClient;
+import com.example.springai.mcp.ToolSchemaRegistry;
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.model.agent.ToolExecutionResult;
 import com.example.springai.model.agent.ToolPlan;
@@ -41,15 +41,18 @@ public class McpToolExecutionService implements ToolExecutionService {
 
     private final McpClientFactory mcpClientFactory;
     private final McpProperties mcpProperties;
+    private final ToolSchemaRegistry toolSchemaRegistry;
     private final ObjectMapper objectMapper;
 
     public McpToolExecutionService(
             McpClientFactory mcpClientFactory,
             McpProperties mcpProperties,
+            ToolSchemaRegistry toolSchemaRegistry,
             ObjectMapper objectMapper
     ) {
         this.mcpClientFactory = mcpClientFactory;
         this.mcpProperties = mcpProperties;
+        this.toolSchemaRegistry = toolSchemaRegistry;
         this.objectMapper = objectMapper;
     }
 
@@ -60,6 +63,10 @@ public class McpToolExecutionService implements ToolExecutionService {
         }
 
         String serverName = plan.serverName();
+        if (!context.getScope().isServerAllowed(serverName)) {
+            logger.warn("Blocked MCP tool execution by scope. server={}", serverName);
+            return new ToolExecutionResult(serverName, "", "Server not allowed by scope", Map.of(), false, false);
+        }
         McpProperties.ServerConfig serverConfig = mcpProperties.getServers().get(serverName);
         if (serverConfig == null) {
             logger.warn("Blocked MCP tool execution. Unknown server: {}", serverName);
@@ -67,10 +74,14 @@ public class McpToolExecutionService implements ToolExecutionService {
         }
 
         McpClient client = mcpClientFactory.createClient(serverName);
-        List<Map<String, Object>> availableTools = extractAvailableTools(client);
+        List<Map<String, Object>> availableTools = toolSchemaRegistry.loadTools(serverName, context.getScope());
         String resolvedTool = resolveToolName(client, serverConfig, plan.toolName(), serverName, availableTools);
         if (resolvedTool.isBlank()) {
             return new ToolExecutionResult(serverName, "", "No allowed/available MCP tool", Map.of(), false, false);
+        }
+        if (!context.getScope().isToolAllowed(serverName, resolvedTool)) {
+            logger.warn("Blocked MCP tool execution by scope. server={}, tool={}", serverName, resolvedTool);
+            return new ToolExecutionResult(serverName, resolvedTool, "Tool not allowed by scope", Map.of(), false, false);
         }
 
         try {
@@ -110,7 +121,7 @@ public class McpToolExecutionService implements ToolExecutionService {
         List<String> allowTools = config.getAllowTools();
         if (!allowTools.isEmpty()) {
             for (String tool : allowTools) {
-                if (client.hasTool(tool)) {
+                if (tool != null && !tool.isBlank()) {
                     return tool;
                 }
             }
@@ -303,25 +314,6 @@ public class McpToolExecutionService implements ToolExecutionService {
         return prefix == 0xFC;
     }
 
-    private List<Map<String, Object>> extractAvailableTools(McpClient client) {
-        if (!(client instanceof StdioMcpClient stdio)) {
-            return List.of();
-        }
-        Object rawTools = stdio.getToolsSchema().get("tools");
-        if (!(rawTools instanceof List<?> list)) {
-            return List.of();
-        }
-        List<Map<String, Object>> tools = new ArrayList<>();
-        for (Object tool : list) {
-            if (tool instanceof Map<?, ?> rawMap) {
-                Map<String, Object> converted = new HashMap<>();
-                rawMap.forEach((k, v) -> converted.put(stringValue(k), v));
-                tools.add(converted);
-            }
-        }
-        return tools;
-    }
-
     private String stringValue(Object raw) {
         return raw == null ? "" : String.valueOf(raw);
     }
@@ -365,8 +357,8 @@ public class McpToolExecutionService implements ToolExecutionService {
 
     private boolean isAllowedAndPresent(McpClient client, McpProperties.ServerConfig config, String toolName) {
         List<String> allowTools = config.getAllowTools();
-        if (!allowTools.isEmpty() && !allowTools.contains(toolName)) {
-            return false;
+        if (!allowTools.isEmpty()) {
+            return allowTools.contains(toolName);
         }
         return client.hasTool(toolName);
     }

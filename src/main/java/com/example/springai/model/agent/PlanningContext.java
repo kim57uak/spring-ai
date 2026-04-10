@@ -16,6 +16,7 @@ public class PlanningContext {
     private List<ToolPlan> plans = new ArrayList<>(List.of(plan));
     private final List<String> toolTrace = new ArrayList<>();
     private ToolExecutionResult executionResult = ToolExecutionResult.skipped();
+    private AgentScope scope = AgentScope.unrestricted();
 
     public PlanningContext(String sessionId, String userMessage, String model) {
         this.sessionId = sessionId;
@@ -102,5 +103,13 @@ public class PlanningContext {
 
     public void setExecutionResult(ToolExecutionResult executionResult) {
         this.executionResult = executionResult;
+    }
+
+    public AgentScope getScope() {
+        return scope;
+    }
+
+    public void setScope(AgentScope scope) {
+        this.scope = scope == null ? AgentScope.unrestricted() : scope;
     }
 }
