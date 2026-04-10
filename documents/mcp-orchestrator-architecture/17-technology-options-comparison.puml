@@ -13,6 +13,8 @@ note bottom of A
 - already implemented in current source
 - CompiledGraph + Redis checkpoint/store in use
 - MCP integration path is stable
+- supports mixed transport (SSE + stdio) via MCP factory
+- supports scoped controllers + unrestricted HttpChatController
 - lowest migration risk
 end note
 

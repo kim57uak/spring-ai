@@ -5,13 +5,15 @@ title 13. MCP State Machine (Current Source)
 skinparam shadowing false
 
 [*] --> REQUEST_VALIDATED
-REQUEST_VALIDATED --> HISTORY_LOADED
+REQUEST_VALIDATED --> SCOPE_RESOLVED
+SCOPE_RESOLVED --> HISTORY_LOADED
 HISTORY_LOADED --> PLANNED
 
 PLANNED --> EXECUTING : planRequired=true
 PLANNED --> COMPOSING : planRequired=false
 
-EXECUTING --> COMPOSING : execute loop finished
+EXECUTING --> TOOL_SCHEMA_REFRESHED : reconnect-first
+TOOL_SCHEMA_REFRESHED --> COMPOSING : execute loop finished
 
 COMPOSING --> COMPLETED
 
@@ -25,6 +27,11 @@ Tool loop is bounded
 - append trace
 - re-plan
 - max iterations guard (4)
+end note
+
+note right of SCOPE_RESOLVED
+HttpChatController: unrestricted scope
+Product/Reservation/Search: restricted scope
 end note
 
 @enduml

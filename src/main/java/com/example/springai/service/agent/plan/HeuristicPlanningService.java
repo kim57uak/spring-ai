@@ -2,9 +2,7 @@ package com.example.springai.service.agent.plan;
 
 import com.example.springai.config.McpProperties;
 import com.example.springai.config.PromptProperties;
-import com.example.springai.mcp.McpClient;
-import com.example.springai.mcp.McpClientFactory;
-import com.example.springai.mcp.StdioMcpClient;
+import com.example.springai.mcp.ToolSchemaRegistry;
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.model.agent.ToolPlan;
 import com.example.springai.service.agent.prompt.PromptRenderService;
@@ -21,13 +19,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.time.DayOfWeek;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * LLM + 휴리스틱 기반 도구 선택(Planning) 구현.
@@ -38,21 +33,19 @@ public class HeuristicPlanningService implements PlanningService {
 
     private static final Logger logger = LoggerFactory.getLogger(HeuristicPlanningService.class);
     private static final String OUTPUT_COMPLETE = "COMPLETE";
-    private static final Duration TOOL_SCHEMA_CACHE_TTL = Duration.ofMinutes(5);
 
     private final McpProperties mcpProperties;
     private final PromptProperties promptProperties;
-    private final McpClientFactory mcpClientFactory;
+    private final ToolSchemaRegistry toolSchemaRegistry;
     private final AgentLlmRuntime llmRuntime;
     private final PromptInjectionGuard promptInjectionGuard;
     private final PromptRenderService promptRenderService;
     private final ObjectMapper objectMapper;
-    private final ConcurrentMap<String, CachedToolSchema> toolSchemaCache = new ConcurrentHashMap<>();
 
     public HeuristicPlanningService(
             McpProperties mcpProperties,
             PromptProperties promptProperties,
-            McpClientFactory mcpClientFactory,
+            ToolSchemaRegistry toolSchemaRegistry,
             AgentLlmRuntime llmRuntime,
             PromptInjectionGuard promptInjectionGuard,
             PromptRenderService promptRenderService,
@@ -60,7 +53,7 @@ public class HeuristicPlanningService implements PlanningService {
     ) {
         this.mcpProperties = mcpProperties;
         this.promptProperties = promptProperties;
-        this.mcpClientFactory = mcpClientFactory;
+        this.toolSchemaRegistry = toolSchemaRegistry;
         this.llmRuntime = llmRuntime;
         this.promptInjectionGuard = promptInjectionGuard;
         this.promptRenderService = promptRenderService;
@@ -78,7 +71,7 @@ public class HeuristicPlanningService implements PlanningService {
         String planningPrompt = buildToolPlanningPrompt(context);
         PlannerDecision structured = readStructuredDecision(planningPrompt, context.getModel(), context.getSessionId());
         if (structured != null) {
-            List<ToolPlan> decisions = parseStructuredDecision(structured);
+            List<ToolPlan> decisions = parseStructuredDecision(structured, context);
             if (!decisions.isEmpty()) {
                 return logResult(deduplicate(decisions));
             }
@@ -101,7 +94,7 @@ public class HeuristicPlanningService implements PlanningService {
      * planner가 참고할 서버/도구/실행이력/최근 결과를 포함한 프롬프트를 구성한다.
      */
     private String buildToolPlanningPrompt(PlanningContext context) {
-        String serverCatalog = buildServerCatalog();
+        String serverCatalog = buildServerCatalog(context);
         String executedTools = context.getToolTrace().isEmpty()
                 ? "NONE"
                 : String.join("\n", context.getToolTrace());
@@ -129,13 +122,16 @@ public class HeuristicPlanningService implements PlanningService {
         ));
     }
 
-    private String buildServerCatalog() {
+    private String buildServerCatalog(PlanningContext context) {
         StringBuilder catalog = new StringBuilder();
         mcpProperties.getServers().forEach((serverName, config) -> {
+            if (!isServerAllowed(serverName, context)) {
+                return;
+            }
             catalog.append("- server=").append(serverName)
                     .append(", capabilities=").append(config.getCapabilities());
 
-            List<Map<String, Object>> tools = loadToolsFromRuntime(serverName);
+            List<Map<String, Object>> tools = loadToolsFromRuntime(serverName, context);
             if (tools.isEmpty()) {
                 catalog.append(", tools=[]\n");
                 return;
@@ -147,6 +143,9 @@ public class HeuristicPlanningService implements PlanningService {
                 summary.put("name", stringValue(tool.get("name")));
                 summary.put("description", stringValue(tool.get("description")));
                 summary.put("inputSchema", tool.getOrDefault("inputSchema", Map.of()));
+                if (!isToolAllowed(serverName, stringValue(tool.get("name")), context)) {
+                    continue;
+                }
                 summarizedTools.add(summary);
             }
             try {
@@ -158,7 +157,7 @@ public class HeuristicPlanningService implements PlanningService {
         return catalog.toString().trim();
     }
 
-    private List<ToolPlan> parsePlans(String plannerOutput) {
+    private List<ToolPlan> parsePlans(String plannerOutput, PlanningContext context) {
         if (plannerOutput == null || plannerOutput.isBlank()) {
             return List.of();
         }
@@ -171,10 +170,13 @@ public class HeuristicPlanningService implements PlanningService {
             List<ToolPlan> plans = new ArrayList<>();
             for (PlannerToolSelection item : selections) {
                 String server = safe(item.server());
-                if (server.isBlank() || !mcpProperties.getServers().containsKey(server)) {
+                if (server.isBlank() || !mcpProperties.getServers().containsKey(server) || !isServerAllowed(server, context)) {
                     continue;
                 }
                 String tool = safe(item.tool());
+                if (!isToolAllowed(server, tool, context)) {
+                    continue;
+                }
                 String reason = safe(item.reason()).isBlank() ? "LLM selected tool" : safe(item.reason());
                 String capability = resolveCapability(server);
                 Map<String, Object> arguments = item.arguments() == null ? Map.of() : item.arguments();
@@ -182,7 +184,7 @@ public class HeuristicPlanningService implements PlanningService {
             }
             return plans;
         } catch (Exception e) {
-            logger.warn("Failed to parse LLM tool plan. output={}", plannerOutput);
+            logger.warn("Failed to parse LLM tool plan to JSON structure");
             return List.of();
         }
     }
@@ -230,45 +232,8 @@ public class HeuristicPlanningService implements PlanningService {
         return List.copyOf(dedup.values());
     }
 
-    private List<Map<String, Object>> loadToolsFromRuntime(String serverName) {
-        CachedToolSchema cached = toolSchemaCache.get(serverName);
-        long now = System.currentTimeMillis();
-        if (cached != null && !cached.isExpired(now)) {
-            return cached.tools();
-        }
-
-        try {
-            List<Map<String, Object>> freshTools = readTools(serverName);
-            toolSchemaCache.put(serverName, new CachedToolSchema(freshTools, now + TOOL_SCHEMA_CACHE_TTL.toMillis()));
-            return freshTools;
-        } catch (Exception e) {
-            logger.warn("Failed to refresh MCP tools from server={}: {}", serverName, e.getMessage());
-            if (cached != null) {
-                logger.info("Using stale MCP tools cache for server={}", serverName);
-                return cached.tools();
-            }
-            return List.of();
-        }
-    }
-
-    private List<Map<String, Object>> readTools(String serverName) {
-        McpClient client = mcpClientFactory.createClient(serverName);
-        if (!(client instanceof StdioMcpClient stdio)) {
-            return List.of();
-        }
-        Object rawTools = stdio.getToolsSchema().get("tools");
-        if (!(rawTools instanceof List<?> list)) {
-            return List.of();
-        }
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Object item : list) {
-            if (item instanceof Map<?, ?> map) {
-                Map<String, Object> converted = new LinkedHashMap<>();
-                map.forEach((k, v) -> converted.put(String.valueOf(k), v));
-                result.add(converted);
-            }
-        }
-        return result;
+    private List<Map<String, Object>> loadToolsFromRuntime(String serverName, PlanningContext context) {
+        return toolSchemaRegistry.loadTools(serverName, context == null ? null : context.getScope());
     }
 
     private String stringValue(Object raw) {
@@ -330,7 +295,7 @@ public class HeuristicPlanningService implements PlanningService {
     }
 
     private List<ToolPlan> parseWithRepair(String plannerOutput, PlanningContext context) {
-        List<ToolPlan> parsed = parsePlans(plannerOutput);
+        List<ToolPlan> parsed = parsePlans(plannerOutput, context);
         if (!parsed.isEmpty()) {
             return parsed;
         }
@@ -338,9 +303,9 @@ public class HeuristicPlanningService implements PlanningService {
         String repairPrompt = buildPlannerRepairPrompt(plannerOutput);
         PlannerDecision repairedStructured = readStructuredDecision(repairPrompt, context.getModel(), context.getSessionId());
         if (repairedStructured != null) {
-            List<ToolPlan> repairedPlans = parseStructuredDecision(repairedStructured);
+            List<ToolPlan> repairedPlans = parseStructuredDecision(repairedStructured, context);
             if (!repairedPlans.isEmpty()) {
-                logger.info("Tool selection repaired via structured output. raw={}", plannerOutput);
+                logger.info("Tool selection repaired via structured output");
                 return repairedPlans;
             }
         }
@@ -350,11 +315,11 @@ public class HeuristicPlanningService implements PlanningService {
             return noToolSelection("LLM planner repaired to COMPLETE");
         }
 
-        List<ToolPlan> repairedPlans = parsePlans(repaired);
+        List<ToolPlan> repairedPlans = parsePlans(repaired, context);
         if (!repairedPlans.isEmpty()) {
-            logger.info("Tool selection repaired successfully. raw={}, repaired={}", plannerOutput, repaired);
+            logger.info("Tool selection repaired successfully via retry");
         } else {
-            logger.warn("Tool selection repair failed. raw={}, repaired={}", plannerOutput, repaired);
+            logger.warn("Tool selection repair failed after retry");
         }
         return repairedPlans;
     }
@@ -386,7 +351,7 @@ public class HeuristicPlanningService implements PlanningService {
         return true;
     }
 
-    private List<ToolPlan> parseStructuredDecision(PlannerDecision decision) {
+    private List<ToolPlan> parseStructuredDecision(PlannerDecision decision, PlanningContext context) {
         if (decision == null) {
             return List.of();
         }
@@ -404,10 +369,13 @@ public class HeuristicPlanningService implements PlanningService {
                 continue;
             }
             String server = safe(item.server());
-            if (server.isBlank() || !mcpProperties.getServers().containsKey(server)) {
+            if (server.isBlank() || !mcpProperties.getServers().containsKey(server) || !isServerAllowed(server, context)) {
                 continue;
             }
             String tool = safe(item.tool());
+            if (!isToolAllowed(server, tool, context)) {
+                continue;
+            }
             String reason = safe(item.reason()).isBlank() ? "LLM selected tool" : safe(item.reason());
             String capability = resolveCapability(server);
             Map<String, Object> arguments = item.arguments() == null ? Map.of() : item.arguments();
@@ -433,13 +401,11 @@ public class HeuristicPlanningService implements PlanningService {
             List<PlannerToolSelection> plans
     ) {}
 
-    private record CachedToolSchema(List<Map<String, Object>> tools, long expiresAtMs) {
-        private CachedToolSchema {
-            tools = List.copyOf(tools);
-        }
+    private boolean isServerAllowed(String serverName, PlanningContext context) {
+        return context == null || context.getScope() == null || context.getScope().isServerAllowed(serverName);
+    }
 
-        private boolean isExpired(long nowMs) {
-            return nowMs >= expiresAtMs;
-        }
+    private boolean isToolAllowed(String serverName, String toolName, PlanningContext context) {
+        return context == null || context.getScope() == null || context.getScope().isToolAllowed(serverName, toolName);
     }
 }

@@ -1,12 +1,13 @@
 @startuml
 !pragma layout smetana
-title 09. Streaming Response Sequence (Current Runtime)
+title 09. Streaming Response Sequence (Unified Controllers)
 
 skinparam shadowing false
 
 actor User
-participant "HttpChatController" as Controller
-participant "HttpChatService" as ChatService
+participant "Agent Controller\n(Http/Product/Reservation/Search)" as Controller
+participant "Chat Service\n(HttpChatService/ScopedAgentChatService)" as ChatService
+participant "AgentScopeResolver" as ScopeResolver
 participant "AgentOrchestrator" as Orchestrator
 participant "ResponseComposeService" as Composer
 participant "DefaultAgentLlmRuntime" as Runtime
@@ -16,6 +17,7 @@ participant "Conversation Store (Redis)" as HistoryRedis
 participant "Checkpoint Store (Redis)" as CheckpointRedis
 
 User -> Controller : HTTP stream request
+Controller -> ScopeResolver : resolve scope
 Controller -> ChatService : streamChat(...)
 ChatService -> Orchestrator : execute(request)
 
@@ -44,5 +46,10 @@ end
 Orchestrator -> HistoryRedis : save history
 Orchestrator -> CheckpointRedis : save checkpoint
 Controller --> User : SSE complete
+
+note right of ScopeResolver
+HttpChatController -> unrestricted scope
+Product/Reservation/Search -> restricted scope
+end note
 
 @enduml

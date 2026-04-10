@@ -23,3 +23,12 @@
 - `HttpChatService`는 `AgentOrchestrator` 위임 구조로 단순화 완료
 - 예외 처리는 `GlobalExceptionHandler` + `ChatProcessingException`으로 분리 완료
 - 남은 개선은 관찰성(trace), 테스트 안정화, 운영 가드레일 강화 중심
+
+## 2026-04-10 Alignment (Doc 26)
+
+- HttpChatController: unrestricted MCP access
+- Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
+- `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
+- MCP settings split: `application.yml` -> `mcp.yml`
+- Tool schema loading: reconnect-first, cache-second, unique composite cache key
+

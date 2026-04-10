@@ -6,7 +6,11 @@ skinparam shadowing false
 skinparam componentStyle rectangle
 
 class HttpChatController
+class ProductAgentController
+class ReservationAgentController
+class SearchAgentController
 class HttpChatService
+class ScopedAgentChatService
 class AgentOrchestrator
 class HeuristicPlanningService
 class LlmResponseComposeService
@@ -24,6 +28,10 @@ class McpToolCallException
 class McpValidationException
 
 HttpChatController --> HttpChatService
+ProductAgentController --> ScopedAgentChatService
+ReservationAgentController --> ScopedAgentChatService
+SearchAgentController --> ScopedAgentChatService
+ScopedAgentChatService --> AgentOrchestrator
 HttpChatService --> AgentOrchestrator
 AgentOrchestrator --> HeuristicPlanningService
 AgentOrchestrator --> LlmResponseComposeService

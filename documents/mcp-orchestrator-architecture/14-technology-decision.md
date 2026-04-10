@@ -35,3 +35,12 @@
 - As-Is: `http-chat + agent + mcp` 통합 구조 운영
 - To-Be: agent 계층 고도화(관찰성/승인노드/재시도 전략)
 - 필수 구성요소: `Spring AI`, `LangGraph4j`, `Redis`
+
+## 2026-04-10 Alignment (Doc 26)
+
+- HttpChatController: unrestricted MCP access
+- Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
+- `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
+- MCP settings split: `application.yml` -> `mcp.yml`
+- Tool schema loading: reconnect-first, cache-second, unique composite cache key
+

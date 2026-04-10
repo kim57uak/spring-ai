@@ -1,6 +1,7 @@
 package com.example.springai.mcp;
 
 import java.util.Map;
+import java.util.List;
 
 /**
  * MCP 서버와의 도구 호출 추상화.
@@ -22,4 +23,9 @@ public interface McpClient {
      * 현재 서버가 특정 도구를 제공하는지 조회한다.
      */
     boolean hasTool(String toolName);
+
+    /**
+     * 서버가 제공하는 도구 스키마 목록을 조회한다.
+     */
+    List<Map<String, Object>> listTools();
 }

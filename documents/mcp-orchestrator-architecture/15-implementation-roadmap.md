@@ -30,3 +30,12 @@
 - tool allowlist 강제
 - raw prompt/token/session 내부값 로그 금지
 - 예외 응답은 `GlobalExceptionHandler`에서 일원화
+
+## 2026-04-10 Alignment (Doc 26)
+
+- HttpChatController: unrestricted MCP access
+- Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
+- `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
+- MCP settings split: `application.yml` -> `mcp.yml`
+- Tool schema loading: reconnect-first, cache-second, unique composite cache key
+

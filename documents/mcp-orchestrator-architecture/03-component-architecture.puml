@@ -1,18 +1,23 @@
 @startuml
 !pragma layout smetana
-title 03. Agentic MCP Component Architecture (Current Source)
+title 03. Agentic MCP Component Architecture (Refactoring Target)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
 package "entry" {
-  [HttpChatController] as Controller
+  [HttpChatController\n(unrestricted)] as HttpController
+  [ProductAgentController\n(restricted)] as ProductController
+  [ReservationAgentController\n(restricted)] as ReservationController
+  [SearchAgentController\n(restricted)] as SearchController
   [GlobalExceptionHandler] as Advice
 }
 
 package "service" {
-  [HttpChatService] as ChatService
+  [HttpChatService] as HttpChatService
+  [ScopedAgentChatService] as ScopedChatService
   [AgentOrchestrator] as Orchestrator
+  [AgentScopeResolver] as ScopeResolver
 }
 
 package "agent ports" {
@@ -48,11 +53,23 @@ package "runtime/integration" {
   [GeminiLiteModelChatService] as GeminiLiteChatService
   [MistralModelChatService] as MistralChatService
   [McpClientFactory] as McpFactory
+  [StdioMcpClient] as StdioClient
+  [SseMcpClient] as SseClient
+  [ToolSchemaRegistry\n(reconnect + cache)] as ToolSchemaRegistry
+  [mcp.yml] as McpYml
 }
 
-Controller --> ChatService
-Advice --> ChatService : error mapping boundary
-ChatService --> Orchestrator
+HttpController --> HttpChatService
+Advice --> HttpChatService : error mapping boundary
+HttpChatService --> Orchestrator : all servers/tools scope
+
+ProductController --> ScopedChatService
+ReservationController --> ScopedChatService
+SearchController --> ScopedChatService
+ScopedChatService --> ScopeResolver
+ScopedChatService --> Orchestrator : restricted scope
+
+ScopeResolver --> McpYml : load allowedServers/allowedToolsByServer
 
 Orchestrator --> PlanningPort
 Orchestrator --> ExecutePort
@@ -74,6 +91,8 @@ ExecuteImpl --> PromptGuard
 ComposeImpl --> LlmRuntime
 PlanningImpl --> LlmRuntime
 ExecuteImpl --> McpFactory
+PlanningImpl --> ToolSchemaRegistry
+ExecuteImpl --> ToolSchemaRegistry
 LlmRuntime <|.. LlmRuntimeImpl
 LlmRuntimeImpl --> ChatFactory
 ChatFactory --> SpringAiChatBase
@@ -85,9 +104,21 @@ SpringAiChatBase <|-- GeminiChatService
 SpringAiChatBase <|-- GeminiLiteChatService
 SpringAiChatBase <|-- MistralChatService
 
-note right of Orchestrator
-Depends on interfaces first
-and composes end-to-end pipeline.
+McpFactory --> StdioClient : transport=stdio
+McpFactory --> SseClient : transport=sse
+ToolSchemaRegistry --> McpFactory : on-demand reconnect
+McpYml --> McpFactory : mcp.servers.*
+McpYml --> ToolSchemaRegistry : cache key fields
+
+note right of HttpController
+Backward compatibility:
+HttpChatController keeps unrestricted MCP access.
+end note
+
+note bottom of ToolSchemaRegistry
+Unique cache key:
+transport|serverName|endpointOrCommandSignature|toolSetHash|scopeHash
+serverName-only cache is forbidden.
 end note
 
 @enduml

@@ -7,7 +7,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 @Component
@@ -18,6 +20,7 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
     private static final Duration TTL = Duration.ofMinutes(30);
 
     private final StringRedisTemplate redisTemplate;
+    private final Map<String, String> localFallback = new ConcurrentHashMap<>();
 
     public RedisGraphCheckpointStore(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
@@ -26,8 +29,14 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
     @Override
     public Optional<String> loadCheckpoint(String sessionId) {
         return runOrDefault(
-                () -> Optional.ofNullable(redisTemplate.opsForValue().get(key(sessionId))),
-                Optional.empty(),
+                () -> {
+                    String value = redisTemplate.opsForValue().get(key(sessionId));
+                    if (value != null) {
+                        localFallback.put(sessionId, value);
+                    }
+                    return Optional.ofNullable(value).or(() -> Optional.ofNullable(localFallback.get(sessionId)));
+                },
+                Optional.ofNullable(localFallback.get(sessionId)),
                 "load checkpoint",
                 sessionId
         );
@@ -35,11 +44,15 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
     @Override
     public void saveCheckpoint(String sessionId, String payload) {
+        if (payload != null) {
+            localFallback.put(sessionId, payload);
+        }
         runSafely(() -> redisTemplate.opsForValue().set(key(sessionId), payload, TTL), "save checkpoint", sessionId);
     }
 
     @Override
     public void clear(String sessionId) {
+        localFallback.remove(sessionId);
         runSafely(() -> redisTemplate.delete(key(sessionId)), "clear checkpoint", sessionId);
     }
 

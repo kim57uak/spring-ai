@@ -1,37 +1,55 @@
 @startuml
 !pragma layout smetana
-title 06. Generic MCP Tool Sequence (Current Runtime)
+title 06. Scoped Agent MCP Sequence (Refactoring Target)
 
 skinparam shadowing false
 
 actor User
-participant "HttpChatController" as Controller
-participant "HttpChatService" as ChatService
+participant "Agent Controller\n(Http/Product/Reservation/Search)" as Controller
+participant "Chat Service\n(HttpChatService/ScopedAgentChatService)" as ChatService
+participant "AgentScopeResolver" as ScopeResolver
+participant "mcp.yml" as McpYml
 participant "AgentOrchestrator" as Orchestrator
 participant "Conversation Store (Redis)" as HistoryRedis
 participant "Checkpoint Store (Redis)" as CheckpointRedis
 participant "LangGraph4J CompiledGraph" as StateGraph
 participant "PlanningService" as Planner
+participant "ToolSchemaRegistry\n(reconnect + cache)" as ToolSchemaRegistry
 participant "ToolExecutionService" as Executor
-participant "MCP Server" as McpServer
+participant "McpClientFactory" as McpFactory
+participant "SSE MCP Server\n(10.225.18.50:8080)" as SseMcpServer
+participant "stdio MCP Server\n(search-mcp-server)" as StdioMcpServer
 participant "ResponseComposeService" as Composer
 participant "DefaultAgentLlmRuntime" as Runtime
 participant "ModelChatServiceFactory" as ChatFactory
 participant "Provider ChatService" as ProviderChatService
 
-User -> Controller : HTTP /api/http-chat/stream
+User -> Controller : HTTP /api/*/stream
 Controller -> ChatService : streamChat(sessionId, message, model)
+Controller -> ScopeResolver : resolveScope(controllerType)
+ScopeResolver -> McpYml : read allowedServers/allowedToolsByServer
+ScopeResolver --> Controller : AgentScope
 ChatService -> Orchestrator : execute(AgentChatRequest)
 Orchestrator --> Controller : preface chunk("[생각의 과정 요약] ...")
 
 Orchestrator -> HistoryRedis : load(sessionId)
 Orchestrator -> CheckpointRedis : loadCheckpoint(sessionId)
 Orchestrator -> StateGraph : invoke(state)
-StateGraph -> Planner : plan(context)
+StateGraph -> Planner : plan(context + scope)
 Planner -> Runtime : complete(tool planning prompt)
-StateGraph -> Executor : execute(plan, context)
-Executor -> McpServer : callTool(tool, args)
-McpServer --> Executor : tool result
+Planner -> ToolSchemaRegistry : loadTools(server, scope)
+ToolSchemaRegistry -> McpFactory : createClient(transport, server)
+
+StateGraph -> Executor : execute(plan, context + scope)
+Executor -> ToolSchemaRegistry : loadTools(server, scope)
+Executor -> McpFactory : createClient(transport, server)
+alt transport = sse (sale-product/reservation)
+  Executor -> SseMcpServer : callTool(tool, args) via SSE
+  SseMcpServer --> Executor : tool result
+else transport = stdio (search-mcp-server)
+  Executor -> StdioMcpServer : callTool(tool, args) via stdio
+  StdioMcpServer --> Executor : tool result
+end
 
 Orchestrator -> Composer : streamCompose(context)
 Composer -> Runtime : stream(prompt, model, sessionId)
@@ -48,5 +66,16 @@ Controller --> User : SSE data
 Orchestrator -> HistoryRedis : save(updated history)
 Orchestrator -> CheckpointRedis : saveCheckpoint(COMPLETED)
 Controller --> User : SSE complete
+
+note right of ScopeResolver
+HttpChatController: unrestricted scope (all MCP)
+Product/Reservation/Search: restricted scope
+end note
+
+note right of ToolSchemaRegistry
+On-demand reconnect first, cache second.
+Unique cache key:
+transport|serverName|endpointOrCommandSignature|toolSetHash|scopeHash
+end note
 
 @enduml

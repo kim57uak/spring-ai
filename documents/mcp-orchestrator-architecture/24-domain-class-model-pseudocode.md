@@ -164,3 +164,12 @@ public class AgentOrchestrator {
     }
 }
 ```
+
+## 2026-04-10 Alignment (Doc 26)
+
+- HttpChatController: unrestricted MCP access
+- Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
+- `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
+- MCP settings split: `application.yml` -> `mcp.yml`
+- Tool schema loading: reconnect-first, cache-second, unique composite cache key
+

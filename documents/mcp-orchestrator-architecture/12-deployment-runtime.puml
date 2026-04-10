@@ -1,14 +1,19 @@
 @startuml
 !pragma layout smetana
-title 12. Deployment Runtime (Current Source)
+title 12. Deployment Runtime (Refactoring Baseline)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
 node "Spring Boot App Runtime" {
-  [HttpChatController] as Controller
+  [HttpChatController\n(unrestricted)] as HttpController
+  [ProductAgentController] as ProductController
+  [ReservationAgentController] as ReservationController
+  [SearchAgentController] as SearchController
   [GlobalExceptionHandler] as Advice
-  [HttpChatService] as ChatService
+  [HttpChatService] as HttpChatService
+  [ScopedAgentChatService] as ScopedChatService
+  [AgentScopeResolver] as ScopeResolver
   [AgentOrchestrator] as Orchestrator
   [LangGraphAgentStateGraphFactory] as GraphFactory
   [LangGraph4J CompiledGraph] as CompiledGraph
@@ -19,6 +24,9 @@ node "Spring Boot App Runtime" {
   [ModelChatServiceFactory] as ChatFactory
   [Provider ChatService] as ProviderChatService
   [McpClientFactory] as McpClientFactory
+  [ToolSchemaRegistry] as ToolSchemaRegistry
+  [SseMcpClient] as SseMcpClient
+  [StdioMcpClient] as StdioMcpClient
   [LlmCallPolicy] as LlmPolicy
   [LlmRequestRateLimiter] as LlmRateLimiter
 }
@@ -30,14 +38,25 @@ database "Redis" as Redis {
 
 cloud "LLM Provider APIs" as Providers
 
-node "MCP Server Processes" as McpServers {
-  [MCP Process 1] as Mcp1
-  [MCP Process 2] as Mcp2
+node "MCP Servers" as McpServers {
+  [SSE MCP\n10.225.18.50:8080] as SseMcp
+  [stdio MCP\nsearch-mcp-server] as StdioMcp
 }
 
-Controller --> ChatService
-Controller --> Advice
-ChatService --> Orchestrator
+artifact "mcp.yml" as McpYml
+
+HttpController --> HttpChatService
+ProductController --> ScopedChatService
+ReservationController --> ScopedChatService
+SearchController --> ScopedChatService
+HttpController --> Advice
+ProductController --> Advice
+ReservationController --> Advice
+SearchController --> Advice
+ScopedChatService --> ScopeResolver
+ScopeResolver --> McpYml
+HttpChatService --> Orchestrator
+ScopedChatService --> Orchestrator
 Orchestrator --> GraphFactory
 GraphFactory --> CompiledGraph
 Orchestrator --> PlanningService
@@ -53,8 +72,14 @@ ProviderChatService --> LlmPolicy
 LlmPolicy --> LlmRateLimiter
 ProviderChatService --> Providers
 ToolExecutionService --> McpClientFactory
-McpClientFactory --> Mcp1
-McpClientFactory --> Mcp2
+PlanningService --> ToolSchemaRegistry
+ToolExecutionService --> ToolSchemaRegistry
+ToolSchemaRegistry --> McpClientFactory
+McpYml --> McpClientFactory
+McpClientFactory --> SseMcpClient
+McpClientFactory --> StdioMcpClient
+SseMcpClient --> SseMcp
+StdioMcpClient --> StdioMcp
 
 note bottom of Redis
 State persistence

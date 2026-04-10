@@ -24,12 +24,16 @@ src/main/java/com/example/springai
 │   └── GlobalExceptionHandler
 ├── controller
 │   ├── HttpChatController
-│   └── (single entry)
+│   ├── ProductAgentController
+│   ├── ReservationAgentController
+│   └── SearchAgentController
 ├── exception
 │   ├── ChatProcessingException
 │   └── McpException + subclasses
 ├── service
 │   ├── HttpChatService
+│   ├── ScopedAgentChatService
+│   ├── AgentScopeResolver
 │   ├── chat/{ChatService, SyncChatService, StreamChatService, StructuredChatService, ChatModelType, ChatRequestContext, ModelChatServiceFactory, SpringAiCompatibleChatService, LlmCallPolicy, LlmRequestRateLimiter}
 │   ├── chat/model/{OpenAiModelChatService, GeminiModelChatService, GeminiLiteModelChatService, MistralModelChatService}
 │   ├── chat/advisor/{PromptSanitizingAdvisor, SessionHistoryAdvisor}
@@ -48,8 +52,11 @@ src/main/java/com/example/springai
 ├── mcp
 │   ├── McpClientFactory
 │   ├── ProcessManager
-│   └── StdioMcpClient
+│   ├── StdioMcpClient
+│   ├── SseMcpClient
+│   └── ToolSchemaRegistry
 └── model/agent
+    ├── AgentScope
     ├── AgentChatRequest
     ├── AgentGraphState
     ├── PlanningContext
@@ -82,6 +89,8 @@ src/main/java/com/example/springai
 ## Security and Reliability
 
 - tool/server allowlist 필수
+- `HttpChatController`: unrestricted MCP 접근
+- Product/Reservation/Search: scoped MCP 접근 (`allowedServers`, `allowedToolsByServer`)
 - 인증/권한/입력 오류는 `HUMAN_MESSAGE`로 반환
 - LLM 호출 정책은 `LlmCallPolicy` + `llm.rate-limit.*` 설정으로 운영 조정
 - raw prompt/token/internal key/full MCP payload 로그 금지
@@ -91,3 +100,11 @@ src/main/java/com/example/springai
 - 기존 `HttpChatController` API 계약은 필요 시 변경 가능하다.
 - 신규 Agent 경로 병행 운영 또는 기존 경로 대체 전환 모두 허용한다.
 - 공통 코드 추출은 직접 리팩토링을 기본으로 하고, 패턴 적용은 선택한다.
+
+## 2026-04-10 Alignment (Doc 26)
+
+- HttpChatController: unrestricted MCP access
+- Product/Reservation/Search: scoped MCP access (`allowedServers`, `allowedToolsByServer`)
+- `sale-product`, `reservation`: SSE host `http://10.225.18.50:8080`
+- MCP settings split: `application.yml` -> `mcp.yml`
+- Tool schema loading: reconnect-first, cache-second, unique composite cache key

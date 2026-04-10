@@ -656,7 +656,7 @@
         <div class="topbar-left">
             <div class="logo">
                 <div class="logo-icon">💬</div>
-                <span class="title">Spring AI Chat</span>
+                <span class="title" id="page-title">Spring AI Chat</span>
             </div>
             <div class="divider"></div>
             <select id="model-select">
@@ -691,7 +691,7 @@
             <textarea id="prompt-input" placeholder="메시지를 입력하세요 (Enter: 전송, Shift+Enter: 줄바꿈)"></textarea>
             <button class="btn btn-send" type="button" id="send-btn">Send</button>
         </div>
-        <div class="hint">Spring AI • Streaming Chat</div>
+        <div class="hint" id="page-hint">Spring AI • Streaming Chat</div>
     </div>
 
     <!-- Status Layer -->
@@ -704,6 +704,19 @@
 
 <script>
     let streaming = false;
+    const query = new URLSearchParams(window.location.search);
+    const apiBase = query.get('apiBase') || '/api/http-chat';
+    const pageTitle = query.get('title') || 'Spring AI Chat';
+    const pageHint = query.get('hint') || 'Spring AI • Streaming Chat';
+    const pageTitleElement = document.getElementById('page-title');
+    const pageHintElement = document.getElementById('page-hint');
+    if (pageTitleElement) {
+        pageTitleElement.textContent = pageTitle;
+    }
+    if (pageHintElement) {
+        pageHintElement.textContent = pageHint;
+    }
+    document.title = pageTitle;
 
     // Marked 설정
     marked.setOptions({
@@ -991,7 +1004,7 @@
             // STATUS: Thinking
             StatusLayer.update('Thinking...');
 
-            const res = await fetch('/api/http-chat/stream', {
+            const res = await fetch(`${apiBase}/stream`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: txt, model: selectedModelKey() })
@@ -1077,7 +1090,7 @@
     async function clearSessionHistory() {
         if (!confirm('세션 히스토리를 삭제하시겠습니까?')) return;
         try {
-            await fetch('/api/http-chat/clear', { method: 'POST' });
+            await fetch(`${apiBase}/clear`, { method: 'POST' });
             const c = document.getElementById('chat-container');
             c.innerHTML = `
                 <div class="message ai">

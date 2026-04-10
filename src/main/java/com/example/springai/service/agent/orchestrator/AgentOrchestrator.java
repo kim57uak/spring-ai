@@ -2,6 +2,7 @@ package com.example.springai.service.agent.orchestrator;
 
 import com.example.springai.model.agent.AgentChatRequest;
 import com.example.springai.model.agent.AgentGraphState;
+import com.example.springai.model.agent.AgentScope;
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.service.agent.compose.ResponseComposeService;
 import com.example.springai.service.agent.graph.AgentStateGraphFactory;
@@ -19,6 +20,7 @@ import reactor.util.function.Tuples;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -113,6 +115,7 @@ public class AgentOrchestrator {
     private PlanningContext invokeGraph(AgentChatRequest request) {
         List<String> history = conversationStore.load(request.sessionId());
         String checkpointId = checkpointStore.loadCheckpoint(request.sessionId()).orElse("");
+        AgentScope scope = scope(request);
 
         CompiledGraph<AgentGraphState> graph = graphFactory.getCompiledGraph();
         RunnableConfig.Builder configBuilder = RunnableConfig.builder()
@@ -128,7 +131,10 @@ public class AgentOrchestrator {
                                 AgentGraphState.MODEL, request.model() == null ? "openai" : request.model(),
                                 AgentGraphState.HISTORY, history,
                                 AgentGraphState.CHECKPOINT_ID, checkpointId,
-                                AgentGraphState.CURRENT_NODE, "HISTORY_LOADED"
+                                AgentGraphState.CURRENT_NODE, "HISTORY_LOADED",
+                                AgentGraphState.SCOPE_ALLOWED_SERVERS, List.copyOf(scope.allowedServers()),
+                                AgentGraphState.SCOPE_ALLOWED_TOOLS, toScopeMap(scope),
+                                AgentGraphState.SCOPE_UNRESTRICTED, scope.isUnrestricted()
                         ),
                         configBuilder.build()
                 )
@@ -137,9 +143,25 @@ public class AgentOrchestrator {
                         AgentGraphState.USER_MESSAGE, request.message(),
                         AgentGraphState.MODEL, request.model() == null ? "openai" : request.model(),
                         AgentGraphState.HISTORY, history,
-                        AgentGraphState.CHECKPOINT_ID, checkpointId
+                        AgentGraphState.CHECKPOINT_ID, checkpointId,
+                        AgentGraphState.SCOPE_ALLOWED_SERVERS, List.copyOf(scope.allowedServers()),
+                        AgentGraphState.SCOPE_ALLOWED_TOOLS, toScopeMap(scope),
+                        AgentGraphState.SCOPE_UNRESTRICTED, scope.isUnrestricted()
                 )));
 
         return state.toPlanningContext();
+    }
+
+    private AgentScope scope(AgentChatRequest request) {
+        if (request.scope() == null) {
+            return AgentScope.unrestricted();
+        }
+        return request.scope();
+    }
+
+    private Map<String, List<String>> toScopeMap(AgentScope scope) {
+        Map<String, List<String>> mapped = new LinkedHashMap<>();
+        scope.allowedToolsByServer().forEach((server, tools) -> mapped.put(server, List.copyOf(tools)));
+        return mapped;
     }
 }

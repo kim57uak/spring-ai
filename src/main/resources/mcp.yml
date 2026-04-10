@@ -1,0 +1,62 @@
+mcp:
+  servers:
+    sale-product:
+      transport: sse
+      host: http://10.225.18.50:8080
+      endpoint: /sse
+      env: {}
+      capabilities:
+        - action-execution
+      allow-tools:
+        - createAutoCopySaleProducts
+        - getSaleProductDetails
+    reservation:
+      transport: sse
+      host: http://10.225.18.50:8080
+      endpoint: /sse
+      env: {}
+      capabilities:
+        - action-execution
+      allow-tools:
+        - createReservation
+    search-mcp-server:
+      transport: stdio
+      command: ${MCP_NODE_PATH:/opt/homebrew/bin/node}
+      args:
+        - ${MCP_SEARCH_SERVER_PATH:/Users/dolpaks/Downloads/project/search-mcp-server/src/server.js}
+      env:
+        PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY}
+      capabilities:
+        - knowledge-retrieval
+      allow-tools: []
+    search-economy-index:
+      transport: stdio
+      command: ${MCP_ECONOMY_PYTHON_PATH:/Users/dolpaks/Downloads/project/search-economy-index/venv/bin/python}
+      args:
+        - ${MCP_ECONOMY_SERVER_PATH:/Users/dolpaks/Downloads/project/search-economy-index/run_server.py}
+      env:
+        PYTHONPATH: ${MCP_ECONOMY_PYTHONPATH:/Users/dolpaks/Downloads/project/search-economy-index/src}
+      capabilities:
+        - live-data-query
+      allow-tools: []
+
+agent:
+  scopes:
+    product:
+      allowed-servers:
+        - sale-product
+      allowed-tools-by-server:
+        sale-product:
+          - createAutoCopySaleProducts
+          - getSaleProductDetails
+    reservation:
+      allowed-servers:
+        - reservation
+      allowed-tools-by-server:
+        reservation:
+          - createReservation
+    search:
+      allowed-servers:
+        - search-mcp-server
+      allowed-tools-by-server:
+        search-mcp-server: []

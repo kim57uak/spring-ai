@@ -6,7 +6,8 @@ skinparam shadowing false
 skinparam componentStyle rectangle
 
 rectangle "Input/Prompt Security" {
-  [HttpChatController] as Controller
+  [HttpChatController\n(unrestricted)] as HttpController
+  [Product/Reservation/Search Controllers\n(scoped)] as ScopedControllers
   [PromptInjectionGuard] as PromptGuard
   [HumanMessageService] as HumanMsg
 }
@@ -14,6 +15,7 @@ rectangle "Input/Prompt Security" {
 rectangle "Tool Call Security" {
   [McpToolExecutionService] as ToolExec
   [McpProperties allowlist] as AllowList
+  [AgentScope\n(allowedServers/allowedToolsByServer)] as AgentScope
   [URL/Host Validator] as UrlValidator
 }
 
@@ -22,8 +24,10 @@ rectangle "Error Safety" {
   [ChatProcessingException] as ChatException
 }
 
-Controller --> PromptGuard : sanitize user/tool text
+HttpController --> PromptGuard : sanitize user/tool text
+ScopedControllers --> PromptGuard : sanitize user/tool text
 ToolExec --> AllowList : server/tool allow check
+ToolExec --> AgentScope : scope enforcement
 ToolExec --> UrlValidator : block localhost/internal/private host
 ToolExec --> HumanMsg : fallback message path
 ErrorHandler --> ChatException : map to safe ErrorResponse
