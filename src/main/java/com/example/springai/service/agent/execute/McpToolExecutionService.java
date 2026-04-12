@@ -22,10 +22,14 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 계획 결과를 바탕으로 MCP 도구를 실제 실행하고 결과를 표준 형태로 정규화한다.
@@ -42,6 +46,7 @@ public class McpToolExecutionService implements ToolExecutionService {
             "169.254.169.254",
             "100.100.100.200"
     );
+    private static final Pattern SALE_PRODUCT_CODE_PATTERN = Pattern.compile("\\b[A-Z]{3}[A-Z0-9]{8,}\\b");
 
     private final McpClientFactory mcpClientFactory;
     private final McpProperties mcpProperties;
@@ -100,20 +105,75 @@ public class McpToolExecutionService implements ToolExecutionService {
             Map<String, Object> params = plan.arguments() != null && !plan.arguments().isEmpty()
                     ? plan.arguments()
                     : buildParamsForTool(resolvedTool, context.getUserMessage(), availableTools);
+            params = normalizeArgumentsForKnownTools(resolvedTool, params, context.getUserMessage());
             logger.info("Executing MCP tool server={}, tool={}, paramsKeys={}",
                     serverName, resolvedTool, params.keySet());
             String payload = client.callTool(resolvedTool, params);
             String normalizedPayload = normalizePayload(payload);
+            if (isRetryableUpstreamFailure(normalizedPayload)) {
+                logger.warn("MCP tool returned retryable upstream failure. server={}, tool={}, retry=1", serverName, resolvedTool);
+                payload = client.callTool(resolvedTool, params);
+                normalizedPayload = normalizePayload(payload);
+            }
+            boolean success = !isErrorPayload(normalizedPayload);
             logger.info("MCP tool result server={}, tool={}, payloadLength={}, preview={}",
                     serverName,
                     resolvedTool,
                     normalizedPayload.length(),
                     preview(normalizedPayload, 300));
-            return new ToolExecutionResult(serverName, resolvedTool, normalizedPayload, Map.copyOf(params), true, true);
+            if (!success) {
+                logger.warn("MCP tool responded with error payload. server={}, tool={}, preview={}",
+                        serverName, resolvedTool, preview(normalizedPayload, 160));
+            }
+            return new ToolExecutionResult(serverName, resolvedTool, normalizedPayload, Map.copyOf(params), success, true);
         } catch (Exception e) {
             logger.warn("MCP execution failed for server={}, tool={}: {}", serverName, resolvedTool, e.getMessage());
             return new ToolExecutionResult(serverName, resolvedTool, "Tool call failed", Map.of(), false, true);
         }
+    }
+
+    private Map<String, Object> normalizeArgumentsForKnownTools(
+            String toolName,
+            Map<String, Object> originalParams,
+            String userMessage
+    ) {
+        Map<String, Object> params = originalParams == null ? new LinkedHashMap<>() : new LinkedHashMap<>(originalParams);
+        if (!"getSaleProductDetails".equals(toolName)) {
+            return params;
+        }
+
+        Object requestObj = params.get("request");
+        if (requestObj instanceof Map<?, ?> requestMapRaw) {
+            Map<String, Object> request = new LinkedHashMap<>();
+            requestMapRaw.forEach((k, v) -> request.put(String.valueOf(k), v));
+            String saleProdCd = stringValue(request.get("saleProdCd"));
+            if (saleProdCd.isBlank()) {
+                saleProdCd = extractSaleProductCode(userMessage);
+            }
+            if (!saleProdCd.isBlank()) {
+                request.put("saleProdCd", saleProdCd);
+            }
+            String guid = stringValue(request.get("guid"));
+            if (guid.isBlank()) {
+                request.put("guid", UUID.randomUUID().toString());
+            }
+            params.put("request", Map.copyOf(request));
+            return params;
+        }
+
+        String saleProdCd = stringValue(params.get("saleProdCd"));
+        if (saleProdCd.isBlank()) {
+            saleProdCd = extractSaleProductCode(userMessage);
+        }
+        if (saleProdCd.isBlank()) {
+            return params;
+        }
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("guid", UUID.randomUUID().toString());
+        request.put("saleProdCd", saleProdCd);
+        params.put("request", Map.copyOf(request));
+        params.remove("saleProdCd");
+        return params;
     }
 
     private String resolveToolName(
@@ -358,6 +418,35 @@ public class McpToolExecutionService implements ToolExecutionService {
         } catch (Exception ignored) {
             return payload;
         }
+    }
+
+    private boolean isRetryableUpstreamFailure(String payload) {
+        if (payload == null) {
+            return false;
+        }
+        return payload.contains("[ERROR][REQUEST_FAILED]");
+    }
+
+    private boolean isErrorPayload(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return true;
+        }
+        String normalized = payload.trim();
+        return normalized.startsWith("[ERROR]")
+                || normalized.contains("Tool call failed")
+                || normalized.contains("request\" is null")
+                || normalized.contains("Retries exhausted");
+    }
+
+    private String extractSaleProductCode(String userMessage) {
+        if (userMessage == null || userMessage.isBlank()) {
+            return "";
+        }
+        Matcher matcher = SALE_PRODUCT_CODE_PATTERN.matcher(userMessage.toUpperCase());
+        if (matcher.find()) {
+            return matcher.group();
+        }
+        return "";
     }
 
     private String preview(String value, int maxLength) {

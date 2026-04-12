@@ -32,7 +32,6 @@ import java.util.concurrent.ExecutionException;
 public class StdioMcpClient implements McpClient {
 
     private static final Logger logger = LoggerFactory.getLogger(StdioMcpClient.class);
-    private static final long DEFAULT_TIMEOUT_SECONDS = 30;
     private static final long PROCESS_SHUTDOWN_TIMEOUT_SECONDS = 5;
 
     private final Process process;
@@ -44,14 +43,16 @@ public class StdioMcpClient implements McpClient {
     private final AtomicLong requestId = new AtomicLong(1);
     private final AtomicReference<Map<String, Object>> toolsSchema = new AtomicReference<>(Map.of());
     private final Map<Long, CompletableFuture<Map<String, Object>>> pendingRequests = new ConcurrentHashMap<>();
+    private final long responseTimeoutSeconds;
     private volatile boolean closed;
 
     /**
      * 프로세스 IO 스트림을 준비하고 수신 펌프를 시작한 뒤 initialize handshake를 수행한다.
      */
-    public StdioMcpClient(Process process, ObjectMapper objectMapper) throws IOException {
+    public StdioMcpClient(Process process, ObjectMapper objectMapper, long timeoutMs) throws IOException {
         this.process = process;
         this.objectMapper = objectMapper;
+        this.responseTimeoutSeconds = Math.max(1L, timeoutMs / 1000L);
         this.stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
         this.stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8));
         this.stdinWriter = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
@@ -231,9 +232,9 @@ public class StdioMcpClient implements McpClient {
      */
     private Map<String, Object> waitForResponse(CompletableFuture<Map<String, Object>> responseFuture) throws IOException {
         try {
-            return responseFuture.get(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return responseFuture.get(responseTimeoutSeconds, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
-            throw new IOException("MCP response timeout after " + DEFAULT_TIMEOUT_SECONDS + " seconds", e);
+            throw new IOException("MCP response timeout after " + responseTimeoutSeconds + " seconds", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while waiting for MCP response", e);

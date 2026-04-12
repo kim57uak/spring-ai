@@ -127,17 +127,26 @@ public class InMemoryA2ATaskStore implements A2ATaskStore {
         ));
     }
 
+    /**
+     * 원자적 상태 전이 업데이트(scope 한정).
+     * <p>
+     * get->put 방식의 레이스를 완화하기 위해 compute를 사용하고,
+     * scope 불일치 항목은 그대로 유지해 잘못된 상태 변이를 방지한다.
+     */
     private Optional<A2aTaskSnapshot> update(
             String taskId,
             AgentScopeName scopeName,
             java.util.function.Function<A2aTaskSnapshot, A2aTaskSnapshot> updater
     ) {
-        A2aTaskSnapshot current = tasks.get(taskId);
-        if (current == null || current.scopeName() != scopeName) {
-            return Optional.empty();
-        }
-        A2aTaskSnapshot next = updater.apply(current);
-        tasks.put(taskId, next);
-        return Optional.of(next);
+        java.util.concurrent.atomic.AtomicReference<A2aTaskSnapshot> updatedRef = new java.util.concurrent.atomic.AtomicReference<>();
+        tasks.compute(taskId, (key, current) -> {
+            if (current == null || current.scopeName() != scopeName) {
+                return current;
+            }
+            A2aTaskSnapshot next = updater.apply(current);
+            updatedRef.set(next);
+            return next;
+        });
+        return Optional.ofNullable(updatedRef.get());
     }
 }

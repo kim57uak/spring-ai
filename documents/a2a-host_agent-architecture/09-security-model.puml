@@ -1,12 +1,12 @@
 @startuml
 !pragma layout smetana
-title 09. Host Agent Security Model
+title 09. Supervisor Agent Security Model
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
 rectangle "Input Guard" {
-  [HostA2AController] as HostA2AController
+  [SupervisorA2AController] as SupervisorA2AController
   [PromptInjectionGuard] as PromptGuard
 }
 
@@ -23,7 +23,7 @@ rectangle "Error Safety" {
   [GlobalExceptionHandler] as ErrorHandler
 }
 
-HostA2AController --> PromptGuard : sanitize user text
+SupervisorA2AController --> PromptGuard : sanitize user text
 Invoker --> Registry : resolve target
 Registry --> Allowlist : validate agent key/endpoint
 Invoker --> TimeoutRetry : bounded call
@@ -32,7 +32,7 @@ Invoker --> PayloadGuard : truncate/validate payload
 ErrorHandler --> Invoker : sanitize exception mapping
 
 note right of Allowlist
-Host agent can call only
+Supervisor agent can call only
 - product A2A endpoint
 - reservation A2A endpoint
 - search A2A endpoint

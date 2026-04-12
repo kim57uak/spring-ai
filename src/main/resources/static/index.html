@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spring AI Client Hub</title>
+  <title>Spring AI Experience Hub</title>
   <style>
     :root {
-      --bg-0: #f4f7fb;
-      --bg-1: #dfe8f3;
-      --text: #142233;
-      --muted: #4a5b70;
-      --card: #ffffffd9;
-      --line: #d6e1ec;
-      --brand: #0f5fa8;
-      --brand-2: #2d7cc3;
-      --radius: 20px;
-      --shadow: 0 20px 50px rgba(20, 34, 51, 0.12);
+      --bg-0: #0a1322;
+      --bg-1: #10253e;
+      --ink: #e2e8f0;
+      --muted: #94a3b8;
+      --card: rgba(248, 250, 252, 0.95);
+      --line: rgba(148, 163, 184, 0.32);
+      --text-dark: #0f172a;
+      --accent-a: #0284c7;
+      --accent-b: #22c55e;
+      --accent-c: #f59e0b;
     }
 
     * { box-sizing: border-box; }
@@ -23,155 +23,237 @@
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "SUIT", "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-      color: var(--text);
+      font-family: "Space Grotesk", "Pretendard", "Noto Sans KR", sans-serif;
+      color: var(--ink);
       background:
-        radial-gradient(900px 380px at 88% -8%, #9ac2e7 0%, transparent 55%),
-        radial-gradient(800px 320px at -10% 110%, #bfd5e9 0%, transparent 50%),
-        linear-gradient(160deg, var(--bg-0), var(--bg-1));
+        radial-gradient(900px 500px at 86% -8%, #1f4a78 0%, transparent 62%),
+        radial-gradient(700px 380px at -12% 105%, #14575f 0%, transparent 55%),
+        linear-gradient(155deg, var(--bg-0), var(--bg-1));
+      padding: 20px;
       display: grid;
       place-items: center;
-      padding: 28px;
+      overflow-x: hidden;
+    }
+
+    .orb {
+      position: fixed;
+      border-radius: 999px;
+      filter: blur(38px);
+      opacity: .28;
+      pointer-events: none;
+      animation: float 9s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb.a { width: 220px; height: 220px; background: #16a34a; top: 8%; left: 7%; }
+    .orb.b { width: 300px; height: 300px; background: #0ea5e9; bottom: 8%; right: 2%; animation-delay: 1.6s; }
+    .orb.c { width: 170px; height: 170px; background: #f59e0b; top: 62%; left: 48%; animation-delay: 3s; }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0) translateX(0); }
+      50% { transform: translateY(-18px) translateX(8px); }
     }
 
     .shell {
-      width: min(1040px, 100%);
-      background: var(--card);
+      position: relative;
+      z-index: 1;
+      width: min(1140px, 100%);
       border: 1px solid var(--line);
-      border-radius: 28px;
-      box-shadow: var(--shadow);
+      border-radius: 30px;
       overflow: hidden;
-      backdrop-filter: blur(8px);
+      background: rgba(15, 23, 42, 0.32);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 30px 60px rgba(2, 8, 23, 0.5);
     }
 
     .hero {
-      padding: 36px 32px 24px;
-      background: linear-gradient(135deg, #edf4fb, #f8fbff);
+      padding: 42px 34px 24px;
       border-bottom: 1px solid var(--line);
     }
 
     .kicker {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
       font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: var(--brand);
+      font-weight: 800;
+      letter-spacing: .1em;
       text-transform: uppercase;
-      padding: 6px 10px;
-      background: #d9eafb;
+      background: rgba(148, 163, 184, .14);
+      border: 1px solid rgba(148, 163, 184, .32);
       border-radius: 999px;
+      padding: 6px 12px;
     }
 
-    h1 {
-      margin: 12px 0 8px;
-      font-size: clamp(26px, 4vw, 38px);
-      line-height: 1.15;
-      letter-spacing: -0.02em;
+    .hero h1 {
+      margin: 14px 0 10px;
+      font-size: clamp(30px, 5vw, 56px);
+      letter-spacing: -.03em;
+      line-height: 1.02;
+      max-width: 760px;
     }
 
-    .desc {
+    .hero p {
       margin: 0;
+      font-size: 16px;
       color: var(--muted);
-      font-size: 15px;
+      max-width: 760px;
+      line-height: 1.6;
     }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
-      padding: 22px;
+      padding: 18px;
     }
 
     .card {
       text-decoration: none;
-      color: inherit;
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 20px;
+      color: var(--text-dark);
+      border-radius: 20px;
+      border: 1px solid #d6e2ef;
+      background: var(--card);
+      padding: 18px;
+      min-height: 170px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transform: translateY(6px);
+      opacity: 0;
+      animation: reveal .5s ease forwards;
       transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
     }
 
-    .card:hover {
-      transform: translateY(-2px);
-      border-color: #aac8e4;
-      box-shadow: 0 12px 28px rgba(15, 95, 168, 0.14);
+    .card:nth-child(2) { animation-delay: .06s; }
+    .card:nth-child(3) { animation-delay: .12s; }
+    .card:nth-child(4) { animation-delay: .18s; }
+    .card:nth-child(5) { animation-delay: .24s; }
+    .card:nth-child(6) { animation-delay: .30s; }
+    .card:nth-child(7) { animation-delay: .36s; }
+
+    @keyframes reveal {
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    .title {
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: #9cc4e7;
+      box-shadow: 0 14px 24px rgba(15, 23, 42, .18);
+    }
+
+    .card h2 {
       margin: 0 0 8px;
       font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
+      letter-spacing: -.01em;
     }
 
-    .meta {
+    .card p {
       margin: 0;
-      color: var(--muted);
+      color: #475569;
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.45;
     }
 
-    .pill {
-      display: inline-block;
-      margin-top: 12px;
+    .badge {
+      margin-top: 16px;
+      display: inline-flex;
+      align-items: center;
       font-size: 12px;
-      font-weight: 600;
-      color: var(--brand);
-      background: #e8f2fb;
-      border: 1px solid #cbe1f6;
+      font-weight: 700;
       border-radius: 999px;
-      padding: 5px 10px;
+      padding: 6px 10px;
+      border: 1px solid;
+      width: fit-content;
     }
 
-    @media (max-width: 760px) {
-      body { padding: 14px; }
-      .hero { padding: 26px 20px 18px; }
+    .b-a { color: #075985; background: #e0f2fe; border-color: #b3e2fb; }
+    .b-b { color: #166534; background: #ecfdf5; border-color: #bbf7d0; }
+    .b-c { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      body { padding: 12px; }
+      .hero { padding: 28px 20px 18px; }
+      .hero p { font-size: 14px; }
       .grid {
         grid-template-columns: 1fr;
-        padding: 16px;
+        padding: 14px;
       }
-      .card { padding: 16px; }
+      .card { min-height: 150px; }
     }
   </style>
 </head>
 <body>
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+  <div class="orb c"></div>
+
   <main class="shell">
     <section class="hero">
-      <span class="kicker">Spring AI</span>
-      <h1>Client Hub</h1>
-      <p class="desc">원하는 에이전트 모드로 바로 이동해 테스트할 수 있습니다.</p>
+      <span class="kicker">Spring AI Multi Agent</span>
+      <h1>Experience Hub For Agents And A2A</h1>
+      <p>하위 에이전트와 Supervisor A2A를 같은 허브에서 빠르게 전환해 API 동작, 스트리밍 이벤트, 라우팅 응답을 점검할 수 있습니다.</p>
     </section>
 
     <section class="grid">
-      <a class="card" href="/design_v7.html">
-        <h2 class="title">Unified Chat</h2>
-        <p class="meta">통합 UI에서 여러 모드를 한 화면에서 확인합니다.</p>
-        <span class="pill">/design_v7.html</span>
+      <a class="card" href="/a2a-supervisor-chat.html" target="_blank" rel="noopener noreferrer">
+        <div>
+          <h2>A2A Supervisor Chat</h2>
+          <p>다른 에이전트와 동일한 채팅 UI로 Supervisor를 스트리밍 방식으로 대화합니다.</p>
+        </div>
+        <span class="badge b-b">/a2a-supervisor-chat.html</span>
       </a>
 
-      <a class="card" href="/chat.html">
-        <h2 class="title">HTTP Chat</h2>
-        <p class="meta">기본 채팅 API 동작을 단순하게 점검합니다.</p>
-        <span class="pill">/chat.html</span>
+      <a class="card" href="/a2asupervisor.html" target="_blank" rel="noopener noreferrer">
+        <div>
+          <h2>A2A Supervisor Console</h2>
+          <p>JSON-RPC `message/send`, `message/stream`, `tasks/*`를 `/a2a/supervisor`로 직접 호출합니다.</p>
+        </div>
+        <span class="badge b-a">/a2asupervisor.html</span>
       </a>
 
-      <a class="card" href="/product-agent-chat.html">
-        <h2 class="title">Product Agent</h2>
-        <p class="meta">상품 조회/생성 관련 시나리오를 테스트합니다.</p>
-        <span class="pill">/product-agent-chat.html</span>
+      <a class="card" href="/design_v7.html" target="_blank" rel="noopener noreferrer">
+        <div>
+          <h2>Unified Chat</h2>
+          <p>여러 모드의 채팅 결과를 통합 화면에서 비교하면서 UX 흐름을 확인합니다.</p>
+        </div>
+        <span class="badge b-b">/design_v7.html</span>
       </a>
 
-      <a class="card" href="/reservation-agent-chat.html">
-        <h2 class="title">Reservation Agent</h2>
-        <p class="meta">예약 생성/조회 플로우를 확인합니다.</p>
-        <span class="pill">/reservation-agent-chat.html</span>
+      <a class="card" href="/chat.html" target="_blank" rel="noopener noreferrer">
+        <div>
+          <h2>HTTP Chat</h2>
+          <p>기본 HTTP 챗 API를 단순 경로로 빠르게 검증합니다.</p>
+        </div>
+        <span class="badge b-c">/chat.html</span>
       </a>
 
-      <a class="card" href="/search-agent-chat.html">
-        <h2 class="title">Search Agent</h2>
-        <p class="meta">검색 기반 응답과 도구 연결을 점검합니다.</p>
-        <span class="pill">/search-agent-chat.html</span>
+      <a class="card" href="/product-agent-chat.html" target="_blank" rel="noopener noreferrer">
+        <div>
+          <h2>Product Agent</h2>
+          <p>상품 질의/응답 경로와 도구 연결 결과를 확인합니다.</p>
+        </div>
+        <span class="badge b-a">/product-agent-chat.html</span>
+      </a>
+
+      <a class="card" href="/reservation-agent-chat.html" target="_blank" rel="noopener noreferrer">
+        <div>
+          <h2>Reservation Agent</h2>
+          <p>예약 생성·조회 시나리오와 응답 안정성을 테스트합니다.</p>
+        </div>
+        <span class="badge b-b">/reservation-agent-chat.html</span>
+      </a>
+
+      <a class="card" href="/search-agent-chat.html" target="_blank" rel="noopener noreferrer">
+        <div>
+          <h2>Search Agent</h2>
+          <p>검색 기반 답변 품질 및 멀티툴 호출 흐름을 점검합니다.</p>
+        </div>
+        <span class="badge b-c">/search-agent-chat.html</span>
       </a>
     </section>
   </main>

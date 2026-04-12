@@ -49,7 +49,7 @@ public class McpClientFactory {
                 return new SseMcpClient(config, objectMapper);
             }
             Process process = processManager.getOrCreateProcess(serverName);
-            return new StdioMcpClient(process, objectMapper);
+            return new StdioMcpClient(process, objectMapper, Math.max(1_000, config.getTimeoutMs()));
         } catch (RuntimeException e) {
             throw new McpClientCreationException(serverName, e.getMessage(), e);
         } catch (IOException e) {

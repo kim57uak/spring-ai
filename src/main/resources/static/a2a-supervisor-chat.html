@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A2A Supervisor Chat</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <style>
+    :root {
+      --bg-gradient-start: #0a0e27;
+      --bg-gradient-end: #1a1f3a;
+      --surface-glass: rgba(255, 255, 255, 0.03);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --accent-blue: #60a5fa;
+      --accent-purple: #a78bfa;
+      --accent-gradient: linear-gradient(135deg, #60a5fa, #a78bfa);
+      --success: #34d399;
+      --error: #f87171;
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
+      color: var(--text-primary);
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(96, 165, 250, 0.15), transparent),
+        radial-gradient(ellipse 60% 50% at 50% 120%, rgba(167, 139, 250, 0.15), transparent),
+        linear-gradient(180deg, var(--bg-gradient-start), var(--bg-gradient-end));
+      background-attachment: fixed;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+    }
+
+    .top {
+      background: var(--surface-glass);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--accent-gradient);
+      box-shadow: var(--shadow-md);
+      font-size: 20px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-weight: 400;
+    }
+
+    .tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    select, button, input, textarea {
+      font: inherit;
+    }
+
+    #model {
+      border: 1px solid var(--border-subtle);
+      background: var(--surface-glass);
+      backdrop-filter: blur(10px);
+      color: var(--text-primary);
+      border-radius: 10px;
+      padding: 10px 14px;
+      min-width: 180px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #model:hover {
+      border-color: var(--accent-blue);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .btn {
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      color: var(--text-primary);
+      background: var(--surface-glass);
+      backdrop-filter: blur(10px);
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--accent-blue);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn.main {
+      background: var(--accent-gradient);
+      border: none;
+      color: white;
+      font-weight: 600;
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn.main:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+    }
+
+    .chat::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .chat::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .chat::-webkit-scrollbar-thumb {
+      background: var(--border-subtle);
+      border-radius: 4px;
+    }
+
+    .chat::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .msg {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .msg.user {
+      flex-direction: row-reverse;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      background: var(--surface-glass);
+      backdrop-filter: blur(10px);
+      font-size: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .msg.user .avatar {
+      background: var(--accent-gradient);
+      border: none;
+    }
+
+    .bubble {
+      max-width: 100%;
+      border-radius: 16px;
+      padding: 16px 20px;
+      background: var(--surface-glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-subtle);
+      line-height: 1.7;
+      font-size: 15px;
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .user .bubble {
+      background: linear-gradient(135deg, rgba(96, 165, 250, 0.15), rgba(167, 139, 250, 0.15));
+      border: 1px solid rgba(96, 165, 250, 0.2);
+    }
+
+    .bubble p {
+      margin: 0.5em 0;
+    }
+
+    .bubble pre {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      overflow-x: auto;
+      padding: 16px;
+      margin: 12px 0;
+    }
+
+    .bubble code {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 0.9em;
+      font-family: "SF Mono", "Consolas", "Monaco", monospace;
+    }
+
+    .bubble pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    .supervisor-panel {
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(96, 165, 250, 0.2);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.5), rgba(30, 41, 59, 0.4));
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .supervisor-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .supervisor-title {
+      font-size: 11px;
+      color: var(--accent-blue);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .supervisor-title::before {
+      content: '⚙️';
+      font-size: 14px;
+    }
+
+    .supervisor-toggle {
+      border: none;
+      background: rgba(96, 165, 250, 0.1);
+      color: var(--accent-blue);
+      font-size: 10px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: all 0.2s;
+      font-weight: 600;
+    }
+
+    .supervisor-toggle:hover {
+      background: rgba(96, 165, 250, 0.2);
+    }
+
+    .supervisor-progress-bar {
+      height: 4px;
+      background: rgba(96, 165, 250, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+
+    .supervisor-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+      border-radius: 2px;
+      transition: width 0.3s ease, background 0.3s ease;
+      box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+    }
+
+    .supervisor-progress-fill.completed {
+      background: linear-gradient(90deg, var(--success), #10b981);
+      box-shadow: 0 0 12px rgba(52, 211, 153, 0.8);
+    }
+
+    .supervisor-current-stage {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      background: rgba(96, 165, 250, 0.1);
+      border-radius: 8px;
+      border-left: 3px solid var(--accent-blue);
+    }
+
+    .supervisor-stream {
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 11px;
+      line-height: 1.6;
+      color: rgba(203, 213, 225, 0.85);
+      white-space: pre-wrap;
+      font-family: "SF Mono", "Consolas", "Monaco", monospace;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-right: -14px;
+      padding-right: 14px;
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.24) transparent;
+    }
+
+    .supervisor-stream::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .supervisor-stream::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .supervisor-stream::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.24);
+      border-radius: 999px;
+    }
+
+    .supervisor-stream:hover::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.38);
+    }
+
+    .supervisor-panel.collapsed .supervisor-stream {
+      display: none;
+    }
+
+    .supervisor-panel.collapsed .supervisor-progress-bar,
+    .supervisor-panel.collapsed .supervisor-current-stage {
+      display: block;
+    }
+
+    .assistant-answer:empty {
+      min-height: 8px;
+    }
+
+    /* Math Equations */
+    .katex-display {
+      margin: 16px 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 8px 0;
+    }
+
+    .katex {
+      font-size: 1.1em;
+      color: var(--text-primary) !important;
+    }
+
+    .katex .base {
+      color: var(--text-primary);
+    }
+
+    /* Inline math */
+    .bubble p .katex {
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    /* Block math */
+    .bubble .katex-display > .katex {
+      display: block;
+      text-align: center;
+    }
+
+    /* Markdown Lists */
+    .bubble ul, .bubble ol {
+      margin: 12px 0;
+      padding-left: 24px;
+    }
+
+    .bubble ul {
+      list-style-type: disc;
+    }
+
+    .bubble ol {
+      list-style-type: decimal;
+    }
+
+    .bubble li {
+      margin: 6px 0;
+      line-height: 1.7;
+    }
+
+    /* Markdown Headings */
+    .bubble h1, .bubble h2, .bubble h3,
+    .bubble h4, .bubble h5, .bubble h6 {
+      margin: 16px 0 8px 0;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .bubble h1 { font-size: 1.5em; }
+    .bubble h2 { font-size: 1.3em; }
+    .bubble h3 { font-size: 1.1em; }
+
+    /* Markdown Blockquote */
+    .bubble blockquote {
+      margin: 12px 0;
+      padding: 8px 16px;
+      border-left: 3px solid var(--border-subtle);
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--text-secondary);
+    }
+
+    /* Markdown Tables */
+    .bubble table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+    }
+
+    .bubble table th,
+    .bubble table td {
+      border: 1px solid var(--border-subtle);
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    .bubble table th {
+      background: rgba(0, 0, 0, 0.3);
+      font-weight: 600;
+    }
+
+    .hint {
+      background: var(--surface-glass);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border-subtle);
+      padding: 12px 24px;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Status Progress Bar */
+    #status-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 100%;
+      background: linear-gradient(90deg,
+        rgba(96, 165, 250, 0.2),
+        rgba(167, 139, 250, 0.2));
+      transition: width 0.3s ease;
+      z-index: 0;
+      opacity: 0;
+    }
+
+    #status-progress.active {
+      opacity: 1;
+      animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+      0% {
+        background-position: -200px 0;
+      }
+      100% {
+        background-position: 200px 0;
+      }
+    }
+
+    #status-progress.active::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1),
+        transparent);
+      animation: progressShine 1.5s infinite;
+    }
+
+    @keyframes progressShine {
+      0% {
+        left: -100%;
+      }
+      100% {
+        left: 200%;
+      }
+    }
+
+    #status {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .status-indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+
+    .status-indicator.active {
+      opacity: 1;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .status-indicator.streaming {
+      background: var(--accent-blue);
+      box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+    }
+
+    .status-indicator.complete {
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+      animation: none;
+    }
+
+    .status-indicator.error {
+      background: var(--error);
+      box-shadow: 0 0 8px rgba(248, 113, 113, 0.6);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.3);
+        opacity: 0.7;
+      }
+    }
+
+    .input {
+      background: var(--surface-glass);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border-subtle);
+      padding: 20px 24px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    #prompt {
+      flex: 1;
+      min-height: 56px;
+      max-height: 200px;
+      resize: vertical;
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 14px 18px;
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 15px;
+      line-height: 1.5;
+      transition: all 0.2s;
+    }
+
+    #prompt:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+    }
+
+    #prompt::placeholder {
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 768px) {
+      .top {
+        padding: 12px 16px;
+      }
+
+      .chat {
+        padding: 20px 16px;
+        gap: 16px;
+      }
+
+      .bubble {
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+
+      .input {
+        padding: 16px;
+      }
+
+      .input-row {
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .btn {
+        width: 100%;
+      }
+
+      #model {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div class="title">
+        <div class="logo">🧭</div>
+        <div>
+          <h1>A2A Supervisor Chat</h1>
+          <div class="subtitle">Independent UI • /a2a/supervisor/stream • JSON-RPC over SSE</div>
+        </div>
+      </div>
+      <div class="tools">
+        <select id="model">
+          <option value="openai">OpenAI (default)</option>
+          <option value="gpt-4o-mini">GPT-4o Mini</option>
+          <option value="gemini">Gemini</option>
+          <option value="gemini-lite">Gemini Lite</option>
+          <option value="mistral">Mistral</option>
+          <option value="mistral-large-latest">Mistral Large Latest</option>
+        </select>
+        <button class="btn" id="stopBtn">Stop</button>
+        <button class="btn" id="clearBtn">Clear</button>
+        <a class="btn" href="/index.html">Hub</a>
+      </div>
+    </header>
+
+    <section id="chat" class="chat"></section>
+    <div class="hint">
+      <div id="status-progress"></div>
+      <div id="status">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span id="status-text">Ready</span>
+      </div>
+    </div>
+
+    <section class="input">
+      <div class="input-row">
+        <textarea id="prompt" placeholder="Supervisor에게 보낼 메시지를 입력하세요. (Enter 전송 / Shift+Enter 줄바꿈)"></textarea>
+        <button class="btn main" id="sendBtn">Send</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    marked.setOptions({
+      gfm: true,
+      breaks: true,
+      pedantic: false,
+      sanitize: false,
+      smartLists: true,
+      smartypants: false
+    });
+    mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+    const endpoint = '/a2a/supervisor/stream';
+    const chatEl = document.getElementById('chat');
+    const statusTextEl = document.getElementById('status-text');
+    const statusIndicatorEl = document.getElementById('status-indicator');
+    const statusProgressEl = document.getElementById('status-progress');
+    const promptEl = document.getElementById('prompt');
+    const modelEl = document.getElementById('model');
+    const sendBtn = document.getElementById('sendBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    let streaming = false;
+    let abortController = null;
+
+    function setStatus(text, type = 'ready') {
+      statusTextEl.textContent = text;
+      statusIndicatorEl.className = 'status-indicator';
+      statusProgressEl.className = '';
+      statusProgressEl.style.width = '0%';
+
+      if (type === 'streaming') {
+        statusIndicatorEl.classList.add('active', 'streaming');
+        statusProgressEl.classList.add('active');
+        statusProgressEl.style.width = '100%';
+      } else if (type === 'complete') {
+        statusIndicatorEl.classList.add('active', 'complete');
+        statusProgressEl.style.width = '100%';
+        setTimeout(() => {
+          statusIndicatorEl.classList.remove('active', 'complete');
+          statusProgressEl.style.width = '0%';
+        }, 2000);
+      } else if (type === 'error') {
+        statusIndicatorEl.classList.add('active', 'error');
+        statusProgressEl.style.width = '100%';
+        setTimeout(() => {
+          statusIndicatorEl.classList.remove('active', 'error');
+          statusProgressEl.style.width = '0%';
+        }, 3000);
+      }
+    }
+
+    function addMessage(role, content) {
+      const msg = document.createElement('div');
+      msg.className = `msg ${role}`;
+      msg.innerHTML = `
+        <div class="avatar">${role === 'user' ? '👤' : '🤖'}</div>
+        <div class="bubble">${content}</div>
+      `;
+      chatEl.appendChild(msg);
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return msg.querySelector('.bubble');
+    }
+
+    function createAiResponseShell() {
+      const bubble = addMessage('ai', '');
+      bubble.innerHTML = `
+        <div class="supervisor-panel" style="display:none;">
+          <div class="supervisor-head">
+            <span class="supervisor-title">Supervisor Progress</span>
+            <button class="supervisor-toggle" type="button">접기</button>
+          </div>
+          <div class="supervisor-progress-bar">
+            <div class="supervisor-progress-fill" style="width: 0%"></div>
+          </div>
+          <div class="supervisor-current-stage"></div>
+          <div class="supervisor-stream"></div>
+        </div>
+        <div class="assistant-answer"></div>
+      `;
+
+      const panel = bubble.querySelector('.supervisor-panel');
+      const stream = bubble.querySelector('.supervisor-stream');
+      const toggle = bubble.querySelector('.supervisor-toggle');
+      const answer = bubble.querySelector('.assistant-answer');
+      const progressFill = bubble.querySelector('.supervisor-progress-fill');
+      const currentStage = bubble.querySelector('.supervisor-current-stage');
+
+      toggle.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+        toggle.textContent = panel.classList.contains('collapsed') ? '펼치기' : '접기';
+      });
+
+      return { bubble, panel, stream, toggle, answer, progressFill, currentStage };
+    }
+
+    function renderAssistantMarkdown(target, text) {
+      // 수식을 임시 플레이스홀더로 보호
+      let protectedText = text;
+      const mathBlocks = [];
+      const mathInlines = [];
+
+      protectedText = protectedText.replace(/\\\[([\s\S]*?)\\\]/g, (match, content) => {
+        mathBlocks.push(content);
+        return `MATHBLOCK${mathBlocks.length - 1}MATHBLOCK`;
+      });
+      protectedText = protectedText.replace(/\$\$([\s\S]*?)\$\$/g, (match, content) => {
+        mathBlocks.push(content);
+        return `MATHBLOCK${mathBlocks.length - 1}MATHBLOCK`;
+      });
+
+      protectedText = protectedText.replace(/\\\((.*?)\\\)/g, (match, content) => {
+        mathInlines.push(content);
+        return `MATHINLINE${mathInlines.length - 1}MATHINLINE`;
+      });
+      protectedText = protectedText.replace(/\$([^\$\n]+?)\$/g, (match, content) => {
+        mathInlines.push(content);
+        return `MATHINLINE${mathInlines.length - 1}MATHINLINE`;
+      });
+
+      let parsedHtml = marked.parse(protectedText);
+
+      parsedHtml = parsedHtml.replace(/MATHBLOCK(\d+)MATHBLOCK/g, (match, index) => {
+        return `\\[${mathBlocks[index]}\\]`;
+      });
+      parsedHtml = parsedHtml.replace(/MATHINLINE(\d+)MATHINLINE/g, (match, index) => {
+        return `\\(${mathInlines[index]}\\)`;
+      });
+
+      target.innerHTML = parsedHtml;
+    }
+
+    function parseSseFrames(buffer) {
+      const normalized = buffer.replace(/\r\n/g, '\n');
+      const chunks = normalized.split('\n\n');
+      return {
+        frames: chunks.slice(0, -1),
+        rest: chunks[chunks.length - 1] || ''
+      };
+    }
+
+    function parseFrame(frame) {
+      const lines = frame.split('\n');
+      let event = 'message';
+      const dataLines = [];
+      for (const line of lines) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+      }
+      return { event, data: dataLines.join('\n') };
+    }
+
+    function normalizeNestedSse(event, data) {
+      if (event !== 'message' || !data) {
+        return { event, data };
+      }
+
+      if (data.startsWith('event:') || data.includes('\ndata:')) {
+        const nested = parseFrame(data);
+        if (nested.data) {
+          return nested;
+        }
+      }
+
+      // 서버 구현에 따라 plain message/data chunk만 내려오는 경우도 허용
+      if (data === '[DONE]') {
+        return { event: 'done', data: '{"reason":"completed"}' };
+      }
+      return { event: 'chunk', data };
+    }
+
+    // KaTeX 렌더링 함수
+    function renderMath(element) {
+      if (!element || !window.renderMathInElement) {
+        console.warn('KaTeX not available');
+        return;
+      }
+      try {
+        renderMathInElement(element, {
+          delimiters: [
+            {left: "$$", right: "$$", display: true},
+            {left: "\\[", right: "\\]", display: true},
+            {left: "$", right: "$", display: false},
+            {left: "\\(", right: "\\)", display: false}
+          ],
+          throwOnError: false
+        });
+        console.log('KaTeX rendered');
+      } catch (e) {
+        console.error('KaTeX render error:', e);
+      }
+    }
+
+    // Mermaid 렌더링 함수
+    async function renderMermaid(element) {
+      if (!element) return;
+      const mermaidBlocks = element.querySelectorAll('code.language-mermaid');
+      for (let i = 0; i < mermaidBlocks.length; i++) {
+        const code = mermaidBlocks[i].textContent;
+        try {
+          const id = `m-${Date.now()}-${i}`;
+          const { svg } = await mermaid.render(id, code);
+          const wrap = document.createElement('div');
+          wrap.className = 'mermaid-diagram';
+          wrap.innerHTML = svg;
+          mermaidBlocks[i].parentElement.replaceWith(wrap);
+          console.log('Mermaid rendered');
+        } catch (e) {
+          console.warn('Mermaid render error:', e);
+        }
+      }
+    }
+
+    async function enhanceBubble(bubble) {
+      try {
+        renderMath(bubble);
+      } catch (e) {
+        console.error('Math render error:', e);
+      }
+
+      try {
+        await renderMermaid(bubble);
+      } catch (e) {
+        console.error('Mermaid render error:', e);
+      }
+    }
+
+    /**
+     * Supervisor 진행 상황 파싱 함수
+     * 포맷: [supervisor] [stage] [progress%] message {metadata}
+     */
+    function parseSupervisorProgress(line) {
+      // [supervisor] [stage] [progress%] message {key=value, ...}
+      const pattern = /^\[supervisor\]\s+\[([^\]]+)\]\s+\[(\d+)%\]\s+(.+?)(?:\s+\{(.+)\})?$/;
+      const match = line.match(pattern);
+
+      if (!match) {
+        return null;
+      }
+
+      const [, stage, progress, message, metadataStr] = match;
+      const metadata = {};
+
+      if (metadataStr) {
+        // "key=value, key2=value2" 파싱
+        metadataStr.split(',').forEach(pair => {
+          const [key, value] = pair.trim().split('=');
+          if (key && value) {
+            metadata[key.trim()] = value.trim();
+          }
+        });
+      }
+
+      return {
+        stage,
+        progress: parseInt(progress, 10),
+        message,
+        metadata
+      };
+    }
+
+    /**
+     * 단계명을 한글 레이블로 변환
+     */
+    function getStageLabel(stage) {
+      const labels = {
+        initializing: '🚀 초기화',
+        analyzing: '🔍 분석',
+        planning: '📋 계획',
+        routing: '🎯 라우팅',
+        invoking: '⚡ 실행',
+        composing: '✨ 합성',
+        completed: '✅ 완료',
+        error: '❌ 오류'
+      };
+      return labels[stage] || stage;
+    }
+
+    async function send() {
+      if (streaming) return;
+      const text = promptEl.value.trim();
+      if (!text) return;
+
+      addMessage('user', text.replace(/\n/g, '<br>'));
+      promptEl.value = '';
+      streaming = true;
+      abortController = new AbortController();
+      setStatus('Sending...', 'streaming');
+
+      const ai = createAiResponseShell();
+      let acc = '';
+      const supervisorLogs = [];
+      let lineBuffer = '';
+      let answerStarted = false;
+      let lastProgress = 0;
+
+      try {
+        const requestId = `ui-${Date.now()}`;
+        const payload = {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'message/stream',
+          params: {
+            messageText: text,
+            model: modelEl.value || 'openai'
+          }
+        };
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          body: JSON.stringify(payload),
+          signal: abortController.signal
+        });
+
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`HTTP ${res.status}: ${err}`);
+        }
+
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (!contentType.includes('text/event-stream')) {
+          const body = await res.text();
+          throw new Error(`Non-SSE response: ${body}`);
+        }
+
+        setStatus('Streaming...', 'streaming');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parsed = parseSseFrames(buffer);
+          buffer = parsed.rest;
+
+          for (const frame of parsed.frames) {
+            const parsedOuter = parseFrame(frame);
+            const { event, data } = normalizeNestedSse(parsedOuter.event, parsedOuter.data);
+            if (!data) continue;
+
+            if (event === 'chunk') {
+              let chunk = data;
+              try { chunk = JSON.parse(data); } catch (e) {}
+              lineBuffer += String(chunk);
+              const lines = lineBuffer.split('\n');
+              lineBuffer = lines.pop() || '';
+
+              let assistantDelta = '';
+              for (const rawLine of lines) {
+                const line = rawLine.trimEnd();
+                if (line.trim().startsWith('[supervisor]')) {
+                  supervisorLogs.push(line.trim());
+
+                  // 진행 상황 파싱 및 UI 업데이트
+                  const progress = parseSupervisorProgress(line.trim());
+                  if (progress) {
+                    // 진행률 업데이트
+                    ai.progressFill.style.width = `${progress.progress}%`;
+                    lastProgress = progress.progress;
+
+                    // 100% 완료 시 시각적 피드백
+                    if (progress.progress >= 100) {
+                      ai.progressFill.classList.add('completed');
+                      // 완료되면 panel은 접힌 상태로 유지 (사라지지 않음)
+                    }
+
+                    // 현재 단계 표시
+                    ai.currentStage.textContent = `${getStageLabel(progress.stage)} - ${progress.message}`;
+
+                    // 하단 상태바 업데이트
+                    setStatus(`${getStageLabel(progress.stage)} (${progress.progress}%)`,
+                              progress.progress >= 100 ? 'complete' : 'streaming');
+                  }
+                } else if (line.length > 0) {
+                  assistantDelta += rawLine + '\n';
+                }
+              }
+
+              if (supervisorLogs.length > 0) {
+                ai.panel.style.display = 'block';
+                ai.stream.textContent = supervisorLogs.join('\n');
+
+                // 스트림을 최하단으로 자동 스크롤
+                ai.stream.scrollTop = ai.stream.scrollHeight;
+              }
+
+              if (assistantDelta.length > 0) {
+                if (!answerStarted) {
+                  answerStarted = true;
+                  ai.panel.classList.add('collapsed');
+                  ai.toggle.textContent = '펼치기';
+                }
+                acc += assistantDelta;
+                renderAssistantMarkdown(ai.answer, acc);
+              }
+
+              chatEl.scrollTop = chatEl.scrollHeight;
+              continue;
+            }
+
+            if (event === 'error') {
+              let msg = data;
+              try {
+                const parsedErr = JSON.parse(data);
+                msg = parsedErr?.error?.message || parsedErr?.message || data;
+              } catch (e) {}
+              acc += `\n\n[오류] ${msg}`;
+              renderAssistantMarkdown(ai.answer, acc);
+              continue;
+            }
+
+            if (event === 'done') {
+              setStatus('Completed', 'complete');
+            }
+          }
+        }
+
+        const remainder = lineBuffer.trim();
+        if (remainder.startsWith('[supervisor]')) {
+          supervisorLogs.push(remainder);
+          ai.panel.style.display = 'block';
+          ai.stream.textContent = supervisorLogs.join('\n');
+        } else if (remainder.length > 0) {
+          acc += remainder;
+        }
+
+        if (!acc) {
+          ai.answer.innerText = '[응답 없음] 스트림에서 chunk를 받지 못했습니다.';
+          setStatus('No chunks received', 'error');
+        } else {
+          renderAssistantMarkdown(ai.answer, acc);
+          await enhanceBubble(ai.answer);
+          setStatus('Completed', 'complete');
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          setStatus('Stopped', 'ready');
+          if (!acc) ai.answer.innerText = '[중단됨]';
+        } else {
+          ai.answer.innerText = `Error: ${e.message}`;
+          setStatus(`Error: ${e.message}`, 'error');
+        }
+      } finally {
+        streaming = false;
+        abortController = null;
+      }
+    }
+
+    sendBtn.addEventListener('click', send);
+    stopBtn.addEventListener('click', () => {
+      if (abortController) abortController.abort();
+    });
+    clearBtn.addEventListener('click', async () => {
+      try {
+        if (abortController) abortController.abort();
+        await fetch('/a2a/supervisor/clear', { method: 'POST' });
+        chatEl.innerHTML = '';
+        setStatus('Cleared', 'ready');
+        addMessage('ai', '세션 히스토리를 초기화했습니다.');
+      } catch (e) {
+        setStatus(`Clear failed: ${e.message}`, 'error');
+      }
+    });
+    promptEl.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    addMessage('ai', '안녕하세요. Supervisor A2A 스트리밍 채팅 화면입니다.');
+
+    // 페이지 로드 시 라이브러리 확인
+    window.addEventListener('load', () => {
+      console.log('=== Library Check ===');
+      console.log('marked:', typeof marked !== 'undefined' ? '✓' : '✗');
+      console.log('mermaid:', typeof mermaid !== 'undefined' ? '✓' : '✗');
+      console.log('katex:', typeof katex !== 'undefined' ? '✓' : '✗');
+      console.log('renderMathInElement:', typeof renderMathInElement !== 'undefined' ? '✓' : '✗');
+    });
+  </script>
+</body>
+</html>

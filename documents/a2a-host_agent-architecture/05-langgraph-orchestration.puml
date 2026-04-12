@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 05. Host Agent LangGraph4J Orchestration
+title 05. Supervisor Agent LangGraph4J Orchestration
 
 skinparam shadowing false
 
@@ -8,7 +8,7 @@ start
 
 :Request validated;
 :Load history/checkpoint;
-:Build HostGraphState;
+:Build SupervisorGraphState;
 :Invoke CompiledGraph;
 
 :PLAN_INTENT node;

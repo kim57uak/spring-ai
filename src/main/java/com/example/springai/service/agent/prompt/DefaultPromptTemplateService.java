@@ -51,7 +51,9 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
                 "composeRules", composeRules,
                 "userMessage", protectedUserMessage,
                 "history", protectedHistory,
-                "toolResult", toolResult
+                "toolResult", toolResult,
+                "toolExecuted", context.getExecutionResult().executed(),
+                "toolSuccess", context.getExecutionResult().success()
         ));
     }
 

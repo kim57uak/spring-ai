@@ -30,12 +30,50 @@ public class A2aLifecycleService {
         return taskStore.get(taskId, scopeName);
     }
 
+    /**
+     * scope + 세션 소유권 기반 단건 조회.
+     * <p>
+     * 세션ID가 인증되었다는 전제 하에 task 소유자 검증을 수행해
+     * 동시 사용자 간 교차 조회를 차단한다.
+     */
+    public Optional<A2aTaskSnapshot> get(String taskId, AgentScopeName scopeName, String sessionId) {
+        return taskStore.get(taskId, scopeName)
+                .filter(snapshot -> snapshot.sessionId() != null && snapshot.sessionId().equals(sessionId));
+    }
+
     public List<A2aTaskSnapshot> list(AgentScopeName scopeName, int limit) {
         return taskStore.list(scopeName, limit);
     }
 
+    /**
+     * scope + 세션 소유권 기반 목록 조회.
+     * <p>
+     * 기존 scope 목록에서 호출자 sessionId로 재필터링해
+     * 타 세션 task가 목록에 포함되지 않도록 보장한다.
+     */
+    public List<A2aTaskSnapshot> list(AgentScopeName scopeName, String sessionId, int limit) {
+        return taskStore.list(scopeName, limit).stream()
+                .filter(snapshot -> snapshot.sessionId() != null && snapshot.sessionId().equals(sessionId))
+                .toList();
+    }
+
     public Optional<A2aTaskSnapshot> cancel(String taskId, AgentScopeName scopeName, String reason) {
         return taskStore.cancel(taskId, scopeName, reason);
+    }
+
+    /**
+     * scope + 세션 소유권 기반 취소.
+     * <p>
+     * 취소 전에 소유권을 확인해 동시접속 환경에서
+     * 타 사용자 task 상태를 변경하지 못하게 한다.
+     */
+    public Optional<A2aTaskSnapshot> cancel(String taskId, AgentScopeName scopeName, String sessionId, String reason) {
+        Optional<A2aTaskSnapshot> owned = get(taskId, scopeName, sessionId);
+        if (owned.isEmpty()) {
+            return Optional.empty();
+        }
+        return taskStore.cancel(taskId, scopeName, reason)
+                .filter(snapshot -> snapshot.sessionId() != null && snapshot.sessionId().equals(sessionId));
     }
 
     public void markCompleted(String taskId, AgentScopeName scopeName, String responsePayload) {
