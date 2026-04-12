@@ -2,6 +2,7 @@ package com.example.springai.controller.a2a;
 
 import com.example.springai.a2a.dto.JsonRpcRequest;
 import com.example.springai.a2a.dto.JsonRpcResponse;
+import com.example.springai.a2a.idempotency.A2aRequestIdempotencyService;
 import com.example.springai.a2a.lifecycle.A2aLifecycleService;
 import com.example.springai.a2a.mapper.A2AResponseMapper;
 import com.example.springai.model.agent.AgentScopeName;
@@ -31,9 +32,19 @@ public class ProductA2AController extends BaseA2AControllerSupport {
             AgentScopeActivationService activationService,
             A2aLifecycleService lifecycleService,
             A2AResponseMapper responseMapper,
+            A2aRequestIdempotencyService requestIdempotencyService,
             ObjectMapper objectMapper
     ) {
-        super(chatService, scopeResolver, activationService, lifecycleService, responseMapper, objectMapper, AgentScopeName.PRODUCT);
+        super(
+                chatService,
+                scopeResolver,
+                activationService,
+                lifecycleService,
+                responseMapper,
+                requestIdempotencyService,
+                objectMapper,
+                AgentScopeName.PRODUCT
+        );
     }
 
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)

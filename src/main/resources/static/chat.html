@@ -706,6 +706,8 @@
     let streaming = false;
     const query = new URLSearchParams(window.location.search);
     const apiBase = query.get('apiBase') || '/api/http-chat';
+    const transport = query.get('transport') || 'rest';
+    const a2aEndpoint = query.get('a2aEndpoint') || '/a2a/supervisor/stream';
     const pageTitle = query.get('title') || 'Spring AI Chat';
     const pageHint = query.get('hint') || 'Spring AI • Streaming Chat';
     const pageTitleElement = document.getElementById('page-title');
@@ -798,6 +800,15 @@
     function selectedModelKey() {
         const modelSelect = document.getElementById('model-select');
         if (!modelSelect) return 'mistral';
+
+        if (transport === 'a2a-supervisor') {
+            const value = (modelSelect.value || '').toLowerCase();
+            if (!value || value === 'openai') return 'gpt-4o-mini';
+            if (value.includes('gpt-') || value.startsWith('o1') || value.startsWith('o3') || value.startsWith('o4')) {
+                return modelSelect.value;
+            }
+            return 'gpt-4o-mini';
+        }
 
         const value = (modelSelect.value || '').toLowerCase();
         if (value.includes('mistral-large') || value === 'mistral-large') return 'mistral-large-latest';
@@ -1004,33 +1015,121 @@
             // STATUS: Thinking
             StatusLayer.update('Thinking...');
 
-            const res = await fetch(`${apiBase}/stream`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: txt, model: selectedModelKey() })
-            });
-
-            // STATUS: Receiving
-            StatusLayer.update('Receiving response...');
-
-            const reader = res.body.getReader();
-            const dec = new TextDecoder();
             let acc = '';
             const renderer = createStreamingMarkdownRenderer(bubble, scrollToBottom);
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                acc += dec.decode(value, { stream: true });
-                renderer.push(acc);
-            }
+            if (transport === 'a2a-supervisor') {
+                const reqId = `chat-${Date.now()}`;
+                const res = await fetch(a2aEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream'
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: reqId,
+                        method: 'message/stream',
+                        params: { messageText: txt, model: selectedModelKey() }
+                    })
+                });
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+                }
+                const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                if (!contentType.includes('text/event-stream')) {
+                    const fallbackText = await res.text();
+                    let errorMessage = fallbackText;
+                    try {
+                        const parsed = JSON.parse(fallbackText);
+                        errorMessage = parsed?.error?.message || fallbackText;
+                    } catch (ignored) {}
+                    throw new Error(`Supervisor stream endpoint returned non-SSE response: ${errorMessage}`);
+                }
 
-            const tail = dec.decode();
-            if (tail) {
-                acc += tail;
-                renderer.push(acc);
+                // STATUS: Receiving
+                StatusLayer.update('Receiving response...');
+
+                const reader = res.body.getReader();
+                const dec = new TextDecoder();
+                let sseBuffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    sseBuffer += dec.decode(value, { stream: true });
+                    const frames = sseBuffer.split('\n\n');
+                    sseBuffer = frames.pop() || '';
+
+                    for (const frame of frames) {
+                        const lines = frame.split('\n');
+                        let eventName = 'message';
+                        let data = '';
+                        for (const line of lines) {
+                            if (line.startsWith('event:')) {
+                                eventName = line.slice(6).trim();
+                            } else if (line.startsWith('data:')) {
+                                data += line.slice(5).trim();
+                            }
+                        }
+                        if (!data) continue;
+
+                        if (eventName === 'chunk') {
+                            let chunk = data;
+                            try {
+                                chunk = JSON.parse(data);
+                            } catch (ignored) {}
+                            acc += String(chunk);
+                            renderer.push(acc);
+                            continue;
+                        }
+
+                        if (eventName === 'error') {
+                            try {
+                                const parsed = JSON.parse(data);
+                                const msg = parsed?.error?.message || parsed?.message || data;
+                                acc += `\n\n[오류] ${msg}`;
+                            } catch (ignored) {
+                                acc += `\n\n[오류] ${data}`;
+                            }
+                            renderer.push(acc);
+                            continue;
+                        }
+
+                        if (eventName === 'done') {
+                            renderer.push(acc);
+                        }
+                    }
+                }
+
+                renderer.flush();
+            } else {
+                const res = await fetch(`${apiBase}/stream`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: txt, model: selectedModelKey() })
+                });
+
+                // STATUS: Receiving
+                StatusLayer.update('Receiving response...');
+
+                const reader = res.body.getReader();
+                const dec = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    acc += dec.decode(value, { stream: true });
+                    renderer.push(acc);
+                }
+
+                const tail = dec.decode();
+                if (tail) {
+                    acc += tail;
+                    renderer.push(acc);
+                }
+                renderer.flush();
             }
-            renderer.flush();
 
             // 스트리밍 완료 후 KaTeX와 Mermaid 렌더링
             console.log('Rendering math and mermaid...');
@@ -1090,12 +1189,14 @@
     async function clearSessionHistory() {
         if (!confirm('세션 히스토리를 삭제하시겠습니까?')) return;
         try {
-            await fetch(`${apiBase}/clear`, { method: 'POST' });
+            if (transport !== 'a2a-supervisor') {
+                await fetch(`${apiBase}/clear`, { method: 'POST' });
+            }
             const c = document.getElementById('chat-container');
             c.innerHTML = `
                 <div class="message ai">
                     <div class="avatar ai">💬</div>
-                    <div class="bubble">세션 히스토리가 삭제되었습니다.</div>
+                    <div class="bubble">${transport === 'a2a-supervisor' ? '대화 화면을 초기화했습니다.' : '세션 히스토리가 삭제되었습니다.'}</div>
                 </div>`;
         } catch (e) {
             alert('히스토리 삭제 실패: ' + e.message);

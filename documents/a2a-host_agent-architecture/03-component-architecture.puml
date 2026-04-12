@@ -1,60 +1,99 @@
 @startuml
 !pragma layout smetana
-title 03. A2A Host Agent Component Architecture
+title 03. A2A Supervisor Agent Component Architecture
 
 skinparam shadowing false
 skinparam componentStyle rectangle
+top to bottom direction
+skinparam ranksep 40
+skinparam nodesep 30
+skinparam linetype ortho
 
-package "entry" {
-  [HostA2AController] as HostA2AController
+package "01 Entry" {
+  [SupervisorA2AController] as SupervisorA2AController
   [GlobalExceptionHandler] as Advice
 }
 
-package "application" {
-  [HostAgentService] as HostService
-  [HostAgentOrchestrator] as HostOrchestrator
+package "02 Application" {
+  [SupervisorAgentService] as SupervisorService
+  [SupervisorAgentOrchestrator] as SupervisorOrchestrator
 }
 
-package "ports" {
-  interface "HostPlanningService" as PlanningPort
-  interface "A2AInvocationService" as InvocationPort
-  interface "HostResponseComposeService" as ComposePort
-  interface "HostStateGraphFactory" as GraphFactoryPort
-  interface "ConversationStore" as ConversationStorePort
-  interface "GraphCheckpointStore" as CheckpointStorePort
+package "03-1 Usecase Ports (Contracts)" {
+  together {
+    interface "Planning Port" as PlanningPort
+    interface "Invocation Port" as InvocationPort
+    interface "Compose Port" as ComposePort
+  }
+
+  PlanningPort -[hidden]down-> InvocationPort
+  InvocationPort -[hidden]down-> ComposePort
 }
 
-package "impl" {
-  [LlmHostPlanningService] as PlanningImpl
-  [DefaultA2AInvocationService] as InvocationImpl
-  [LlmHostResponseComposeService] as ComposeImpl
-  [LangGraphHostStateGraphFactory] as GraphFactoryImpl
-  [RedisConversationStore] as ConversationStoreImpl
-  [RedisGraphCheckpointStore] as CheckpointStoreImpl
-  [A2AClientRegistry] as A2ARegistry
-  [A2AJsonRpcClient] as A2AJsonRpcClient
+package "03-2 Infra Ports (Contracts)" {
+  together {
+    interface "Graph Factory Port" as GraphFactoryPort
+    interface "Conversation Store Port" as ConversationStorePort
+    interface "Checkpoint Store Port" as CheckpointStorePort
+  }
+
+  GraphFactoryPort -[hidden]down-> ConversationStorePort
+  ConversationStorePort -[hidden]down-> CheckpointStorePort
 }
 
-package "runtime/integration" {
-  [DefaultAgentLlmRuntime] as LlmRuntime
+package "04 Adapters (Implementations)" {
+  package "04-1 Usecase Adapters" {
+    [LlmSupervisorPlanningService] as PlanningImpl
+    [DefaultA2AInvocationService] as InvocationImpl
+    [LlmSupervisorResponseComposeService] as ComposeImpl
+  }
+
+  package "04-2 Infra Adapters" {
+    [LangGraphSupervisorStateGraphFactory] as GraphFactoryImpl
+    [RedisConversationStore] as ConversationStoreImpl
+    [RedisGraphCheckpointStore] as CheckpointStoreImpl
+  }
+
+  package "04-3 A2A Gateway" #EAF4FF {
+    [A2AClientRegistry] as A2ARegistry #D6E9FF
+    [A2AJsonRpcClient] as A2AJsonRpcClient #D6E9FF
+  }
+}
+
+package "05 Runtime / External" {
+  [DefaultSupervisorLlmRuntime] as LlmRuntime
   [ModelChatServiceFactory] as ChatFactory
   [LlmCallPolicy] as LlmPolicy
-  [a2a-host.yml] as HostConfig
+  [a2a-supervisor.yml] as SupervisorConfig
   [Product Agent A2A] as ProductAgent
   [Reservation Agent A2A] as ReservationAgent
   [Search Agent A2A] as SearchAgent
 }
 
-HostA2AController --> HostService
-HostA2AController --> Advice
-HostService --> HostOrchestrator
+SupervisorA2AController --> SupervisorService : request
+SupervisorA2AController --> Advice : exception mapping
+SupervisorService --> SupervisorOrchestrator : orchestrate
 
-HostOrchestrator --> PlanningPort
-HostOrchestrator --> InvocationPort
-HostOrchestrator --> ComposePort
-HostOrchestrator --> GraphFactoryPort
-HostOrchestrator --> ConversationStorePort
-HostOrchestrator --> CheckpointStorePort
+SupervisorOrchestrator --> PlanningPort : intent plan
+SupervisorOrchestrator --> InvocationPort : downstream call
+SupervisorOrchestrator --> ComposePort : response compose
+SupervisorOrchestrator --> GraphFactoryPort : state graph
+SupervisorOrchestrator --> ConversationStorePort : history load/save
+SupervisorOrchestrator --> CheckpointStorePort : checkpoint load/save
+
+note right of ComposePort
+Usecase mappings
+- PlanningPort -> SupervisorPlanningService
+- InvocationPort -> A2AInvocationService
+- ComposePort -> SupervisorResponseComposeService
+end note
+
+note right of CheckpointStorePort
+Infra mappings
+- GraphFactoryPort -> SupervisorStateGraphFactory
+- ConversationStorePort -> ConversationStore
+- CheckpointStorePort -> GraphCheckpointStore
+end note
 
 PlanningPort <|.. PlanningImpl
 InvocationPort <|.. InvocationImpl
@@ -68,18 +107,24 @@ ComposeImpl --> LlmRuntime
 LlmRuntime --> ChatFactory
 ChatFactory --> LlmPolicy
 
-InvocationImpl --> A2ARegistry
-InvocationImpl --> A2AJsonRpcClient
-A2ARegistry --> HostConfig
+InvocationImpl --> A2ARegistry : resolve route
+InvocationImpl --> A2AJsonRpcClient : call json-rpc
+A2ARegistry --> SupervisorConfig : route config
 A2AJsonRpcClient --> ProductAgent
 A2AJsonRpcClient --> ReservationAgent
 A2AJsonRpcClient --> SearchAgent
 
-note right of InvocationImpl
-No sub-agent internals
-- routing key -> A2A endpoint
-- JSON-RPC request/response normalization
-- timeout/retry/circuit-breaker
+legend bottom
+  == Reading Guide ==
+  1. Orchestrator depends only on Ports (contracts)
+  2. Adapters implement Ports
+  3. Downstream agents are called only via A2A Gateway
+endlegend
+
+note bottom of InvocationImpl
+Supervisor boundary rule
+- no sub-agent internal dependency
+- A2A endpoint allowlist + timeout/retry
 end note
 
 @enduml

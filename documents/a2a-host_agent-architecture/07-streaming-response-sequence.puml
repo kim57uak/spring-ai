@@ -1,22 +1,22 @@
 @startuml
 !pragma layout smetana
-title 07. Host Agent Streaming Response Sequence
+title 07. Supervisor Agent Streaming Response Sequence
 
 skinparam shadowing false
 
 actor User
-participant "HostA2AController" as Controller
-participant "HostAgentService" as Service
-participant "HostAgentOrchestrator" as Orchestrator
-participant "HostResponseComposeService" as Composer
-participant "DefaultAgentLlmRuntime" as Runtime
+participant "SupervisorA2AController" as Controller
+participant "SupervisorAgentService" as Service
+participant "SupervisorAgentOrchestrator" as Orchestrator
+participant "SupervisorResponseComposeService" as Composer
+participant "DefaultSupervisorLlmRuntime" as Runtime
 participant "ModelChatServiceFactory" as Factory
 participant "Provider ChatService" as Provider
 participant "Conversation Store" as ConversationStore
 participant "Checkpoint Store" as CheckpointStore
 
-User -> Controller : stream request
-Controller -> Service : streamChat(...)
+User -> Controller : stream request (/a2a/supervisor)
+Controller -> Service : stream(...)
 Service -> Orchestrator : execute(request)
 Orchestrator --> Controller : preface summary chunk
 Controller --> User : SSE(summary)

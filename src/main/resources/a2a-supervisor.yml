@@ -1,0 +1,29 @@
+host:
+  a2a:
+    routing:
+      product:
+        endpoint: ${SUPERVISOR_PRODUCT_A2A_ENDPOINT:http://localhost:8082/a2a/product}
+        method: message/send
+        timeout-ms: 120000
+      reservation:
+        endpoint: ${SUPERVISOR_RESERVATION_A2A_ENDPOINT:http://localhost:8082/a2a/reservation}
+        method: message/send
+        timeout-ms: 120000
+      search:
+        endpoint: ${SUPERVISOR_SEARCH_A2A_ENDPOINT:http://localhost:8082/a2a/search}
+        method: message/send
+        timeout-ms: 120000
+      mygenie:
+        endpoint: ${MYGENIE_A2A_ENDPOINT:http://localhost:8001/a2a}
+        method: message/send
+        timeout-ms: 120000
+    retry:
+      max-retries: 1
+      initial-backoff-ms: 500
+      max-backoff-ms: 3000
+    circuit-breaker:
+      enabled: true
+      failure-threshold: 3
+      open-duration-ms: 30000
+    stream:
+      timeout-ms: 120000

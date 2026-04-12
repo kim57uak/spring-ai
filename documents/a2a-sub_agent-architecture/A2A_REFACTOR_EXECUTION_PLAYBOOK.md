@@ -4,6 +4,14 @@
 대상: `spring-ai`  
 위치: `documents/a2a-architecture`
 
+## 0. 동기화 메모 (2026-04-12)
+
+- `GlobalExceptionHandler`는 `/a2a/**` 요청 예외를 JSON-RPC 오류 포맷으로 반환하도록 반영됨
+- `A2aLifecycleService`는 `tasks/get`, `tasks/list`, `tasks/cancel`에서 `scope + sessionId` 소유권 검증을 반영함
+- `A2aRequestIdempotencyService`가 추가되어 `message/send` 중복 요청의 in-flight/completed 캐시 기반 idempotency를 처리함
+- `AgentCardController`는 활성 스코프 기반 카드 목록(`/.well-known/agent.json`)과 스코프 단일 카드(`/a2a/{scope}/.well-known/agent.json`)를 지원함
+- `BaseA2AControllerSupport`는 공식 `message/stream`을 `/a2a/{scope}` 본 경로에서 처리하고 `/stream`은 alias로 유지함
+
 ## 1. 목적
 
 이 문서는 A2A 통합 품질을 `문서 정합성 + 운영 안정성 + 테스트 신뢰성` 기준으로 상향하기 위한 실행 가이드다.

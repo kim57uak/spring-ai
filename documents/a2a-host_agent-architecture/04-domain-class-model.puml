@@ -1,17 +1,17 @@
 @startuml
 !pragma layout smetana
-title 04. Host Agent Domain Class Model
+title 04. Supervisor Agent Domain Class Model
 
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 
-class HostAgentRequest {
+class SupervisorAgentRequest {
   +sessionId: String
   +message: String
   +model: String
 }
 
-class HostPlanningContext {
+class SupervisorPlanningContext {
   +sessionId: String
   +userMessage: String
   +model: String
@@ -38,7 +38,7 @@ class DownstreamCallResult {
   +errorMessage: String
 }
 
-class HostGraphState {
+class SupervisorGraphState {
   +SESSION_ID
   +USER_MESSAGE
   +MODEL
@@ -48,7 +48,7 @@ class HostGraphState {
   +CURRENT_NODE
 }
 
-interface HostPlanningService {
+interface SupervisorPlanningService {
   +plan(context): List<RoutingPlan>
 }
 
@@ -56,13 +56,13 @@ interface A2AInvocationService {
   +invoke(plan, context): DownstreamCallResult
 }
 
-interface HostResponseComposeService {
+interface SupervisorResponseComposeService {
   +streamCompose(context): Flux<String>
 }
 
-HostAgentRequest --> HostPlanningContext
-HostPlanningContext --> RoutingPlan
-HostPlanningContext --> DownstreamCallResult
-HostGraphState --> HostPlanningContext
+SupervisorAgentRequest --> SupervisorPlanningContext
+SupervisorPlanningContext --> RoutingPlan
+SupervisorPlanningContext --> DownstreamCallResult
+SupervisorGraphState --> SupervisorPlanningContext
 
 @enduml

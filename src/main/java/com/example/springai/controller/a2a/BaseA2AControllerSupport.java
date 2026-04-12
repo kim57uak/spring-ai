@@ -1,5 +1,6 @@
 package com.example.springai.controller.a2a;
 
+import com.example.springai.a2a.A2aMethod;
 import com.example.springai.a2a.context.A2aExecutionContext;
 import com.example.springai.a2a.dto.JsonRpcRequest;
 import com.example.springai.a2a.dto.JsonRpcResponse;
@@ -11,10 +12,12 @@ import com.example.springai.a2a.dto.TasksListResult;
 import com.example.springai.a2a.lifecycle.A2aLifecycleService;
 import com.example.springai.a2a.mapper.A2AResponseMapper;
 import com.example.springai.a2a.task.A2aTaskSnapshot;
+import com.example.springai.a2a.idempotency.A2aRequestIdempotencyService;
 import com.example.springai.model.agent.AgentScopeName;
 import com.example.springai.service.AgentScopeActivationService;
 import com.example.springai.service.AgentScopeResolver;
 import com.example.springai.service.ScopedAgentChatService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;
 import reactor.core.publisher.Flux;
@@ -37,6 +40,7 @@ public abstract class BaseA2AControllerSupport {
     private final AgentScopeActivationService activationService;
     private final A2aLifecycleService lifecycleService;
     private final A2AResponseMapper responseMapper;
+    private final A2aRequestIdempotencyService requestIdempotencyService;
     private final ObjectMapper objectMapper;
     private final AgentScopeName scopeName;
 
@@ -46,6 +50,7 @@ public abstract class BaseA2AControllerSupport {
             AgentScopeActivationService activationService,
             A2aLifecycleService lifecycleService,
             A2AResponseMapper responseMapper,
+            A2aRequestIdempotencyService requestIdempotencyService,
             ObjectMapper objectMapper,
             AgentScopeName scopeName
     ) {
@@ -54,23 +59,38 @@ public abstract class BaseA2AControllerSupport {
         this.activationService = activationService;
         this.lifecycleService = lifecycleService;
         this.responseMapper = responseMapper;
+        this.requestIdempotencyService = requestIdempotencyService;
         this.objectMapper = objectMapper;
         this.scopeName = scopeName;
     }
 
+    /**
+     * Unary 경로 진입점.
+     * <p>
+     * 호환 정책:
+     * - send 메서드는 `SendMessage`/`message/send` 모두 수용한다.
+     * - stream 메서드는 unary에서 차단하고 SSE 경로로 유도한다.
+     *
+     * @param request JSON-RPC 요청
+     * @param session HTTP 세션
+     * @return JSON-RPC 응답
+     */
     protected JsonRpcResponse handle(JsonRpcRequest request, HttpSession session) {
         JsonRpcResponse precheckError = precheck(request);
         if (precheckError != null) {
             return precheckError;
         }
-        if ("message/stream".equals(request.method())) {
-            return JsonRpcResponse.error(request.id(), METHOD_NOT_FOUND, "Use streaming endpoint for message/stream");
+        A2aMethod method = A2aMethod.from(request.method()).orElse(null);
+        if (method != null && method.isStream()) {
+            return JsonRpcResponse.error(request.id(), METHOD_NOT_FOUND, "Use streaming endpoint for SendStreamingMessage or message/stream");
         }
         return handleUnary(request, session);
     }
 
     /**
-     * 공식 A2A 메서드(message/stream)를 /a2a/{scope} 본 경로에서 처리한다.
+     * 메인 `/a2a/{scope}` 경로에서 stream 메서드를 처리한다.
+     * <p>
+     * `SendStreamingMessage`/`message/stream`를 모두 수용한다.
      */
     protected Flux<String> handleMainStream(JsonRpcRequest request, HttpSession session) {
         JsonRpcResponse precheckError = precheck(request);
@@ -83,7 +103,7 @@ public abstract class BaseA2AControllerSupport {
     /**
      * 레거시 /stream alias 처리.
      * <p>
-     * 호환 경로이지만 공식 메서드 규칙을 강제하기 위해 message/stream만 허용한다.
+     * 호환 경로이지만 stream 메서드 규칙(`SendStreamingMessage`/`message/stream`)만 허용한다.
      */
     protected Flux<String> handleStreamAlias(JsonRpcRequest request, HttpSession session) {
         JsonRpcResponse precheckError = precheck(request);
@@ -107,21 +127,32 @@ public abstract class BaseA2AControllerSupport {
     }
 
     private JsonRpcResponse handleUnary(JsonRpcRequest request, HttpSession session) {
-        return switch (request.method()) {
-            case "message/send" -> handleSend(request, session);
-            case "tasks/get" -> handleGet(request);
-            case "tasks/cancel" -> handleCancel(request);
-            case "tasks/list" -> handleList(request);
-            default -> JsonRpcResponse.error(request.id(), METHOD_NOT_FOUND, "Method not found");
-        };
+        A2aMethod method = A2aMethod.from(request.method()).orElse(null);
+        if (method == null) {
+            return JsonRpcResponse.error(request.id(), METHOD_NOT_FOUND, "Method not found");
+        }
+        if (method.isSend()) {
+            return handleSend(request, session);
+        }
+        if (method.isTaskGet()) {
+            return handleGet(request, session);
+        }
+        if (method.isTaskCancel()) {
+            return handleCancel(request, session);
+        }
+        if (method.isTaskList()) {
+            return handleList(request, session);
+        }
+        return JsonRpcResponse.error(request.id(), METHOD_NOT_FOUND, "Method not found");
     }
 
     private Flux<String> handleMessageStream(JsonRpcRequest request, HttpSession session) {
-        if (!"message/stream".equals(request.method())) {
+        A2aMethod method = A2aMethod.from(request.method()).orElse(null);
+        if (method == null || !method.isStream()) {
             JsonRpcResponse error = JsonRpcResponse.error(request.id(), METHOD_NOT_FOUND, "Method not found");
             return Flux.just("data: " + objectMapper.valueToTree(error).toString() + "\n\n");
         }
-        TaskSendParams params = request.paramsAs(objectMapper, TaskSendParams.class);
+        ResolvedSendParams params = resolveSendParams(request);
         if (params == null || params.messageText() == null || params.messageText().isBlank()) {
             JsonRpcResponse error = JsonRpcResponse.error(request.id(), INVALID_PARAMS, "messageText is required");
             return Flux.just("data: " + objectMapper.valueToTree(error).toString() + "\n\n");
@@ -140,11 +171,21 @@ public abstract class BaseA2AControllerSupport {
     }
 
     private JsonRpcResponse handleSend(JsonRpcRequest request, HttpSession session) {
-        TaskSendParams params = request.paramsAs(objectMapper, TaskSendParams.class);
+        ResolvedSendParams params = resolveSendParams(request);
         if (params == null || params.messageText() == null || params.messageText().isBlank()) {
             return JsonRpcResponse.error(request.id(), INVALID_PARAMS, "messageText is required");
         }
 
+        return requestIdempotencyService.executeOnce(
+                scopeName.name(),
+                session.getId(),
+                normalizedSendMethod(request.method()),
+                request.id(),
+                () -> executeSend(request, session, params)
+        );
+    }
+
+    private JsonRpcResponse executeSend(JsonRpcRequest request, HttpSession session, ResolvedSendParams params) {
         A2aTaskSnapshot task = lifecycleService.createAndMarkRunning(scopeName, session.getId(), params.messageText());
         A2aExecutionContext context = new A2aExecutionContext(task.taskId(), scopeName, request.method());
 
@@ -165,32 +206,134 @@ public abstract class BaseA2AControllerSupport {
         return JsonRpcResponse.success(request.id(), responseMapper.toTaskView(effective));
     }
 
-    private JsonRpcResponse handleGet(JsonRpcRequest request) {
+    /**
+     * idempotency 키 충돌 방지를 위해 send 계열 메서드를 단일 키로 정규화한다.
+     * <p>
+     * 이유:
+     * - 클라이언트가 구/신 메서드명을 섞어 재시도해도 같은 요청으로 취급해야
+     *   중복 실행이 발생하지 않는다.
+     *
+     * @param method 원본 JSON-RPC method 문자열
+     * @return 정규화된 dedupe key
+     */
+    private String normalizedSendMethod(String method) {
+        A2aMethod parsed = A2aMethod.from(method).orElse(null);
+        if (parsed != null && parsed.isSend()) {
+            return A2aMethod.sendDedupeKey();
+        }
+        return method;
+    }
+
+    /**
+     * send/stream 파라미터를 legacy/v1.0 양쪽 포맷에서 읽어 내부 표준 형태로 변환한다.
+     * <p>
+     * 지원 포맷:
+     * - legacy: `params.messageText`
+     * - v1.0: `params.message.parts[].text`
+     *
+     * @param request JSON-RPC 요청
+     * @return 내부 표준 파라미터(없거나 불완전하면 null)
+     */
+    private ResolvedSendParams resolveSendParams(JsonRpcRequest request) {
+        TaskSendParams legacy = request.paramsAs(objectMapper, TaskSendParams.class);
+        if (legacy != null && legacy.messageText() != null && !legacy.messageText().isBlank()) {
+            return new ResolvedSendParams(legacy.messageText(), legacy.model());
+        }
+
+        JsonNode paramsNode = request.params();
+        if (paramsNode == null || paramsNode.isNull()) {
+            return null;
+        }
+        JsonNode messageNode = paramsNode.path("message");
+        String text = extractTextFromParts(messageNode.path("parts"));
+        if (text.isBlank()) {
+            return null;
+        }
+        String model = paramsNode.path("model").asText("");
+        return new ResolvedSendParams(text, model.isBlank() ? null : model);
+    }
+
+    /**
+     * v1.0 message.parts의 text 조각을 단일 문자열로 병합한다.
+     *
+     * @param partsNode message.parts 노드
+     * @return 병합 텍스트
+     */
+    private String extractTextFromParts(JsonNode partsNode) {
+        if (partsNode == null || !partsNode.isArray()) {
+            return "";
+        }
+        StringBuilder merged = new StringBuilder();
+        for (JsonNode part : partsNode) {
+            String type = part.path("type").asText("");
+            if (!type.isBlank() && !"text".equalsIgnoreCase(type)) {
+                continue;
+            }
+            String text = part.path("text").asText("");
+            if (text.isBlank()) {
+                continue;
+            }
+            if (!merged.isEmpty()) {
+                merged.append('\n');
+            }
+            merged.append(text.trim());
+        }
+        return merged.toString().trim();
+    }
+
+    /**
+     * legacy/v1.0 입력을 통합한 내부 send 파라미터.
+     *
+     * @param messageText 사용자 텍스트
+     * @param model 모델명(옵션)
+     */
+    private record ResolvedSendParams(String messageText, String model) {
+    }
+
+    /**
+     * 세션 소유권 기반 task 조회.
+     * <p>
+     * scope 검증에 더해 sessionId까지 일치해야 조회를 허용해
+     * 동시접속 환경에서 타 사용자 task 접근을 방지한다.
+     */
+    private JsonRpcResponse handleGet(JsonRpcRequest request, HttpSession session) {
         TaskQueryParams params = request.paramsAs(objectMapper, TaskQueryParams.class);
         if (params == null || params.id() == null || params.id().isBlank()) {
             return JsonRpcResponse.error(request.id(), INVALID_PARAMS, "id is required");
         }
-        return lifecycleService.get(params.id(), scopeName)
+        return lifecycleService.get(params.id(), scopeName, session.getId())
                 .map(snapshot -> JsonRpcResponse.success(request.id(), responseMapper.toTaskView(snapshot)))
                 .orElseGet(() -> JsonRpcResponse.error(request.id(), -32004, "Task not found"));
     }
 
-    private JsonRpcResponse handleCancel(JsonRpcRequest request) {
+    /**
+     * 세션 소유권 기반 task 취소.
+     * <p>
+     * 호출자 sessionId를 lifecycle 계층에 전달해
+     * 타 세션 task 취소를 거부한다.
+     */
+    private JsonRpcResponse handleCancel(JsonRpcRequest request, HttpSession session) {
         TaskIdParams params = request.paramsAs(objectMapper, TaskIdParams.class);
         if (params == null || params.id() == null || params.id().isBlank()) {
             return JsonRpcResponse.error(request.id(), INVALID_PARAMS, "id is required");
         }
-        return lifecycleService.cancel(params.id(), scopeName, params.reason())
+        return lifecycleService.cancel(params.id(), scopeName, session.getId(), params.reason())
                 .map(snapshot -> JsonRpcResponse.success(request.id(), responseMapper.toTaskView(snapshot)))
                 .orElseGet(() -> JsonRpcResponse.error(request.id(), -32004, "Task not found"));
     }
 
-    private JsonRpcResponse handleList(JsonRpcRequest request) {
+    /**
+     * 세션 소유권 기반 task 목록 조회.
+     * <p>
+     * scope + sessionId 이중 필터를 적용해
+     * 반환 목록이 호출자 소유 task로 한정되도록 한다.
+     */
+    private JsonRpcResponse handleList(JsonRpcRequest request, HttpSession session) {
         TasksListParams params = request.paramsAs(objectMapper, TasksListParams.class);
         int limit = params == null || params.limit() == null ? 20 : params.limit();
         return JsonRpcResponse.success(
                 request.id(),
-                new TasksListResult(lifecycleService.list(scopeName, limit).stream().map(responseMapper::toTaskView).toList())
+                new TasksListResult(lifecycleService.list(scopeName, session.getId(), limit).stream().map(responseMapper::toTaskView).toList())
         );
     }
 }

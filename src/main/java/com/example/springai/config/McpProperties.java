@@ -41,6 +41,7 @@ public class McpProperties {
         private List<String> capabilities = Collections.emptyList();
 
         private List<String> allowTools = Collections.emptyList();
+        private int timeoutMs = 30_000;
 
         public String getTransport() {
             return transport == null || transport.isBlank() ? "stdio" : transport;
@@ -104,6 +105,14 @@ public class McpProperties {
 
         public void setAllowTools(List<String> allowTools) {
             this.allowTools = allowTools;
+        }
+
+        public int getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public void setTimeoutMs(int timeoutMs) {
+            this.timeoutMs = timeoutMs;
         }
     }
 }

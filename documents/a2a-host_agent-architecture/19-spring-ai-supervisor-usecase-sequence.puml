@@ -1,0 +1,30 @@
+@startuml
+!pragma layout smetana
+title 19. Spring AI Supervisor Usecase Sequence (A2A Controller Only)
+
+skinparam shadowing false
+
+actor User
+participant "SupervisorA2AController" as Controller
+participant "SupervisorAgentService" as Service
+participant "SupervisorAgentOrchestrator" as Orchestrator
+participant "SupervisorPlanningService" as Planner
+participant "A2AInvocationService" as Invoker
+participant "SupervisorResponseComposeService" as Composer
+participant "DefaultSupervisorLlmRuntime" as Runtime
+
+User -> Controller : JSON-RPC message/send|message/stream
+Controller -> Service : send(...) or stream(...)
+Service -> Orchestrator : execute(supervisorRequest)
+Orchestrator -> Planner : plan(context)
+Planner -> Runtime : complete(planning prompt)
+Runtime --> Planner : routing plans
+Orchestrator -> Invoker : invoke(plans)
+Invoker --> Orchestrator : downstream results
+Orchestrator -> Composer : streamCompose(context + results)
+Composer -> Runtime : stream(compose prompt)
+Runtime --> Composer : token chunks
+Composer --> Controller : chunks
+Controller --> User : JSON-RPC/SSE response
+
+@enduml

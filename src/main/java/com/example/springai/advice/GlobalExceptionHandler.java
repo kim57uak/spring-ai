@@ -3,6 +3,9 @@ package com.example.springai.advice;
 import com.example.springai.a2a.dto.JsonRpcResponse;
 import com.example.springai.dto.ErrorResponse;
 import com.example.springai.exception.ChatProcessingException;
+import com.example.springsupervisorai.exception.A2ARoutingException;
+import com.example.springsupervisorai.exception.DownstreamA2AException;
+import com.example.springsupervisorai.exception.SupervisorChatProcessingException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -22,6 +25,7 @@ public class GlobalExceptionHandler {
     private static final int INVALID_REQUEST = -32600;
     private static final int INVALID_PARAMS = -32602;
     private static final int INTERNAL_ERROR = -32603;
+    private static final int DOWNSTREAM_ERROR = -32000;
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<?> handleValidationException(MethodArgumentNotValidException ex, HttpServletRequest request) {
@@ -62,6 +66,35 @@ public class GlobalExceptionHandler {
                     INTERNAL_ERROR,
                     "요청 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요."
             );
+        }
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ErrorResponse("요청 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요."));
+    }
+
+    @ExceptionHandler(A2ARoutingException.class)
+    public ResponseEntity<?> handleA2aRouting(A2ARoutingException ex, HttpServletRequest request) {
+        logger.warn("Supervisor routing rejected: {}", ex.getMessage());
+        if (isA2a(request)) {
+            return a2aError(HttpStatus.BAD_REQUEST, INVALID_PARAMS, sanitizeMessage(ex.getMessage()));
+        }
+        return ResponseEntity.badRequest().body(new ErrorResponse("입력값을 확인해주세요."));
+    }
+
+    @ExceptionHandler(DownstreamA2AException.class)
+    public ResponseEntity<?> handleDownstreamA2a(DownstreamA2AException ex, HttpServletRequest request) {
+        logger.warn("Downstream A2A call failed: {}", ex.getMessage());
+        if (isA2a(request)) {
+            return a2aError(HttpStatus.BAD_GATEWAY, DOWNSTREAM_ERROR, "Downstream A2A call failed");
+        }
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ErrorResponse("외부 서비스 호출 중 오류가 발생했습니다."));
+    }
+
+    @ExceptionHandler(SupervisorChatProcessingException.class)
+    public ResponseEntity<?> handleSupervisorCompose(SupervisorChatProcessingException ex, HttpServletRequest request) {
+        logger.warn("Supervisor compose failed: {}", ex.getMessage());
+        if (isA2a(request)) {
+            return a2aError(HttpStatus.BAD_GATEWAY, INTERNAL_ERROR, "Supervisor response compose failed");
         }
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(new ErrorResponse("요청 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요."));
@@ -109,5 +142,12 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<JsonRpcResponse> a2aError(HttpStatus status, int code, String message) {
         return ResponseEntity.status(status).body(JsonRpcResponse.error(null, code, message));
+    }
+
+    private String sanitizeMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return "Invalid request";
+        }
+        return message.length() > 200 ? message.substring(0, 200) : message;
     }
 }

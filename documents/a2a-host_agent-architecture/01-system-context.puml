@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 01. A2A Host Agent System Context
+title 01. A2A Supervisor Agent System Context
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -11,15 +11,15 @@ rectangle "Client Channel" {
   [Web UI / API Client] as Client
 }
 
-rectangle "Host Agent (spring-ai)" {
-  [HostA2AController] as HostA2AController
-  [HostAgentService] as HostService
-  [HostAgentOrchestrator] as HostOrchestrator
+rectangle "Supervisor Agent (spring-ai + springsupervisorai)" {
+  [SupervisorA2AController] as SupervisorA2AController
+  [SupervisorAgentService] as SupervisorService
+  [SupervisorAgentOrchestrator] as SupervisorOrchestrator
   [LangGraph4J CompiledGraph] as StateGraph
-  [HostPlanningService] as Planner
+  [SupervisorPlanningService] as Planner
   [A2AInvocationService] as A2AInvocationService
-  [ResponseComposeService] as Composer
-  [DefaultAgentLlmRuntime] as LlmRuntime
+  [SupervisorResponseComposeService] as Composer
+  [DefaultSupervisorLlmRuntime] as LlmRuntime
   [A2AClientRegistry] as A2ARegistry
   [GlobalExceptionHandler] as Advice
 }
@@ -35,17 +35,17 @@ cloud "Downstream A2A Agents" {
   [Search Agent A2A] as SearchAgent
 }
 
-artifact "a2a-host.yml" as HostYml
+artifact "a2a-supervisor.yml" as HostYml
 
 User --> Client
-Client --> HostA2AController : /a2a/host/*
-HostA2AController --> HostService
-HostA2AController --> Advice
-HostService --> HostOrchestrator
-HostOrchestrator --> StateGraph
-HostOrchestrator --> Planner
-HostOrchestrator --> A2AInvocationService
-HostOrchestrator --> Composer
+Client --> SupervisorA2AController : /a2a/supervisor
+SupervisorA2AController --> SupervisorService
+SupervisorA2AController --> Advice
+SupervisorService --> SupervisorOrchestrator
+SupervisorOrchestrator --> StateGraph
+SupervisorOrchestrator --> Planner
+SupervisorOrchestrator --> A2AInvocationService
+SupervisorOrchestrator --> Composer
 Planner --> LlmRuntime
 Composer --> LlmRuntime
 A2AInvocationService --> A2ARegistry
@@ -53,11 +53,11 @@ A2ARegistry --> HostYml
 A2AInvocationService --> ProductAgent
 A2AInvocationService --> ReservationAgent
 A2AInvocationService --> SearchAgent
-HostOrchestrator --> ConversationStore
-HostOrchestrator --> CheckpointStore
+SupervisorOrchestrator --> ConversationStore
+SupervisorOrchestrator --> CheckpointStore
 
-note right of HostOrchestrator
-Host flow
+note right of SupervisorOrchestrator
+Supervisor flow
 - intent planning
 - downstream agent selection
 - A2A call (sync/stream)

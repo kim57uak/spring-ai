@@ -4,6 +4,7 @@ mcp:
       transport: sse
       host: http://10.225.18.50:8080
       endpoint: /sse
+      timeout-ms: 120000
       env: {}
       capabilities:
         - action-execution
@@ -14,6 +15,7 @@ mcp:
       transport: sse
       host: http://10.225.18.50:8080
       endpoint: /sse
+      timeout-ms: 120000
       env: {}
       capabilities:
         - action-execution
@@ -22,6 +24,7 @@ mcp:
     search-mcp-server:
       transport: stdio
       command: ${MCP_NODE_PATH:/opt/homebrew/bin/node}
+      timeout-ms: 120000
       args:
         - ${MCP_SEARCH_SERVER_PATH:/Users/dolpaks/Downloads/project/search-mcp-server/src/server.js}
       env:
@@ -32,6 +35,7 @@ mcp:
     search-economy-index:
       transport: stdio
       command: ${MCP_ECONOMY_PYTHON_PATH:/Users/dolpaks/Downloads/project/search-economy-index/venv/bin/python}
+      timeout-ms: 120000
       args:
         - ${MCP_ECONOMY_SERVER_PATH:/Users/dolpaks/Downloads/project/search-economy-index/run_server.py}
       env:

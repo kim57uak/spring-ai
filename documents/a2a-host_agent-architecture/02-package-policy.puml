@@ -1,34 +1,30 @@
 @startuml
 !pragma layout smetana
-title 02. Host Agent Package Policy (com.example.springai.host)
+title 02. Supervisor Agent Package Policy (com.example.springsupervisorai)
 
 skinparam shadowing false
 skinparam packageStyle rectangle
 
-package "com.example.springai.host" {
+package "com.example.springsupervisorai" {
   package "config" {
-    class HostAgentProperties
-    class A2aHostRoutingProperties
-    class HostObservationConfig
+    class A2aSupervisorRoutingProperties
+    class SupervisorPromptProperties
+    class SupervisorStreamProperties
   }
 
   package "controller" {
-    class HostA2AController
-  }
-
-  package "advice" {
-    class HostExceptionHandler
+    class SupervisorA2AController
   }
 
   package "service" {
-    class HostAgentService
-    class HostAgentOrchestrator
+    class SupervisorAgentService
+    class SupervisorAgentOrchestrator
   }
 
   package "service.agent" {
     package "plan" {
-      interface HostPlanningService
-      class LlmHostPlanningService
+      interface SupervisorPlanningService
+      class LlmSupervisorPlanningService
     }
     package "invoke" {
       interface A2AInvocationService
@@ -36,12 +32,12 @@ package "com.example.springai.host" {
       class A2AClientRegistry
     }
     package "compose" {
-      interface HostResponseComposeService
-      class LlmHostResponseComposeService
+      interface SupervisorResponseComposeService
+      class LlmSupervisorResponseComposeService
     }
     package "graph" {
-      interface HostStateGraphFactory
-      class LangGraphHostStateGraphFactory
+      interface SupervisorStateGraphFactory
+      class LangGraphSupervisorStateGraphFactory
     }
     package "store" {
       interface ConversationStore
@@ -50,11 +46,11 @@ package "com.example.springai.host" {
   }
 
   package "model" {
-    class HostAgentRequest
-    class HostPlanningContext
+    class SupervisorAgentRequest
+    class SupervisorPlanningContext
     class RoutingPlan
     class DownstreamCallResult
-    class HostGraphState
+    class SupervisorGraphState
   }
 
   package "a2a" {
@@ -66,9 +62,9 @@ package "com.example.springai.host" {
 
 note bottom
 Rules
-- Host agent는 하위 agent 내부 구현에 의존하지 않는다
+- Supervisor agent는 하위 agent 내부 구현에 의존하지 않는다
 - 하위 agent 연동은 오직 A2A(JSON-RPC/SSE) 경계로 처리한다
-- HostA2AController는 orchestration 세부를 알지 않는다
+- SupervisorA2AController는 orchestration 세부를 알지 않는다
 - orchestrator는 포트(interface)에만 의존한다
 - Spring AI + LangGraph4J + Redis 구성은 기존 정책과 동일하게 유지한다
 end note

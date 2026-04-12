@@ -1,12 +1,12 @@
-# 13. Host Agent Implementation Roadmap
+# 13. Supervisor Agent Implementation Roadmap
 
-## Phase 1: Host Core
+## Phase 1: Supervisor Core
 
-- `HostA2AController` 단일 진입점 추가
-- `HostAgentService -> HostAgentOrchestrator` 기본 흐름 구현
-- `HostPlanningService`, `HostResponseComposeService` 분리
+- `SupervisorA2AController` 단일 진입점 추가
+- `SupervisorAgentService -> SupervisorAgentOrchestrator` 기본 흐름 구현
+- `SupervisorPlanningService`, `SupervisorResponseComposeService` 분리
 
-## Phase 2: LangGraph Host Flow
+## Phase 2: LangGraph Supervisor Flow
 
 - `plan -> select -> invoke -> merge -> compose` 그래프 구현
 - iteration guard 및 checkpoint resume 적용
@@ -15,7 +15,7 @@
 
 - `A2AClientRegistry` + `A2AJsonRpcClient` 구현
 - downstream agent allowlist/timeout/retry/circuit-breaker 반영
-- `a2a-host.yml` 기반 라우팅 설정 외부화
+- `a2a-supervisor.yml` 기반 라우팅 설정 외부화
 
 ## Phase 4: Production Hardening
 

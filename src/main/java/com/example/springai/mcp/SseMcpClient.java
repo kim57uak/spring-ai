@@ -38,10 +38,10 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SseMcpClient implements McpClient {
 
     private static final Logger logger = LoggerFactory.getLogger(SseMcpClient.class);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(8);
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final Duration requestTimeout;
     private final URI sseEndpointUri;
     private final URI fallbackRpcEndpointUri;
     private final AtomicLong requestId = new AtomicLong(1);
@@ -54,8 +54,9 @@ public class SseMcpClient implements McpClient {
 
     public SseMcpClient(McpProperties.ServerConfig config, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        this.requestTimeout = Duration.ofMillis(Math.max(1_000, config.getTimeoutMs()));
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(REQUEST_TIMEOUT)
+                .connectTimeout(requestTimeout)
                 .build();
         this.sseEndpointUri = buildSseEndpoint(config);
         this.fallbackRpcEndpointUri = buildFallbackRpcEndpoint(config);
@@ -179,7 +180,7 @@ public class SseMcpClient implements McpClient {
         notification.put("params", params);
         String payload = objectMapper.writeValueAsString(notification);
         HttpRequest request = HttpRequest.newBuilder(activePostEndpoint())
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(requestTimeout)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(payload))
                 .build();
@@ -206,7 +207,7 @@ public class SseMcpClient implements McpClient {
         try {
             String body = objectMapper.writeValueAsString(payload);
             HttpRequest request = HttpRequest.newBuilder(activePostEndpoint())
-                    .timeout(REQUEST_TIMEOUT)
+                    .timeout(requestTimeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
@@ -228,7 +229,7 @@ public class SseMcpClient implements McpClient {
                 }
             }
 
-            return responseFuture.get(REQUEST_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+            return responseFuture.get(requestTimeout.toSeconds(), TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             throw new IOException("request timed out", e);
         } catch (Exception e) {
@@ -273,7 +274,7 @@ public class SseMcpClient implements McpClient {
      */
     private void openSseSession() throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(sseEndpointUri)
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(requestTimeout)
                 .header("Accept", "text/event-stream")
                 .GET()
                 .build();
@@ -301,7 +302,7 @@ public class SseMcpClient implements McpClient {
 
     private String readEndpointPath(BufferedReader reader) throws IOException {
         String line;
-        long deadline = System.currentTimeMillis() + REQUEST_TIMEOUT.toMillis();
+        long deadline = System.currentTimeMillis() + requestTimeout.toMillis();
         while ((line = reader.readLine()) != null) {
             if (line.startsWith("data:")) {
                 return line.substring("data:".length()).trim();

@@ -1,0 +1,51 @@
+@startuml
+!pragma layout smetana
+title 06. Supervisor Agent A2A Routing Sequence
+
+skinparam shadowing false
+
+actor User
+participant "SupervisorA2AController" as Controller
+participant "SupervisorAgentService" as Service
+participant "SupervisorAgentOrchestrator" as Orchestrator
+participant "LangGraph CompiledGraph" as StateGraph
+participant "SupervisorPlanningService" as Planner
+participant "A2AInvocationService" as Invoker
+participant "A2AClientRegistry" as Registry
+participant "A2AJsonRpcClient" as A2AClient
+participant "Product Agent A2A" as ProductAgent
+participant "Reservation Agent A2A" as ReservationAgent
+participant "Search Agent A2A" as SearchAgent
+participant "SupervisorResponseComposeService" as Composer
+
+User -> Controller : POST /a2a/supervisor (Accept: text/event-stream)
+Controller -> Service : stream(sessionId, message, model)
+Service -> Orchestrator : execute(request)
+Orchestrator -> StateGraph : invoke(state)
+
+StateGraph -> Planner : plan(context)
+Planner --> StateGraph : routing plans
+StateGraph -> Invoker : invoke(plan, context)
+Invoker -> Registry : resolve(agentKey)
+Registry --> Invoker : endpoint/method/timeout
+Invoker -> A2AClient : call JSON-RPC
+
+alt agentKey=product
+  A2AClient -> ProductAgent : message/send or message/stream
+  ProductAgent --> A2AClient : task/result
+else agentKey=reservation
+  A2AClient -> ReservationAgent : message/send or message/stream
+  ReservationAgent --> A2AClient : task/result
+else agentKey=search
+  A2AClient -> SearchAgent : message/send or message/stream
+  SearchAgent --> A2AClient : task/result
+end
+
+Invoker --> StateGraph : DownstreamCallResult
+StateGraph -> Composer : compose(context + all results)
+Composer --> Orchestrator : response chunks
+Orchestrator --> Service : chunks
+Service --> Controller : chunks
+Controller --> User : SSE stream
+
+@enduml

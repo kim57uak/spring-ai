@@ -1,21 +1,21 @@
 @startuml
 !pragma layout smetana
-title 10. Host Agent Deployment Runtime
+title 10. Supervisor Agent Deployment Runtime
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
-node "Host Agent Spring Boot Runtime" {
-  [HostA2AController] as HostA2AController
-  [HostAgentService] as HostService
-  [HostAgentOrchestrator] as HostOrchestrator
-  [LangGraphHostStateGraphFactory] as GraphFactory
-  [LlmHostPlanningService] as Planner
+node "Supervisor Agent Spring Boot Runtime" {
+  [SupervisorA2AController] as SupervisorA2AController
+  [SupervisorAgentService] as SupervisorService
+  [SupervisorAgentOrchestrator] as SupervisorOrchestrator
+  [LangGraphSupervisorStateGraphFactory] as GraphFactory
+  [LlmSupervisorPlanningService] as Planner
   [DefaultA2AInvocationService] as Invoker
-  [LlmHostResponseComposeService] as Composer
+  [LlmSupervisorResponseComposeService] as Composer
   [A2AClientRegistry] as Registry
   [A2AJsonRpcClient] as A2AClient
-  [DefaultAgentLlmRuntime] as LlmRuntime
+  [DefaultSupervisorLlmRuntime] as LlmRuntime
 }
 
 database "Redis" as Redis {
@@ -31,21 +31,21 @@ node "Downstream A2A Agents" {
   [Search Agent] as SearchAgent
 }
 
-artifact "a2a-host.yml" as HostConfig
+artifact "a2a-supervisor.yml" as SupervisorConfig
 
-HostA2AController --> HostService
-HostService --> HostOrchestrator
-HostOrchestrator --> GraphFactory
-HostOrchestrator --> Planner
-HostOrchestrator --> Invoker
-HostOrchestrator --> Composer
-HostOrchestrator --> ConversationStore
-HostOrchestrator --> CheckpointStore
+SupervisorA2AController --> SupervisorService
+SupervisorService --> SupervisorOrchestrator
+SupervisorOrchestrator --> GraphFactory
+SupervisorOrchestrator --> Planner
+SupervisorOrchestrator --> Invoker
+SupervisorOrchestrator --> Composer
+SupervisorOrchestrator --> ConversationStore
+SupervisorOrchestrator --> CheckpointStore
 Planner --> LlmRuntime
 Composer --> LlmRuntime
 LlmRuntime --> LlmProviders
 Invoker --> Registry
-Registry --> HostConfig
+Registry --> SupervisorConfig
 Invoker --> A2AClient
 A2AClient --> ProductAgent
 A2AClient --> ReservationAgent
