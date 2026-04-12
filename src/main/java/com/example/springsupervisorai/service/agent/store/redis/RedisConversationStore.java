@@ -1,5 +1,7 @@
 package com.example.springsupervisorai.service.agent.store.redis;
 
+import com.example.common.redis.RedisKeyspace;
+import com.example.common.redis.RedisTtlPolicy;
 import com.example.springsupervisorai.service.agent.store.ConversationStore;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -18,8 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RedisConversationStore implements ConversationStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisConversationStore.class);
-    private static final String KEY_PREFIX = "supervisor:conv:";
-    private static final Duration TTL = Duration.ofMinutes(30);
+    private static final String KEY_PREFIX = RedisKeyspace.SUPERVISOR_CONVERSATION_PREFIX;
+    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;

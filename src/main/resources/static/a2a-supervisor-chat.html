@@ -11,21 +11,24 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
   <style>
     :root {
-      --bg-gradient-start: #0a0e27;
-      --bg-gradient-end: #1a1f3a;
-      --surface-glass: rgba(255, 255, 255, 0.03);
-      --border-subtle: rgba(255, 255, 255, 0.08);
-      --text-primary: #f8fafc;
-      --text-secondary: #cbd5e1;
-      --text-muted: #94a3b8;
-      --accent-blue: #60a5fa;
-      --accent-purple: #a78bfa;
-      --accent-gradient: linear-gradient(135deg, #60a5fa, #a78bfa);
-      --success: #34d399;
-      --error: #f87171;
-      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-      --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.5);
+      --bg-primary: #f8f9fa;
+      --bg-secondary: #ffffff;
+      --surface-elevated: #ffffff;
+      --border-light: #e2e8f0;
+      --border-medium: #cbd5e1;
+      --text-primary: #1e293b;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-primary: #3b82f6;
+      --accent-secondary: #8b5cf6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
     }
 
     * {
@@ -40,11 +43,8 @@
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
       color: var(--text-primary);
-      background:
-        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(96, 165, 250, 0.15), transparent),
-        radial-gradient(ellipse 60% 50% at 50% 120%, rgba(167, 139, 250, 0.15), transparent),
-        linear-gradient(180deg, var(--bg-gradient-start), var(--bg-gradient-end));
-      background-attachment: fixed;
+      background: var(--bg-primary);
+      line-height: 1.6;
     }
 
     .app {
@@ -58,18 +58,18 @@
     }
 
     .top {
-      background: var(--surface-glass);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border-subtle);
-      padding: 16px 24px;
+      background: var(--surface-elevated);
+      border-bottom: 1px solid var(--border-light);
+      padding: 20px 32px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 24px;
       flex-wrap: wrap;
       position: sticky;
       top: 0;
       z-index: 100;
+      box-shadow: var(--shadow-sm);
     }
 
     .title {
@@ -79,30 +79,27 @@
     }
 
     .logo {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
       display: grid;
       place-items: center;
-      background: var(--accent-gradient);
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
       box-shadow: var(--shadow-md);
-      font-size: 20px;
+      font-size: 24px;
     }
 
     h1 {
-      font-size: 20px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      background: linear-gradient(135deg, var(--text-primary), var(--text-secondary));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
     }
 
     .subtitle {
       font-size: 13px;
-      color: var(--text-muted);
-      margin-top: 4px;
+      color: var(--text-secondary);
+      margin-top: 2px;
       font-weight: 400;
     }
 
@@ -118,30 +115,35 @@
     }
 
     #model {
-      border: 1px solid var(--border-subtle);
-      background: var(--surface-glass);
-      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-medium);
+      background: var(--bg-secondary);
       color: var(--text-primary);
-      border-radius: 10px;
-      padding: 10px 14px;
+      border-radius: 8px;
+      padding: 10px 16px;
       min-width: 180px;
       font-size: 14px;
       cursor: pointer;
       transition: all 0.2s;
+      font-weight: 500;
     }
 
     #model:hover {
-      border-color: var(--accent-blue);
-      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--accent-primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    #model:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
 
     .btn {
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
       color: var(--text-primary);
-      background: var(--surface-glass);
-      backdrop-filter: blur(10px);
-      padding: 10px 16px;
+      background: var(--bg-secondary);
+      padding: 10px 18px;
       cursor: pointer;
       font-size: 14px;
       font-weight: 500;
@@ -151,61 +153,62 @@
     }
 
     .btn:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: var(--accent-blue);
-      transform: translateY(-1px);
+      background: var(--bg-primary);
+      border-color: var(--accent-primary);
       box-shadow: var(--shadow-sm);
     }
 
     .btn.main {
-      background: var(--accent-gradient);
-      border: none;
+      background: var(--accent-primary);
+      border: 1px solid var(--accent-primary);
       color: white;
       font-weight: 600;
       box-shadow: var(--shadow-md);
     }
 
     .btn.main:hover {
-      transform: translateY(-2px);
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
       box-shadow: var(--shadow-lg);
     }
 
     .chat {
       flex: 1;
       overflow-y: auto;
-      padding: 32px 24px;
+      padding: 40px 32px;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 28px;
       width: 100%;
       max-width: none;
       margin: 0;
     }
 
     .chat::-webkit-scrollbar {
-      width: 8px;
+      width: 10px;
     }
 
     .chat::-webkit-scrollbar-track {
-      background: transparent;
+      background: var(--bg-primary);
     }
 
     .chat::-webkit-scrollbar-thumb {
-      background: var(--border-subtle);
-      border-radius: 4px;
+      background: var(--border-medium);
+      border-radius: 5px;
+      border: 2px solid var(--bg-primary);
     }
 
     .chat::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.15);
+      background: var(--text-muted);
     }
 
     .msg {
       display: flex;
-      gap: 12px;
+      gap: 16px;
       align-items: flex-start;
       animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       width: 100%;
-      max-width: 900px;
+      max-width: 1000px;
       margin: 0 auto;
     }
 
@@ -225,31 +228,29 @@
     }
 
     .avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 12px;
-      border: 1px solid var(--border-subtle);
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border-light);
       display: grid;
       place-items: center;
       flex-shrink: 0;
-      background: var(--surface-glass);
-      backdrop-filter: blur(10px);
-      font-size: 18px;
+      background: var(--bg-secondary);
+      font-size: 20px;
       box-shadow: var(--shadow-sm);
     }
 
     .msg.user .avatar {
-      background: var(--accent-gradient);
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
       border: none;
     }
 
     .bubble {
       max-width: 100%;
-      border-radius: 16px;
-      padding: 16px 20px;
-      background: var(--surface-glass);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 18px 24px;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-light);
       line-height: 1.7;
       font-size: 15px;
       color: var(--text-primary);
@@ -257,8 +258,9 @@
     }
 
     .user .bubble {
-      background: linear-gradient(135deg, rgba(96, 165, 250, 0.15), rgba(167, 139, 250, 0.15));
-      border: 1px solid rgba(96, 165, 250, 0.2);
+      background: var(--surface-elevated);
+      border: 1px solid var(--accent-primary);
+      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1), var(--shadow-sm);
     }
 
     .bubble p {
@@ -266,126 +268,126 @@
     }
 
     .bubble pre {
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
+      background: #f1f5f9;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
       overflow-x: auto;
       padding: 16px;
       margin: 12px 0;
     }
 
     .bubble code {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      padding: 2px 6px;
+      background: #f1f5f9;
+      border-radius: 4px;
+      padding: 3px 7px;
       font-size: 0.9em;
       font-family: "SF Mono", "Consolas", "Monaco", monospace;
+      color: var(--text-primary);
+      border: 1px solid var(--border-light);
     }
 
     .bubble pre code {
       background: transparent;
       padding: 0;
+      border: none;
     }
 
     .supervisor-panel {
-      margin-bottom: 10px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: 1px solid rgba(96, 165, 250, 0.2);
-      background: linear-gradient(135deg, rgba(15, 23, 42, 0.5), rgba(30, 41, 59, 0.4));
+      margin-bottom: 16px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--border-medium);
+      background: #f8fafc;
       transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      box-shadow: var(--shadow-sm);
     }
 
     .supervisor-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 10px;
+      gap: 12px;
+      margin-bottom: 12px;
     }
 
     .supervisor-title {
-      font-size: 11px;
-      color: var(--accent-blue);
+      font-size: 12px;
+      color: var(--accent-primary);
       letter-spacing: 0.05em;
       text-transform: uppercase;
       font-weight: 700;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
     }
 
     .supervisor-title::before {
       content: '⚙️';
-      font-size: 14px;
+      font-size: 16px;
     }
 
     .supervisor-toggle {
-      border: none;
-      background: rgba(96, 165, 250, 0.1);
-      color: var(--accent-blue);
-      font-size: 10px;
+      border: 1px solid var(--border-medium);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 11px;
       cursor: pointer;
-      padding: 4px 8px;
+      padding: 6px 12px;
       border-radius: 6px;
       transition: all 0.2s;
       font-weight: 600;
     }
 
     .supervisor-toggle:hover {
-      background: rgba(96, 165, 250, 0.2);
+      background: var(--bg-primary);
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
     }
 
     .supervisor-progress-bar {
-      height: 4px;
-      background: rgba(96, 165, 250, 0.2);
-      border-radius: 2px;
+      height: 6px;
+      background: var(--border-light);
+      border-radius: 3px;
       overflow: hidden;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
 
     .supervisor-progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
-      border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+      border-radius: 3px;
       transition: width 0.3s ease, background 0.3s ease;
-      box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
     }
 
     .supervisor-progress-fill.completed {
-      background: linear-gradient(90deg, var(--success), #10b981);
-      box-shadow: 0 0 12px rgba(52, 211, 153, 0.8);
+      background: var(--success);
     }
 
     .supervisor-current-stage {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-primary);
-      margin-bottom: 8px;
-      padding: 6px 10px;
-      background: rgba(96, 165, 250, 0.1);
-      border-radius: 8px;
-      border-left: 3px solid var(--accent-blue);
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      border-left: 3px solid var(--accent-primary);
     }
 
     .supervisor-stream {
-      max-height: 120px;
+      max-height: 140px;
       overflow-y: auto;
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.6;
-      color: rgba(203, 213, 225, 0.85);
+      color: var(--text-secondary);
       white-space: pre-wrap;
       font-family: "SF Mono", "Consolas", "Monaco", monospace;
-      background: rgba(0, 0, 0, 0.2);
-      padding: 8px 10px;
+      background: var(--bg-secondary);
+      padding: 10px 12px;
       border-radius: 6px;
-      margin-right: -14px;
-      padding-right: 14px;
-      border-top-right-radius: 0;
-      border-bottom-right-radius: 0;
+      border: 1px solid var(--border-light);
       scrollbar-width: thin;
-      scrollbar-color: rgba(148, 163, 184, 0.24) transparent;
+      scrollbar-color: var(--border-medium) transparent;
     }
 
     .supervisor-stream::-webkit-scrollbar {
@@ -397,12 +399,12 @@
     }
 
     .supervisor-stream::-webkit-scrollbar-thumb {
-      background: rgba(148, 163, 184, 0.24);
-      border-radius: 999px;
+      background: var(--border-medium);
+      border-radius: 3px;
     }
 
     .supervisor-stream:hover::-webkit-scrollbar-thumb {
-      background: rgba(148, 163, 184, 0.38);
+      background: var(--text-muted);
     }
 
     .supervisor-panel.collapsed .supervisor-stream {
@@ -416,6 +418,131 @@
 
     .assistant-answer:empty {
       min-height: 8px;
+    }
+
+    .review-panel {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid var(--warning);
+      background: #fffbeb;
+      display: none;
+    }
+
+    .review-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .review-title::before {
+      content: '👤';
+      font-size: 16px;
+    }
+
+    .review-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .review-progress {
+      display: none;
+      margin: 12px 0;
+      padding: 12px;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      border: 1px solid var(--border-light);
+    }
+
+    .review-progress.active {
+      display: block;
+    }
+
+    .review-progress-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .review-progress-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border-medium);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .review-progress-bar {
+      height: 6px;
+      background: var(--border-light);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .review-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.3s ease;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
+    .review-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn.approve {
+      background: var(--success);
+      border: 1px solid var(--success);
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn.approve:disabled,
+    .btn.cancel:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn.approve:hover:not(:disabled) {
+      background: #059669;
+      border-color: #059669;
+    }
+
+    .btn.cancel {
+      background: var(--error);
+      border: 1px solid var(--error);
+      color: white;
+    }
+
+    .btn.cancel:hover:not(:disabled) {
+      background: #dc2626;
+      border-color: #dc2626;
     }
 
     /* Math Equations */
@@ -507,12 +634,11 @@
     }
 
     .hint {
-      background: var(--surface-glass);
-      backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border-subtle);
-      padding: 12px 24px;
+      background: var(--surface-elevated);
+      border-top: 1px solid var(--border-light);
+      padding: 14px 32px;
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--text-secondary);
       text-align: center;
       position: relative;
       overflow: hidden;
@@ -526,8 +652,8 @@
       width: 0;
       height: 100%;
       background: linear-gradient(90deg,
-        rgba(96, 165, 250, 0.2),
-        rgba(167, 139, 250, 0.2));
+        rgba(59, 130, 246, 0.08),
+        rgba(139, 92, 246, 0.08));
       transition: width 0.3s ease;
       z-index: 0;
       opacity: 0;
@@ -535,39 +661,6 @@
 
     #status-progress.active {
       opacity: 1;
-      animation: shimmer 2s infinite;
-    }
-
-    @keyframes shimmer {
-      0% {
-        background-position: -200px 0;
-      }
-      100% {
-        background-position: 200px 0;
-      }
-    }
-
-    #status-progress.active::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg,
-        transparent,
-        rgba(255, 255, 255, 0.1),
-        transparent);
-      animation: progressShine 1.5s infinite;
-    }
-
-    @keyframes progressShine {
-      0% {
-        left: -100%;
-      }
-      100% {
-        left: 200%;
-      }
     }
 
     #status {
@@ -576,12 +669,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
     }
 
     .status-indicator {
-      width: 6px;
-      height: 6px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       background: var(--text-muted);
       opacity: 0;
@@ -594,19 +687,19 @@
     }
 
     .status-indicator.streaming {
-      background: var(--accent-blue);
-      box-shadow: 0 0 8px rgba(96, 165, 250, 0.6);
+      background: var(--accent-primary);
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
     }
 
     .status-indicator.complete {
       background: var(--success);
-      box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
       animation: none;
     }
 
     .status-indicator.error {
       background: var(--error);
-      box-shadow: 0 0 8px rgba(248, 113, 113, 0.6);
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
       animation: none;
     }
 
@@ -622,17 +715,16 @@
     }
 
     .input {
-      background: var(--surface-glass);
-      backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border-subtle);
-      padding: 20px 24px;
+      background: var(--surface-elevated);
+      border-top: 1px solid var(--border-light);
+      padding: 24px 32px;
     }
 
     .input-row {
       display: flex;
       gap: 12px;
       align-items: flex-end;
-      max-width: 900px;
+      max-width: 1000px;
       margin: 0 auto;
     }
 
@@ -641,11 +733,11 @@
       min-height: 56px;
       max-height: 200px;
       resize: vertical;
-      border: 1px solid var(--border-subtle);
-      border-radius: 14px;
+      border: 1px solid var(--border-medium);
+      border-radius: 10px;
       padding: 14px 18px;
       color: var(--text-primary);
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--bg-secondary);
       font-size: 15px;
       line-height: 1.5;
       transition: all 0.2s;
@@ -653,9 +745,9 @@
 
     #prompt:focus {
       outline: none;
-      border-color: var(--accent-blue);
-      background: rgba(255, 255, 255, 0.08);
-      box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+      border-color: var(--accent-primary);
+      background: var(--bg-secondary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
 
     #prompt::placeholder {
@@ -700,10 +792,10 @@
   <main class="app">
     <header class="top">
       <div class="title">
-        <div class="logo">🧭</div>
+        <div class="logo">🤖</div>
         <div>
-          <h1>A2A Supervisor Chat</h1>
-          <div class="subtitle">Independent UI • /a2a/supervisor/stream • JSON-RPC over SSE</div>
+          <h1>A2A Supervisor</h1>
+          <div class="subtitle">Enterprise AI Assistant • Real-time Streaming</div>
         </div>
       </div>
       <div class="tools">
@@ -715,9 +807,9 @@
           <option value="mistral">Mistral</option>
           <option value="mistral-large-latest">Mistral Large Latest</option>
         </select>
-        <button class="btn" id="stopBtn">Stop</button>
-        <button class="btn" id="clearBtn">Clear</button>
-        <a class="btn" href="/index.html">Hub</a>
+        <button class="btn" id="stopBtn">중지</button>
+        <button class="btn" id="clearBtn">초기화</button>
+        <a class="btn" href="/index.html">홈</a>
       </div>
     </header>
 
@@ -726,14 +818,14 @@
       <div id="status-progress"></div>
       <div id="status">
         <span class="status-indicator" id="status-indicator"></span>
-        <span id="status-text">Ready</span>
+        <span id="status-text">준비됨</span>
       </div>
     </div>
 
     <section class="input">
       <div class="input-row">
-        <textarea id="prompt" placeholder="Supervisor에게 보낼 메시지를 입력하세요. (Enter 전송 / Shift+Enter 줄바꿈)"></textarea>
-        <button class="btn main" id="sendBtn">Send</button>
+        <textarea id="prompt" placeholder="메시지를 입력하세요... (Enter: 전송 / Shift+Enter: 줄바꿈)"></textarea>
+        <button class="btn main" id="sendBtn">전송</button>
       </div>
     </section>
   </main>
@@ -816,6 +908,23 @@
           <div class="supervisor-current-stage"></div>
           <div class="supervisor-stream"></div>
         </div>
+        <div class="review-panel">
+          <div class="review-title">HITL 승인 대기</div>
+          <div class="review-desc"></div>
+          <div class="review-progress">
+            <div class="review-progress-label">
+              <div class="review-progress-spinner"></div>
+              <span class="review-progress-text">처리 중...</span>
+            </div>
+            <div class="review-progress-bar">
+              <div class="review-progress-fill"></div>
+            </div>
+          </div>
+          <div class="review-actions">
+            <button class="btn approve" type="button">승인(APPROVE)</button>
+            <button class="btn cancel" type="button">취소(CANCEL)</button>
+          </div>
+        </div>
         <div class="assistant-answer"></div>
       `;
 
@@ -825,13 +934,24 @@
       const answer = bubble.querySelector('.assistant-answer');
       const progressFill = bubble.querySelector('.supervisor-progress-fill');
       const currentStage = bubble.querySelector('.supervisor-current-stage');
+      const reviewPanel = bubble.querySelector('.review-panel');
+      const reviewDesc = bubble.querySelector('.review-desc');
+      const reviewProgress = bubble.querySelector('.review-progress');
+      const reviewProgressText = bubble.querySelector('.review-progress-text');
+      const reviewProgressFill = bubble.querySelector('.review-progress-fill');
+      const approveBtn = bubble.querySelector('.btn.approve');
+      const cancelBtn = bubble.querySelector('.btn.cancel');
 
       toggle.addEventListener('click', () => {
         panel.classList.toggle('collapsed');
         toggle.textContent = panel.classList.contains('collapsed') ? '펼치기' : '접기';
       });
 
-      return { bubble, panel, stream, toggle, answer, progressFill, currentStage };
+      return {
+        bubble, panel, stream, toggle, answer, progressFill, currentStage,
+        reviewPanel, reviewDesc, reviewProgress, reviewProgressText, reviewProgressFill,
+        approveBtn, cancelBtn
+      };
     }
 
     function renderAssistantMarkdown(target, text) {
@@ -1007,6 +1127,7 @@
         initializing: '🚀 초기화',
         analyzing: '🔍 분석',
         planning: '📋 계획',
+        hitl_waiting: '🧑 검토 대기',
         routing: '🎯 라우팅',
         invoking: '⚡ 실행',
         composing: '✨ 합성',
@@ -1014,6 +1135,179 @@
         error: '❌ 오류'
       };
       return labels[stage] || stage;
+    }
+
+    async function rpcCall(method, params) {
+      const body = {
+        jsonrpc: '2.0',
+        id: `ui-rpc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        method,
+        params
+      };
+      const res = await fetch('/a2a/supervisor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    }
+
+    async function findLatestWaitingTaskId() {
+      const listRes = await rpcCall('tasks/list', { limit: 30 });
+      const tasks = listRes?.result?.tasks || [];
+      const waiting = tasks.find(t => t.status === 'WAITING_REVIEW');
+      return waiting?.id || '';
+    }
+
+    async function handleReviewDecision(ai, taskId, decision) {
+      // 버튼 비활성화
+      ai.approveBtn.disabled = true;
+      ai.cancelBtn.disabled = true;
+
+      // 프로그레스 바 표시
+      ai.reviewProgress.classList.add('active');
+      ai.reviewProgressText.textContent = decision === 'APPROVE' ? '승인 처리 중...' : '취소 처리 중...';
+      ai.reviewProgressFill.style.width = '30%';
+
+      if (decision === 'APPROVE') {
+        setStatus('승인 후 실행 시작...', 'streaming');
+      }
+
+      try {
+        // 50% 진행
+        ai.reviewProgressFill.style.width = '50%';
+
+        const decideRes = await rpcCall('tasks/review/decide', {
+          id: taskId,
+          decision,
+          reason: decision === 'APPROVE' ? 'approved_from_ui' : 'canceled_from_ui',
+          decisionId: `ui-decision-${Date.now()}`
+        });
+
+        // 70% 진행
+        ai.reviewProgressFill.style.width = '70%';
+
+        if (decideRes?.error) {
+          ai.reviewProgress.classList.remove('active');
+          ai.reviewDesc.textContent = `결정 실패: ${decideRes.error.message || 'unknown error'}`;
+          ai.approveBtn.disabled = false;
+          ai.cancelBtn.disabled = false;
+          return;
+        }
+
+        const task = decideRes?.result?.task;
+        const review = decideRes?.result?.review;
+
+        // 90% 진행
+        ai.reviewProgressFill.style.width = '90%';
+        ai.reviewProgressText.textContent = '결과 처리 중...';
+
+        ai.reviewDesc.textContent = `결정 완료: ${review?.status || decision}`;
+        if (task?.response) {
+          const parsed = splitSupervisorPayload(String(task.response));
+          if (parsed.logs.length > 0) {
+            ai.panel.style.display = 'block';
+            ai.panel.classList.remove('collapsed');
+            ai.toggle.textContent = '접기';
+            await replaySupervisorLogs(ai, parsed.logs);
+          }
+          if (parsed.answer.trim().length > 0) {
+            renderAssistantMarkdown(ai.answer, parsed.answer.trim());
+            await enhanceBubble(ai.answer);
+          }
+        } else if (decision === 'CANCEL') {
+          renderAssistantMarkdown(ai.answer, '요청이 검토 단계에서 취소되었습니다.');
+        }
+
+        // 100% 완료
+        ai.reviewProgressFill.style.width = '100%';
+        ai.reviewProgressText.textContent = '완료';
+
+        // 1초 후 프로그레스 바 숨기기
+        setTimeout(() => {
+          ai.reviewProgress.classList.remove('active');
+          ai.approveBtn.style.display = 'none';
+          ai.cancelBtn.style.display = 'none';
+        }, 1000);
+
+        setStatus(`Review ${decision} 완료`, 'complete');
+      } catch (e) {
+        ai.reviewProgress.classList.remove('active');
+        ai.reviewDesc.textContent = `결정 처리 실패: ${e.message}`;
+        ai.approveBtn.disabled = false;
+        ai.cancelBtn.disabled = false;
+      }
+    }
+
+    function splitSupervisorPayload(payload) {
+      const lines = String(payload || '').split('\n');
+      const logs = [];
+      const answerLines = [];
+      for (const raw of lines) {
+        const line = raw.trimEnd();
+        if (line.trim().startsWith('[supervisor]')) {
+          logs.push(line.trim());
+        } else {
+          answerLines.push(raw);
+        }
+      }
+      return {
+        logs,
+        answer: answerLines.join('\n')
+      };
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function replaySupervisorLogs(ai, logs) {
+      ai.stream.textContent = '';
+      ai.progressFill.classList.remove('completed');
+      let lastProgress = 0;
+
+      for (const line of logs) {
+        ai.stream.textContent += (ai.stream.textContent ? '\n' : '') + line;
+        ai.stream.scrollTop = ai.stream.scrollHeight;
+
+        const progress = parseSupervisorProgress(line);
+        if (progress) {
+          const pct = Math.max(lastProgress, Math.min(100, progress.progress));
+          lastProgress = pct;
+          ai.progressFill.style.width = `${pct}%`;
+          ai.currentStage.textContent = `${getStageLabel(progress.stage)} - ${progress.message}`;
+          statusProgressEl.classList.add('active');
+          statusProgressEl.style.width = `${pct}%`;
+          statusTextEl.textContent = `${getStageLabel(progress.stage)} (${pct}%)`;
+          statusIndicatorEl.className = 'status-indicator active streaming';
+          if (pct >= 100 || progress.stage === 'completed') {
+            ai.progressFill.classList.add('completed');
+            statusIndicatorEl.className = 'status-indicator active complete';
+            statusProgressEl.classList.remove('active');
+          }
+        }
+        await sleep(90);
+      }
+    }
+
+    async function showHitlReviewPanel(ai, reason) {
+      const taskId = await findLatestWaitingTaskId();
+      if (!taskId) {
+        ai.reviewPanel.style.display = 'block';
+        ai.reviewDesc.textContent = '리뷰 대기 task를 찾지 못했습니다. 잠시 후 다시 시도해주세요.';
+        ai.approveBtn.disabled = true;
+        ai.cancelBtn.disabled = true;
+        return;
+      }
+      ai.reviewPanel.style.display = 'block';
+      ai.reviewDesc.textContent = `taskId=${taskId}${reason ? `, reason=${reason}` : ''}`;
+      ai.approveBtn.style.display = '';
+      ai.cancelBtn.style.display = '';
+      ai.approveBtn.disabled = false;
+      ai.cancelBtn.disabled = false;
+      ai.approveBtn.onclick = () => handleReviewDecision(ai, taskId, 'APPROVE');
+      ai.cancelBtn.onclick = () => handleReviewDecision(ai, taskId, 'CANCEL');
     }
 
     async function send() {
@@ -1025,7 +1319,7 @@
       promptEl.value = '';
       streaming = true;
       abortController = new AbortController();
-      setStatus('Sending...', 'streaming');
+      setStatus('전송 중...', 'streaming');
 
       const ai = createAiResponseShell();
       let acc = '';
@@ -1033,6 +1327,31 @@
       let lineBuffer = '';
       let answerStarted = false;
       let lastProgress = 0;
+      let waitingReviewDetected = false;
+      let streamedAnswer = '';
+      let pendingChars = '';
+      let typewriterRunning = false;
+
+      const pumpTypewriter = async () => {
+        if (typewriterRunning) return;
+        typewriterRunning = true;
+        while (pendingChars.length > 0) {
+          const batchSize = Math.min(6, pendingChars.length);
+          const batch = pendingChars.slice(0, batchSize);
+          pendingChars = pendingChars.slice(batchSize);
+          streamedAnswer += batch;
+          renderAssistantMarkdown(ai.answer, streamedAnswer);
+          chatEl.scrollTop = chatEl.scrollHeight;
+          await sleep(8);
+        }
+        typewriterRunning = false;
+      };
+
+      const enqueueAssistantChars = (text) => {
+        if (!text) return;
+        pendingChars += text;
+        void pumpTypewriter();
+      };
 
       try {
         const requestId = `ui-${Date.now()}`;
@@ -1067,7 +1386,7 @@
           throw new Error(`Non-SSE response: ${body}`);
         }
 
-        setStatus('Streaming...', 'streaming');
+        setStatus('응답 수신 중...', 'streaming');
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -1089,7 +1408,8 @@
               try { chunk = JSON.parse(data); } catch (e) {}
               lineBuffer += String(chunk);
               const lines = lineBuffer.split('\n');
-              lineBuffer = lines.pop() || '';
+              const trailing = lines.pop() || '';
+              lineBuffer = '';
 
               let assistantDelta = '';
               for (const rawLine of lines) {
@@ -1099,7 +1419,7 @@
 
                   // 진행 상황 파싱 및 UI 업데이트
                   const progress = parseSupervisorProgress(line.trim());
-                  if (progress) {
+                    if (progress) {
                     // 진행률 업데이트
                     ai.progressFill.style.width = `${progress.progress}%`;
                     lastProgress = progress.progress;
@@ -1111,7 +1431,11 @@
                     }
 
                     // 현재 단계 표시
-                    ai.currentStage.textContent = `${getStageLabel(progress.stage)} - ${progress.message}`;
+                      ai.currentStage.textContent = `${getStageLabel(progress.stage)} - ${progress.message}`;
+                      if (progress.stage === 'hitl_waiting') {
+                        waitingReviewDetected = true;
+                        await showHitlReviewPanel(ai, progress.message);
+                      }
 
                     // 하단 상태바 업데이트
                     setStatus(`${getStageLabel(progress.stage)} (${progress.progress}%)`,
@@ -1119,6 +1443,14 @@
                   }
                 } else if (line.length > 0) {
                   assistantDelta += rawLine + '\n';
+                }
+              }
+
+              if (trailing.length > 0) {
+                if (trailing.trim().startsWith('[supervisor]')) {
+                  lineBuffer = trailing;
+                } else {
+                  assistantDelta += trailing;
                 }
               }
 
@@ -1137,7 +1469,7 @@
                   ai.toggle.textContent = '펼치기';
                 }
                 acc += assistantDelta;
-                renderAssistantMarkdown(ai.answer, acc);
+                enqueueAssistantChars(assistantDelta);
               }
 
               chatEl.scrollTop = chatEl.scrollHeight;
@@ -1150,41 +1482,53 @@
                 const parsedErr = JSON.parse(data);
                 msg = parsedErr?.error?.message || parsedErr?.message || data;
               } catch (e) {}
-              acc += `\n\n[오류] ${msg}`;
-              renderAssistantMarkdown(ai.answer, acc);
+              const errorDelta = `\n\n[오류] ${msg}`;
+              acc += errorDelta;
+              enqueueAssistantChars(errorDelta);
               continue;
             }
 
             if (event === 'done') {
-              setStatus('Completed', 'complete');
+              setStatus('완료', 'complete');
             }
           }
         }
 
-        const remainder = lineBuffer.trim();
-        if (remainder.startsWith('[supervisor]')) {
-          supervisorLogs.push(remainder);
+        const remainder = lineBuffer;
+        const trimmedRemainder = remainder.trim();
+        if (trimmedRemainder.startsWith('[supervisor]')) {
+          supervisorLogs.push(trimmedRemainder);
           ai.panel.style.display = 'block';
           ai.stream.textContent = supervisorLogs.join('\n');
         } else if (remainder.length > 0) {
           acc += remainder;
+          enqueueAssistantChars(remainder);
+        }
+
+        while (typewriterRunning || pendingChars.length > 0) {
+          await sleep(10);
         }
 
         if (!acc) {
-          ai.answer.innerText = '[응답 없음] 스트림에서 chunk를 받지 못했습니다.';
-          setStatus('No chunks received', 'error');
+          if (waitingReviewDetected) {
+            ai.answer.innerText = '요청이 HITL 승인 대기 상태입니다. 아래 버튼으로 승인/취소를 선택하세요.';
+            setStatus('HITL 대기 중', 'streaming');
+          } else {
+            ai.answer.innerText = '[응답 없음] 스트림에서 chunk를 받지 못했습니다.';
+            setStatus('응답 없음', 'error');
+          }
         } else {
           renderAssistantMarkdown(ai.answer, acc);
           await enhanceBubble(ai.answer);
-          setStatus('Completed', 'complete');
+          setStatus('완료', 'complete');
         }
       } catch (e) {
         if (e.name === 'AbortError') {
-          setStatus('Stopped', 'ready');
+          setStatus('중지됨', 'ready');
           if (!acc) ai.answer.innerText = '[중단됨]';
         } else {
-          ai.answer.innerText = `Error: ${e.message}`;
-          setStatus(`Error: ${e.message}`, 'error');
+          ai.answer.innerText = `오류: ${e.message}`;
+          setStatus(`오류: ${e.message}`, 'error');
         }
       } finally {
         streaming = false;
@@ -1201,10 +1545,10 @@
         if (abortController) abortController.abort();
         await fetch('/a2a/supervisor/clear', { method: 'POST' });
         chatEl.innerHTML = '';
-        setStatus('Cleared', 'ready');
+        setStatus('초기화됨', 'ready');
         addMessage('ai', '세션 히스토리를 초기화했습니다.');
       } catch (e) {
-        setStatus(`Clear failed: ${e.message}`, 'error');
+        setStatus(`초기화 실패: ${e.message}`, 'error');
       }
     });
     promptEl.addEventListener('keydown', (e) => {
@@ -1215,7 +1559,7 @@
       }
     });
 
-    addMessage('ai', '안녕하세요. Supervisor A2A 스트리밍 채팅 화면입니다.');
+    addMessage('ai', '안녕하세요. A2A Supervisor에 오신 것을 환영합니다. 무엇을 도와드릴까요?');
 
     // 페이지 로드 시 라이브러리 확인
     window.addEventListener('load', () => {

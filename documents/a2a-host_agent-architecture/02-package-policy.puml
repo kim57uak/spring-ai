@@ -39,15 +39,23 @@ package "com.example.springsupervisorai" {
       interface SupervisorStateGraphFactory
       class LangGraphSupervisorStateGraphFactory
     }
+    package "hitl" {
+      interface HitlPolicyService
+      interface HitlDecisionService
+    }
     package "store" {
       interface ConversationStore
       interface GraphCheckpointStore
+      interface SupervisorSwarmStateStore
+      interface SupervisorReviewStore
     }
   }
 
   package "model" {
     class SupervisorAgentRequest
     class SupervisorPlanningContext
+    class SwarmSharedState
+    class HitlReviewContext
     class RoutingPlan
     class DownstreamCallResult
     class SupervisorGraphState
@@ -69,4 +77,9 @@ Rules
 - Spring AI + LangGraph4J + Redis 구성은 기존 정책과 동일하게 유지한다
 end note
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

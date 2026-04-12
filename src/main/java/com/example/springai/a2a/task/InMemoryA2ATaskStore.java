@@ -1,6 +1,7 @@
 package com.example.springai.a2a.task;
 
 import com.example.springai.model.agent.AgentScopeName;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -15,6 +16,7 @@ import java.util.concurrent.ConcurrentMap;
  * 로컬 실행 및 테스트용 {@link A2ATaskStore} 인메모리 구현체.
  */
 @Component
+@ConditionalOnProperty(name = "app.redis.enabled", havingValue = "false", matchIfMissing = true)
 public class InMemoryA2ATaskStore implements A2ATaskStore {
 
     private final ConcurrentMap<String, A2aTaskSnapshot> tasks = new ConcurrentHashMap<>();

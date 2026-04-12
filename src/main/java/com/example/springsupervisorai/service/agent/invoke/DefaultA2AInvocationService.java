@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -99,7 +100,7 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
                 JsonRpcRequest candidateRequest = requestMapper.toJsonRpcRequest(plan, context, candidateMethod);
                 try {
                     if (SupervisorA2aMethod.from(candidateMethod).map(SupervisorA2aMethod::isStream).orElse(false)) {
-                        String streamPayload = jsonRpcClient.callStream(candidateTarget, candidateRequest);
+                        String streamPayload = jsonRpcClient.callStream(candidateTarget, candidateRequest, context.getSessionId());
                         markSuccess(plan.agentKey());
                         logger.info("Supervisor invoke success sessionId={}, agentKey={}, method={}",
                                 context.getSessionId(), plan.agentKey(), candidateMethod);
@@ -112,7 +113,7 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
                                 ""
                         );
                     }
-                    JsonNode response = jsonRpcClient.call(candidateTarget, candidateRequest);
+                    JsonNode response = jsonRpcClient.call(candidateTarget, candidateRequest, context.getSessionId());
                     DownstreamCallResult result = normalize(plan.agentKey(), response);
                     if (isMethodNotFound(result) && index < methodCandidates.size() - 1) {
                         logger.warn("Supervisor invoke method fallback sessionId={}, agentKey={}, fromMethod={}, toMethod={}",
@@ -125,6 +126,10 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
                     return result;
                 } catch (RuntimeException ex) {
                     lastError = ex;
+                    if (isTimeout(ex)) {
+                        // 타임아웃 발생 시 동일 세션 컨텍스트를 가진 downstream 상태를 정리해 후속 요청에 누수가 없게 한다.
+                        jsonRpcClient.clearSession(candidateTarget, context.getSessionId());
+                    }
                     logger.warn("Supervisor invoke attempt failed sessionId={}, agentKey={}, method={}, attempt={}, error={}",
                             context.getSessionId(), plan.agentKey(), candidateMethod, attempt + 1, ex.getMessage());
                 }
@@ -161,6 +166,21 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private boolean isTimeout(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof TimeoutException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && (message.contains("timed out") || message.contains("Timeout on blocking read"))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /**

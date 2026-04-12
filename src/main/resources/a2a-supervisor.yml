@@ -25,5 +25,8 @@ host:
       enabled: true
       failure-threshold: 3
       open-duration-ms: 30000
+    execution:
+      # 1이면 순차, 2 이상이면 최대 동시 호출 수
+      max-concurrency: 2
     stream:
       timeout-ms: 120000

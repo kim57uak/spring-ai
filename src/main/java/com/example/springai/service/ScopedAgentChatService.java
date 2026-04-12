@@ -6,10 +6,10 @@ import com.example.springai.model.agent.AgentScope;
 import com.example.springai.service.agent.orchestrator.AgentOrchestrator;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 스코프 기반 채팅 요청을 오케스트레이터로 전달하는 서비스 진입점.
@@ -18,7 +18,7 @@ import java.util.List;
 @Service
 public class ScopedAgentChatService {
 
-    private static final Duration SYNC_TIMEOUT = Duration.ofSeconds(120);
+    private static final Duration SYNC_TIMEOUT = Duration.ofSeconds(90);
     private final AgentOrchestrator agentOrchestrator;
 
     public ScopedAgentChatService(AgentOrchestrator agentOrchestrator) {
@@ -68,10 +68,28 @@ public class ScopedAgentChatService {
             AgentScope scope,
             A2aExecutionContext a2aContext
     ) {
-        return streamChat(sessionId, message, modelType, scope, a2aContext)
-                .collectList()
-                .map(this::joinChunks)
-                .block(SYNC_TIMEOUT);
+        try {
+            return streamChat(sessionId, message, modelType, scope, a2aContext)
+                    .collectList()
+                    .map(this::joinChunks)
+                    .block(SYNC_TIMEOUT);
+        } catch (RuntimeException ex) {
+            if (isTimeout(ex)) {
+                return "[ERROR][AGENT_SYNC_TIMEOUT] chat timed out after " + SYNC_TIMEOUT.toSeconds() + "s";
+            }
+            throw ex;
+        }
+    }
+
+    private boolean isTimeout(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof TimeoutException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     public void clearSession(String sessionId) {

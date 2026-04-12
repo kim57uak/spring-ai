@@ -21,8 +21,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Supervisor 라우팅 계획을 LLM 프롬프트로 생성하는 planner 구현체.
@@ -96,8 +98,12 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
         List<String> allowedAgentKeys = routingProperties.getRouting().keySet().stream().toList();
         String allowedAgents = String.join(", ", allowedAgentKeys);
         String agentCards = downstreamAgentCardCache.summarizeForPrompt(allowedAgentKeys);
-        String recentHistory = context.getHistory().stream().skip(Math.max(0, context.getHistory().size() - 6))
+
+        // 히스토리를 최대 4개로 제한하여 적절한 컨텍스트 유지 및 과의존 방지
+        String recentHistory = context.getHistory().stream()
+                .skip(Math.max(0, context.getHistory().size() - 4))
                 .reduce("", (acc, value) -> acc.isBlank() ? value : acc + "\n" + value);
+
         String protectedUserMessage = promptInjectionGuard.protectUserInput(context.getUserMessage());
         String protectedHistory = promptInjectionGuard.protectHistory(recentHistory);
 
@@ -204,13 +210,15 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
         if (node == null || !node.isObject()) {
             return null;
         }
-        String agentKey = firstNonBlank(
+        String rawAgentKey = firstNonBlank(
                 node.path("agentKey").asText(""),
                 node.path("agent").asText(""),
                 node.path("targetAgent").asText(""),
                 node.path("scope").asText("")
         );
-        if (!routingProperties.getRouting().containsKey(agentKey)) {
+        String agentKey = resolveAgentKey(rawAgentKey);
+        if (agentKey.isBlank()) {
+            logger.debug("Supervisor planning dropped plan: unknown agentKey raw={}", safe(rawAgentKey));
             return null;
         }
 
@@ -231,6 +239,41 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
         }
         Map<String, Object> arguments = readArguments(argumentsNode);
         return new RoutingPlan(agentKey, method, reason, priority, arguments);
+    }
+
+    /**
+     * planner가 반환한 agentKey를 라우팅 설정 키로 정규화한다.
+     * - 대소문자 차이(Product/product)
+     * - 접미사(agent/product-agent)
+     * 를 허용해 유효 계획이 파싱 단계에서 탈락하지 않도록 한다.
+     */
+    private String resolveAgentKey(String rawAgentKey) {
+        String candidate = normalizeAgentToken(rawAgentKey);
+        if (candidate.isBlank()) {
+            return "";
+        }
+        if (routingProperties.getRouting().containsKey(candidate)) {
+            return candidate;
+        }
+
+        Map<String, String> normalizedKeyToCanonical = routingProperties.getRouting().keySet().stream()
+                .collect(Collectors.toMap(this::normalizeAgentToken, key -> key, (left, right) -> left, LinkedHashMap::new));
+        return normalizedKeyToCanonical.getOrDefault(candidate, "");
+    }
+
+    private String normalizeAgentToken(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        if (normalized.endsWith("-agent")) {
+            normalized = normalized.substring(0, normalized.length() - 6);
+        } else if (normalized.endsWith(" agent")) {
+            normalized = normalized.substring(0, normalized.length() - 6);
+        } else if (normalized.endsWith("agent") && normalized.length() > 5) {
+            normalized = normalized.substring(0, normalized.length() - 5);
+        }
+        return normalized.trim();
     }
 
     private Map<String, Object> readArguments(JsonNode node) {

@@ -42,6 +42,10 @@ public class A2ARequestMapper {
             case GET_TASK, TASKS_GET -> new com.example.springsupervisorai.a2a.dto.TaskQueryParams(readString(plan.arguments(), "id"));
             case CANCEL_TASK, TASKS_CANCEL -> new TaskIdParams(readString(plan.arguments(), "id"), readString(plan.arguments(), "reason"));
             case LIST_TASKS, TASKS_LIST -> new TasksListParams(readInt(plan.arguments(), "limit", 20));
+            case GET_TASK_REVIEW, TASKS_REVIEW_GET ->
+                    new com.example.springsupervisorai.a2a.dto.TaskQueryParams(readString(plan.arguments(), "id"));
+            case DECIDE_TASK_REVIEW, TASKS_REVIEW_DECIDE ->
+                    new TaskIdParams(readString(plan.arguments(), "id"), readString(plan.arguments(), "reason"));
             case SEND_MESSAGE -> buildSendMessageParams(plan, context);
             case SEND_STREAMING_MESSAGE -> buildSendMessageParams(plan, context);
             case MESSAGE_STREAM, MESSAGE_SEND -> buildTaskSendParams(plan, context);

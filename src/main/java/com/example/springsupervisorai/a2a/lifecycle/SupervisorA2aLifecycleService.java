@@ -21,6 +21,19 @@ public class SupervisorA2aLifecycleService {
         return taskStore.markRunning(created.taskId()).orElse(created);
     }
 
+    /**
+     * task를 생성하고 HITL 리뷰 대기 상태로 전이한다.
+     *
+     * @param sessionId 세션 id
+     * @param requestMessage 사용자 요청 원문
+     * @param reason 리뷰 대기 사유
+     * @return 대기 상태 task 스냅샷
+     */
+    public A2aTaskSnapshot createAndMarkWaitingReview(String sessionId, String requestMessage, String reason) {
+        A2aTaskSnapshot created = taskStore.create(sessionId, requestMessage);
+        return taskStore.markWaitingReview(created.taskId(), reason).orElse(created);
+    }
+
     public Optional<A2aTaskSnapshot> get(String taskId) {
         return taskStore.get(taskId);
     }
@@ -73,6 +86,15 @@ public class SupervisorA2aLifecycleService {
 
     public void markCompleted(String taskId, String responsePayload) {
         taskStore.markCompleted(taskId, responsePayload);
+    }
+
+    /**
+     * task를 RUNNING 상태로 전이한다.
+     *
+     * @param taskId task id
+     */
+    public void markRunning(String taskId) {
+        taskStore.markRunning(taskId);
     }
 
     public void markFailed(String taskId, String code, String message) {

@@ -1,12 +1,13 @@
 package com.example.springai.service.agent.store.redis;
 
+import com.example.common.redis.RedisKeyspace;
+import com.example.common.redis.RedisTtlPolicy;
 import com.example.springai.service.agent.store.GraphCheckpointStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,8 +21,8 @@ import java.util.function.Supplier;
 public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisGraphCheckpointStore.class);
-    private static final String KEY_PREFIX = "agent:ckpt:";
-    private static final Duration TTL = Duration.ofMinutes(30);
+    private static final String KEY_PREFIX = RedisKeyspace.AGENT_CHECKPOINT_PREFIX;
+    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final Map<String, String> localFallback = new ConcurrentHashMap<>();

@@ -13,6 +13,8 @@ node "Supervisor Agent Spring Boot Runtime" {
   [LlmSupervisorPlanningService] as Planner
   [DefaultA2AInvocationService] as Invoker
   [LlmSupervisorResponseComposeService] as Composer
+  [DefaultHitlPolicyService] as HitlPolicy
+  [DefaultHitlDecisionService] as HitlDecision
   [A2AClientRegistry] as Registry
   [A2AJsonRpcClient] as A2AClient
   [DefaultSupervisorLlmRuntime] as LlmRuntime
@@ -21,6 +23,7 @@ node "Supervisor Agent Spring Boot Runtime" {
 database "Redis" as Redis {
   [RedisConversationStore] as ConversationStore
   [RedisGraphCheckpointStore] as CheckpointStore
+  [RedisSupervisorSwarmStateStore] as SwarmStateStore
 }
 
 cloud "LLM Providers" as LlmProviders
@@ -39,8 +42,11 @@ SupervisorOrchestrator --> GraphFactory
 SupervisorOrchestrator --> Planner
 SupervisorOrchestrator --> Invoker
 SupervisorOrchestrator --> Composer
+SupervisorOrchestrator --> HitlPolicy
+SupervisorOrchestrator --> HitlDecision
 SupervisorOrchestrator --> ConversationStore
 SupervisorOrchestrator --> CheckpointStore
+SupervisorOrchestrator --> SwarmStateStore
 Planner --> LlmRuntime
 Composer --> LlmRuntime
 LlmRuntime --> LlmProviders
@@ -51,4 +57,9 @@ A2AClient --> ProductAgent
 A2AClient --> ReservationAgent
 A2AClient --> SearchAgent
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

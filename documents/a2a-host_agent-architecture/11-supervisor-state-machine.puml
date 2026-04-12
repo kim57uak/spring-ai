@@ -7,7 +7,13 @@ skinparam shadowing false
 [*] --> REQUEST_VALIDATED
 REQUEST_VALIDATED --> HISTORY_LOADED
 HISTORY_LOADED --> PLANNED
-PLANNED --> ROUTING_SELECTED
+PLANNED --> HITL_EVALUATING
+HITL_EVALUATING --> HITL_WAITING : review required
+HITL_EVALUATING --> ROUTING_SELECTED : review not required
+HITL_WAITING --> HITL_APPROVED : decision=APPROVE
+HITL_WAITING --> HITL_CANCELED : decision=CANCEL
+HITL_APPROVED --> ROUTING_SELECTED
+HITL_CANCELED --> COMPLETED
 
 ROUTING_SELECTED --> A2A_CALLING : plans exist
 ROUTING_SELECTED --> COMPOSING : no plan
@@ -28,4 +34,16 @@ Per-call policy
 - circuit breaker
 end note
 
+note left of HITL_WAITING
+Swarm state snapshot is updated
+- review request metadata
+- stateVersion
+- decision event log
+end note
+
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

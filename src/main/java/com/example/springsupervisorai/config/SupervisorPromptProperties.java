@@ -8,6 +8,9 @@ public class SupervisorPromptProperties {
     private String planningSystem = "";
     private String planningTemplate = "";
     private String planningRepairTemplate = "";
+    private String hitlPolicySystem = "";
+    private String hitlPolicyTemplate = "";
+    private String hitlPolicyRepairTemplate = "";
     private String composeSystem = "";
     private String composeTemplate = "";
 
@@ -35,6 +38,30 @@ public class SupervisorPromptProperties {
         this.planningRepairTemplate = planningRepairTemplate;
     }
 
+    public String getHitlPolicySystem() {
+        return hitlPolicySystem;
+    }
+
+    public void setHitlPolicySystem(String hitlPolicySystem) {
+        this.hitlPolicySystem = hitlPolicySystem;
+    }
+
+    public String getHitlPolicyTemplate() {
+        return hitlPolicyTemplate;
+    }
+
+    public void setHitlPolicyTemplate(String hitlPolicyTemplate) {
+        this.hitlPolicyTemplate = hitlPolicyTemplate;
+    }
+
+    public String getHitlPolicyRepairTemplate() {
+        return hitlPolicyRepairTemplate;
+    }
+
+    public void setHitlPolicyRepairTemplate(String hitlPolicyRepairTemplate) {
+        this.hitlPolicyRepairTemplate = hitlPolicyRepairTemplate;
+    }
+
     public String getComposeSystem() {
         return composeSystem;
     }
@@ -51,4 +78,3 @@ public class SupervisorPromptProperties {
         this.composeTemplate = composeTemplate;
     }
 }
-

@@ -21,14 +21,19 @@ supervisor:
       {history}
 
       [작업]
+      - **반드시 현재 사용자 메시지(userMessage)를 최우선으로 분석한다.**
+      - **recentHistory는 단순 참고용이며, 현재 요청과 다른 주제면 무시한다.**
       - 필요하면 여러 agent를 순서대로 계획한다.
       - method는 SendMessage, SendStreamingMessage, GetTask, ListTasks, CancelTask, message/send, message/stream, tasks/get, tasks/list, tasks/cancel 중 하나만 사용한다.
       - 기본 선택은 SendMessage를 우선 사용한다.
       - 단, SendStreamingMessage/message/stream은 해당 agent card에 streaming=true일 때만 사용한다.
       - 불필요한 호출은 하지 않는다.
       - 단일 의도 요청이면 우선 단일 agent만 계획한다.
-      - 다중 agent 계획은 요청이 명확히 복합 의도일 때만 사용한다.
-      - 각 agent 선택 이유(reason)에 사용자 요청 근거를 명시한다.
+      - 다중 agent 계획은 요청이 명확히 복합 의도일 때 반드시 사용한다.
+      - "A 정보 조회 + B 정보 조회 + 비교/분석/제안" 형태면, 필요한 데이터 소스 agent를 모두 계획한 뒤 마지막에 종합 agent를 선택한다.
+      - 특히 "판매상품 정보"와 "여행 트렌드"가 함께 나오면 product + search를 모두 계획해야 한다.
+      - "비교", "보완", "개선 제안", "취합" 표현이 있으면 단일 검색 결과만으로 완료 처리하지 않는다.
+      - 각 agent 선택 이유(reason)에 현재 사용자 요청 근거를 명시한다.
       - 결과 형식 외 텍스트 금지.
 
       [출력 계약]
@@ -46,6 +51,49 @@ supervisor:
       아래 출력은 계약 위반이므로 유효한 JSON으로만 교정하라.
       설명 문장 금지, JSON 외 텍스트 금지.
       complete=false 인 경우 plans를 비워두지 마라.
+
+      invalidOutput:
+      {invalidOutput}
+    hitl-policy-system: |
+      [ROLE] supervisor-hitl-policy-evaluator
+      너는 Supervisor Agent의 HITL 적용 정책 평가기다.
+      입력을 보고 review 필요 여부를 JSON으로만 반환한다.
+      추론 과정/설명/마크다운을 출력하지 않는다.
+    hitl-policy-template: |
+      {hitlPolicySystem}
+      오늘 날짜: {today}
+
+      [입력]
+      userMessage:
+      {userMessage}
+
+      [출력 계약]
+      JSON 객체만 반환한다.
+      - intentType: "read_only" | "data_mutation" | "unknown"
+      - reviewRequired: boolean
+      - reviewReason: string
+      - riskScore: number (0~1)
+
+      [절대 규칙]
+      - **반드시 현재 userMessage만을 분석한다. 이전 대화 내용은 고려하지 않는다.**
+      - 인사/스몰토크/일반 정보 질문/설명 요청/번역/요약/검색은 반드시 intentType="read_only", reviewRequired=false로 반환한다.
+      - 상태 변경(create/update/delete/예약/주문/결제/환불/등록/취소)이 명확하면 반드시 intentType="data_mutation", reviewRequired=true로 반환한다.
+      - 위 두 경우가 아니고 판단이 애매하면 intentType="unknown"으로 반환한다.
+
+      [reviewRequired 판정 규칙]
+      - intentType="data_mutation"이면 reviewRequired=true (강제)
+      - intentType="read_only"이면 reviewRequired=false (강제)
+      - intentType="unknown"은 riskScore >= 0.8일 때만 reviewRequired=true, 아니면 false
+
+      [값 작성 규칙]
+      - reviewReason은 짧고 구체적인 snake_case로 작성한다.
+      - read_only일 때 reviewReason은 "not_required_read_only"를 사용한다.
+      - data_mutation일 때 reviewReason은 "data_mutation_detected" 또는 구체 사유를 사용한다.
+      - unknown이면서 reviewRequired=true일 때 reviewReason은 "high_risk_unknown_intent"를 우선 사용한다.
+      - JSON 외 텍스트를 절대 출력하지 않는다.
+    hitl-policy-repair-template: |
+      아래 출력은 계약 위반이므로 유효한 JSON으로만 교정하라.
+      설명 문장 금지, JSON 외 텍스트 금지.
 
       invalidOutput:
       {invalidOutput}
@@ -68,8 +116,10 @@ supervisor:
       {downstreamResults}
 
       [응답 규칙]
-      - 항상 현재 사용자 질문을 최우선으로 해석한다.
-      - 이전 대화 주제가 현재 질문과 다르면 이전 주제를 이어서 답하지 않는다.
+      - **반드시 현재 사용자 질문(userMessage)만을 기준으로 답변한다.**
+      - **히스토리(history)는 문맥 이해용이며, 현재 질문과 무관하면 완전히 무시한다.**
+      - **이전 대화의 주제/의도와 현재 질문이 다르면 이전 내용을 전혀 언급하지 않는다.**
+      - **예시: 이전이 '예약'이고 현재가 '상품 검색'이면 예약 관련 내용을 답변에 포함하지 않는다.**
       - 사용자가 인사/스몰토크를 입력하면 이전 문맥을 길게 끌어오지 않는다.
       - 사실 기반으로 답한다.
       - 결과가 부족하면 한계를 명확히 말한다.

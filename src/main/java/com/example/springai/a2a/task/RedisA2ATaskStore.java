@@ -1,0 +1,207 @@
+package com.example.springai.a2a.task;
+
+import com.example.common.redis.RedisKeyspace;
+import com.example.common.redis.RedisTtlPolicy;
+import com.example.springai.model.agent.AgentScopeName;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
+
+/**
+ * Redis 기반 A2A task 저장소.
+ * <p>
+ * - task 본문: key-value(JSON)
+ * - scope별 목록: sorted-set(updatedAt epoch ms)
+ */
+@Component
+@ConditionalOnProperty(name = "app.redis.enabled", havingValue = "true")
+public class RedisA2ATaskStore implements A2ATaskStore {
+
+    private static final Logger logger = LoggerFactory.getLogger(RedisA2ATaskStore.class);
+    // 요청하신 운영 기준: task 데이터 TTL 30분 고정
+    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
+    // 단건 조회(get)는 taskId 기반이므로 본문 키는 taskId를 사용한다.
+    private static final String TASK_KEY_PREFIX = RedisKeyspace.AGENT_TASK_PREFIX;
+    // 목록(list)은 scope 단위 조회이므로 scope 인덱스를 별도로 유지한다.
+    private static final String SCOPE_INDEX_PREFIX = RedisKeyspace.AGENT_TASK_SCOPE_INDEX_PREFIX;
+
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+
+    public RedisA2ATaskStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public A2aTaskSnapshot create(AgentScopeName scopeName, String sessionId, String requestMessage) {
+        Instant now = Instant.now();
+        String taskId = "task-" + UUID.randomUUID();
+        A2aTaskSnapshot snapshot = new A2aTaskSnapshot(
+                taskId,
+                scopeName,
+                sessionId,
+                A2aTaskStatus.SUBMITTED,
+                now,
+                now,
+                requestMessage == null ? "" : requestMessage,
+                "",
+                "",
+                ""
+        );
+        save(snapshot);
+        return snapshot;
+    }
+
+    @Override
+    public Optional<A2aTaskSnapshot> get(String taskId, AgentScopeName scopeName) {
+        return load(taskId).filter(snapshot -> snapshot.scopeName() == scopeName);
+    }
+
+    @Override
+    public List<A2aTaskSnapshot> list(AgentScopeName scopeName, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 200));
+        String scopeIndexKey = scopeIndexKey(scopeName);
+        Set<String> taskIds = redisTemplate.opsForZSet().reverseRange(scopeIndexKey, 0, safeLimit - 1);
+        if (taskIds == null || taskIds.isEmpty()) {
+            return List.of();
+        }
+        List<A2aTaskSnapshot> snapshots = new ArrayList<>();
+        for (String taskId : taskIds) {
+            Optional<A2aTaskSnapshot> loaded = load(taskId);
+            if (loaded.isEmpty()) {
+                redisTemplate.opsForZSet().remove(scopeIndexKey, taskId);
+                continue;
+            }
+            A2aTaskSnapshot snapshot = loaded.get();
+            if (snapshot.scopeName() != scopeName) {
+                continue;
+            }
+            snapshots.add(snapshot);
+        }
+        return snapshots;
+    }
+
+    @Override
+    public Optional<A2aTaskSnapshot> markRunning(String taskId, AgentScopeName scopeName) {
+        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
+                old.taskId(),
+                old.scopeName(),
+                old.sessionId(),
+                A2aTaskStatus.RUNNING,
+                old.createdAt(),
+                Instant.now(),
+                old.requestMessage(),
+                old.responsePayload(),
+                old.errorCode(),
+                old.errorMessage()
+        ));
+    }
+
+    @Override
+    public Optional<A2aTaskSnapshot> markCompleted(String taskId, AgentScopeName scopeName, String responsePayload) {
+        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
+                old.taskId(),
+                old.scopeName(),
+                old.sessionId(),
+                old.status() == A2aTaskStatus.CANCELED ? A2aTaskStatus.CANCELED : A2aTaskStatus.COMPLETED,
+                old.createdAt(),
+                Instant.now(),
+                old.requestMessage(),
+                old.status() == A2aTaskStatus.CANCELED ? old.responsePayload() : (responsePayload == null ? "" : responsePayload),
+                old.status() == A2aTaskStatus.CANCELED ? old.errorCode() : "",
+                old.status() == A2aTaskStatus.CANCELED ? old.errorMessage() : ""
+        ));
+    }
+
+    @Override
+    public Optional<A2aTaskSnapshot> markFailed(String taskId, AgentScopeName scopeName, String errorCode, String errorMessage) {
+        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
+                old.taskId(),
+                old.scopeName(),
+                old.sessionId(),
+                old.status() == A2aTaskStatus.CANCELED ? A2aTaskStatus.CANCELED : A2aTaskStatus.FAILED,
+                old.createdAt(),
+                Instant.now(),
+                old.requestMessage(),
+                old.responsePayload(),
+                old.status() == A2aTaskStatus.CANCELED ? old.errorCode() : (errorCode == null ? "INTERNAL_ERROR" : errorCode),
+                old.status() == A2aTaskStatus.CANCELED ? old.errorMessage() : (errorMessage == null ? "A2A task failed" : errorMessage)
+        ));
+    }
+
+    @Override
+    public Optional<A2aTaskSnapshot> cancel(String taskId, AgentScopeName scopeName, String reason) {
+        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
+                old.taskId(),
+                old.scopeName(),
+                old.sessionId(),
+                A2aTaskStatus.CANCELED,
+                old.createdAt(),
+                Instant.now(),
+                old.requestMessage(),
+                old.responsePayload(),
+                "CANCELED",
+                reason == null || reason.isBlank() ? "Canceled by request" : reason
+        ));
+    }
+
+    private Optional<A2aTaskSnapshot> update(
+            String taskId,
+            AgentScopeName scopeName,
+            Function<A2aTaskSnapshot, A2aTaskSnapshot> updater
+    ) {
+        Optional<A2aTaskSnapshot> current = load(taskId);
+        if (current.isEmpty() || current.get().scopeName() != scopeName) {
+            return Optional.empty();
+        }
+        A2aTaskSnapshot next = updater.apply(current.get());
+        save(next);
+        return Optional.of(next);
+    }
+
+    private void save(A2aTaskSnapshot snapshot) {
+        try {
+            String key = taskKey(snapshot.taskId());
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(snapshot), TTL);
+            redisTemplate.opsForZSet().add(scopeIndexKey(snapshot.scopeName()), snapshot.taskId(), snapshot.updatedAt().toEpochMilli());
+            redisTemplate.expire(scopeIndexKey(snapshot.scopeName()), TTL);
+        } catch (JsonProcessingException ex) {
+            logger.error("Failed to serialize A2A task snapshot taskId={}", snapshot.taskId(), ex);
+            throw new IllegalStateException("A2A task serialization failed", ex);
+        }
+    }
+
+    private Optional<A2aTaskSnapshot> load(String taskId) {
+        String raw = redisTemplate.opsForValue().get(taskKey(taskId));
+        if (raw == null || raw.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(objectMapper.readValue(raw, A2aTaskSnapshot.class));
+        } catch (Exception ex) {
+            logger.warn("Failed to deserialize A2A task snapshot taskId={}: {}", taskId, ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private String taskKey(String taskId) {
+        return TASK_KEY_PREFIX + taskId;
+    }
+
+    private String scopeIndexKey(AgentScopeName scopeName) {
+        return SCOPE_INDEX_PREFIX + scopeName.name();
+    }
+}

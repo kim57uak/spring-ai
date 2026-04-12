@@ -20,7 +20,8 @@ import java.util.Map;
 @Component
 public class LlmSupervisorResponseComposeService implements SupervisorResponseComposeService {
 
-    private static final int MAX_HISTORY_MESSAGES = 6;
+    // 적절한 컨텍스트 유지 및 과의존 방지를 위해 최대 4개로 제한
+    private static final int MAX_HISTORY_MESSAGES = 4;
     private final SupervisorLlmRuntime llmRuntime;
     private final SupervisorPromptProperties promptProperties;
     private final SupervisorPromptRenderService promptRenderService;

@@ -19,6 +19,22 @@ class SupervisorPlanningContext {
   +routingPlans: List<RoutingPlan>
   +results: List<DownstreamCallResult>
   +checkpointId: String
+  +hitlRequired: boolean
+  +hitlStatus: String
+  +swarmStateVersion: long
+}
+
+class SwarmSharedState {
+  +stateVersion: long
+  +sharedFacts: Map<String, Object>
+  +eventLog: List<Map<String, Object>>
+}
+
+class HitlReviewContext {
+  +required: boolean
+  +decision: String
+  +decisionReason: String
+  +expiresAt: Instant
 }
 
 class RoutingPlan {
@@ -63,6 +79,13 @@ interface SupervisorResponseComposeService {
 SupervisorAgentRequest --> SupervisorPlanningContext
 SupervisorPlanningContext --> RoutingPlan
 SupervisorPlanningContext --> DownstreamCallResult
+SupervisorPlanningContext --> SwarmSharedState
+SupervisorPlanningContext --> HitlReviewContext
 SupervisorGraphState --> SupervisorPlanningContext
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml
