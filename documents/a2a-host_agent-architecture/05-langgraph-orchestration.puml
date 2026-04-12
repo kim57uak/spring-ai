@@ -12,9 +12,16 @@ start
 :Invoke CompiledGraph;
 
 :PLAN_INTENT node;
+:RISK_ASSESS node;
+:HITL_GATE node;
+:WAIT_REVIEW node (if required);
+:APPLY_REVIEW node (APPROVE/CANCEL);
 :SELECT_DOWNSTREAM node;
 
-if (routing plan exists?) then (yes)
+if (review decision = CANCEL?) then (yes)
+  :mark canceled + stop compose;
+  stop
+elseif (routing plan exists?) then (yes)
   :CALL_A2A node;
   if (more plans?) then (yes)
     :loop next routing plan;
@@ -30,10 +37,17 @@ stop
 
 note right
 Graph contract
-- nodes: plan, select, invoke, merge, compose
+- nodes: plan, risk_assess, hitl_gate, wait_review, apply_review, select, invoke, merge, compose
 - edge: select -> (invoke|compose)
 - invoke loop has max iteration guard
 - downstream call boundary is A2A only
+- data mutation(create/update/delete) requests always pass WAIT_REVIEW
+- graph state snapshot + swarm shared state must be persisted together
 end note
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

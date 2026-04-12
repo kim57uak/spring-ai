@@ -5,6 +5,8 @@ import com.example.springsupervisorai.a2a.dto.JsonRpcRequest;
 import com.example.springsupervisorai.a2a.dto.JsonRpcResponse;
 import com.example.springsupervisorai.a2a.dto.TaskIdParams;
 import com.example.springsupervisorai.a2a.dto.TaskQueryParams;
+import com.example.springsupervisorai.a2a.dto.TaskReviewDecisionParams;
+import com.example.springsupervisorai.a2a.dto.TaskReviewGetParams;
 import com.example.springsupervisorai.a2a.dto.TasksListParams;
 import com.example.springsupervisorai.a2a.dto.TasksListResult;
 import com.example.springsupervisorai.config.SupervisorStreamProperties;
@@ -103,6 +105,8 @@ public class SupervisorA2AController {
                     case GET_TASK, TASKS_GET -> handleGet(request, session);
                     case CANCEL_TASK, TASKS_CANCEL -> handleCancel(request, session);
                     case LIST_TASKS, TASKS_LIST -> handleList(request, session);
+                    case GET_TASK_REVIEW, TASKS_REVIEW_GET -> handleReviewGet(request, session);
+                    case DECIDE_TASK_REVIEW, TASKS_REVIEW_DECIDE -> handleReviewDecide(request, session);
                     case SEND_STREAMING_MESSAGE, MESSAGE_STREAM -> JsonRpcResponse.error(
                             request.id(), METHOD_NOT_FOUND, "Use streaming endpoint for SendStreamingMessage or message/stream"
                     );
@@ -267,6 +271,54 @@ public class SupervisorA2AController {
                                 .toList()
                 )
         );
+    }
+
+    /**
+     * tasks/review/get 처리 로직.
+     * <p>
+     * 호출자 세션의 review ticket만 조회 가능하다.
+     *
+     * @param request JSON-RPC 요청
+     * @param session HTTP 세션
+     * @return JSON-RPC 성공/오류 응답
+     */
+    private JsonRpcResponse handleReviewGet(JsonRpcRequest request, HttpSession session) {
+        SupervisorA2ARequestValidator.ValidationResult<TaskReviewGetParams> validation =
+                requestValidator.validateReviewGet(request, objectMapper);
+        if (validation.isError()) {
+            return validation.error();
+        }
+        TaskReviewGetParams params = validation.params();
+        return supervisorAgentService.getReview(params.id(), session.getId())
+                .map(review -> JsonRpcResponse.success(request.id(), responseMapper.toTaskReviewView(review)))
+                .orElseGet(() -> JsonRpcResponse.error(request.id(), RESOURCE_NOT_FOUND, "Review not found"));
+    }
+
+    /**
+     * tasks/review/decide 처리 로직.
+     * <p>
+     * 현재 지원 결정 타입은 APPROVE/CANCEL만 허용한다.
+     *
+     * @param request JSON-RPC 요청
+     * @param session HTTP 세션
+     * @return JSON-RPC 성공/오류 응답
+     */
+    private JsonRpcResponse handleReviewDecide(JsonRpcRequest request, HttpSession session) {
+        SupervisorA2ARequestValidator.ValidationResult<TaskReviewDecisionParams> validation =
+                requestValidator.validateReviewDecision(request, objectMapper);
+        if (validation.isError()) {
+            return validation.error();
+        }
+        TaskReviewDecisionParams params = validation.params();
+        return supervisorAgentService.decideReview(
+                        session.getId(),
+                        params.id(),
+                        params.decision(),
+                        params.reason(),
+                        params.decisionId()
+                )
+                .map(result -> JsonRpcResponse.success(request.id(), result))
+                .orElseGet(() -> JsonRpcResponse.error(request.id(), RESOURCE_NOT_FOUND, "Review or task not found"));
     }
 
     /**

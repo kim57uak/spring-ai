@@ -8,12 +8,14 @@ actor User
 participant "SupervisorA2AController" as Controller
 participant "SupervisorAgentService" as Service
 participant "SupervisorAgentOrchestrator" as Orchestrator
+participant "HITL Decision Service" as HitlDecision
 participant "SupervisorResponseComposeService" as Composer
 participant "DefaultSupervisorLlmRuntime" as Runtime
 participant "ModelChatServiceFactory" as Factory
 participant "Provider ChatService" as Provider
 participant "Conversation Store" as ConversationStore
 participant "Checkpoint Store" as CheckpointStore
+participant "Swarm State Store" as SwarmStore
 
 User -> Controller : stream request (/a2a/supervisor)
 Controller -> Service : stream(...)
@@ -21,23 +23,35 @@ Service -> Orchestrator : execute(request)
 Orchestrator --> Controller : preface summary chunk
 Controller --> User : SSE(summary)
 
-Orchestrator -> Composer : streamCompose(context)
-Composer -> Runtime : stream(prompt, model, sessionId)
-Runtime -> Factory : resolveStream(model)
-Factory --> Runtime : StreamChatService
-Runtime -> Provider : streamGenerate
-Provider --> Runtime : Flux<String>
-Runtime --> Composer : Flux<String>
+Orchestrator -> HitlDecision : check APPROVE/CANCEL
+alt decision=APPROVE
+  Orchestrator -> Composer : streamCompose(context)
+  Composer -> Runtime : stream(prompt, model, sessionId)
+  Runtime -> Factory : resolveStream(model)
+  Factory --> Runtime : StreamChatService
+  Runtime -> Provider : streamGenerate
+  Provider --> Runtime : Flux<String>
+  Runtime --> Composer : Flux<String>
 
-loop token chunks
-  Composer --> Orchestrator : chunk
-  Orchestrator --> Service : chunk
-  Service --> Controller : chunk
-  Controller --> User : SSE(token)
+  loop token chunks
+    Composer --> Orchestrator : chunk
+    Orchestrator --> Service : chunk
+    Service --> Controller : chunk
+    Controller --> User : SSE(token)
+  end
+else decision=CANCEL
+  Orchestrator --> Controller : canceled message
+  Controller --> User : SSE(cancel)
 end
 
 Orchestrator -> ConversationStore : save history
 Orchestrator -> CheckpointStore : save checkpoint
+Orchestrator -> SwarmStore : save hitl/event state
 Controller --> User : SSE complete
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

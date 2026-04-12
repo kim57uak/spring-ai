@@ -8,13 +8,14 @@ import com.example.springsupervisorai.model.SupervisorAgentRequest;
 import com.example.springsupervisorai.model.SupervisorErrorCode;
 import com.example.springsupervisorai.model.SupervisorGraphState;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
-import com.example.springsupervisorai.model.SupervisorProgressEvent;
 import com.example.springsupervisorai.model.SupervisorRuntimeState;
+import com.example.springsupervisorai.model.SwarmState;
 import com.example.springsupervisorai.service.agent.compose.SupervisorResponseComposeService;
 import com.example.springsupervisorai.service.agent.graph.SupervisorStateGraphFactory;
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import com.example.springsupervisorai.service.agent.store.ConversationStore;
 import com.example.springsupervisorai.service.agent.store.GraphCheckpointStore;
+import com.example.springsupervisorai.service.agent.swarm.SupervisorSwarmCoordinator;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.slf4j.Logger;
@@ -31,9 +32,9 @@ import java.util.ArrayList;
 import java.util.concurrent.CancellationException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,6 +70,7 @@ public class SupervisorAgentOrchestrator {
     private final SupervisorResponseComposeService composeService;
     private final SupervisorA2aLifecycleService lifecycleService;
     private final A2AInvocationService invocationService;
+    private final SupervisorSwarmCoordinator swarmCoordinator;
 
     /**
      * 오케스트레이터 의존성을 생성자 주입으로 초기화한다.
@@ -79,6 +81,7 @@ public class SupervisorAgentOrchestrator {
      * @param composeService 최종 응답 합성 서비스
      * @param lifecycleService supervisor A2A task 라이프사이클 서비스
      * @param invocationService downstream invocation 포트
+     * @param swarmCoordinator swarm 상태 조정 서비스
      */
     public SupervisorAgentOrchestrator(
             ConversationStore conversationStore,
@@ -86,7 +89,8 @@ public class SupervisorAgentOrchestrator {
             SupervisorStateGraphFactory graphFactory,
             SupervisorResponseComposeService composeService,
             SupervisorA2aLifecycleService lifecycleService,
-            A2AInvocationService invocationService
+            A2AInvocationService invocationService,
+            SupervisorSwarmCoordinator swarmCoordinator
     ) {
         this.conversationStore = conversationStore;
         this.checkpointStore = checkpointStore;
@@ -94,6 +98,7 @@ public class SupervisorAgentOrchestrator {
         this.composeService = composeService;
         this.lifecycleService = lifecycleService;
         this.invocationService = invocationService;
+        this.swarmCoordinator = swarmCoordinator;
     }
 
     /**
@@ -116,7 +121,7 @@ public class SupervisorAgentOrchestrator {
         logger.info("Supervisor execute start taskId={}, sessionId={}, model={}", taskId, request.sessionId(), request.model());
 
         // 단계별 진행 상황 emit
-        emitProgress(progressSink, "initializing", 0, "요청을 접수했습니다.", Map.of(
+        emitProgress(progressSink, SupervisorProgressSupport.STAGE_INITIALIZING, 0, "요청을 접수했습니다.", Map.of(
                 "sessionId", shortSessionId(request.sessionId()),
                 "model", safe(request.model())
         ));
@@ -129,7 +134,7 @@ public class SupervisorAgentOrchestrator {
                                 emitProgress(progressSink, stage, progress, message, metadata))
                 )
                 .subscribeOn(Schedulers.boundedElastic())
-                .doOnError(error -> emitProgress(progressSink, "error", 0, "실행 중 오류가 발생했습니다.", Map.of(
+                .doOnError(error -> emitProgress(progressSink, SupervisorProgressSupport.STAGE_ERROR, 0, "실행 중 오류가 발생했습니다.", Map.of(
                         "error", sanitize(error.getMessage())
                 )))
                 .cache();
@@ -150,9 +155,14 @@ public class SupervisorAgentOrchestrator {
                             AtomicBoolean failed = new AtomicBoolean(false);
 
                             // composing 시작 진행 상황 (80%)
-                            String composingProgress = formatProgress("composing", 80, "하위 에이전트 실행 결과를 정리하고 답변을 생성합니다...", Map.of(
+                            String composingProgress = SupervisorProgressSupport.line(
+                                    SupervisorProgressSupport.STAGE_COMPOSING,
+                                    80,
+                                    "하위 에이전트 실행 결과를 정리하고 답변을 생성합니다...",
+                                    Map.of(
                                     "resultsCount", context.getResults().size()
-                            ));
+                                    )
+                            );
 
                             return Flux.concat(
                                     Flux.just(composingProgress),  // composing 80% 먼저 전송
@@ -164,7 +174,7 @@ public class SupervisorAgentOrchestrator {
                                                 failed.set(true);
                                                 lifecycleService.markFailed(taskId, SupervisorErrorCode.COMPOSE_ERROR.value(), sanitize(error.getMessage()));
                                                 return Flux.concat(
-                                                        Flux.just(formatProgress("error", 0, "응답 합성 중 오류가 발생했습니다.", Map.of(
+                                                        Flux.just(SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_ERROR, 0, "응답 합성 중 오류가 발생했습니다.", Map.of(
                                                                 "error", sanitize(error.getMessage())
                                                         ))),
                                                         Flux.just("응답 합성 중 오류가 발생했습니다.")
@@ -174,13 +184,17 @@ public class SupervisorAgentOrchestrator {
                                             .doOnComplete(() -> {
                                                 // 답변 스트림 완료 후 처리
                                                 persist(context, answer.toString());
+                                                swarmCoordinator.recordNodeEvent(taskId, request.sessionId(), "COMPOSE", "Compose completed", Map.of(
+                                                        "answerLength", answer.length(),
+                                                        "resultsCount", context.getResults().size()
+                                                ));
                                                 logger.info("Supervisor execute finished taskId={}, sessionId={}, results={}, responseLength={}",
                                                         taskId, request.sessionId(), context.getResults().size(), answer.length());
                                                 if (!failed.get()) {
                                                     lifecycleService.markCompleted(taskId, answer.toString());
                                                 }
                                             })
-                                            .concatWith(Flux.just("\n" + formatProgress("completed", 100, "응답 생성이 완료되었습니다.", Map.of(
+                                            .concatWith(Flux.just("\n" + SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_COMPLETED, 100, "응답 생성이 완료되었습니다.", Map.of(
                                                     "answerLength", answer.length()
                                             ))))
                             );
@@ -196,7 +210,7 @@ public class SupervisorAgentOrchestrator {
                             lifecycleService.markFailed(taskId, SupervisorErrorCode.ORCHESTRATION_ERROR.value(), sanitize(error.getMessage()));
                             progressSink.tryEmitComplete();
                             return Flux.concat(
-                                    Flux.just(formatProgress("error", 0, "Supervisor 처리 중 오류가 발생했습니다.", Map.of(
+                                    Flux.just(SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_ERROR, 0, "Supervisor 처리 중 오류가 발생했습니다.", Map.of(
                                             "error", sanitize(error.getMessage())
                                     ))),
                                     Flux.just("Supervisor 처리 중 오류가 발생했습니다.")
@@ -221,45 +235,7 @@ public class SupervisorAgentOrchestrator {
         if (message == null || message.isBlank()) {
             return;
         }
-        SupervisorProgressEvent event = SupervisorProgressEvent.of(stage, progress, message, metadata);
-        sink.tryEmitNext(formatProgress(event));
-    }
-
-    /**
-     * 진행 상황 이벤트를 문자열 포맷으로 변환한다.
-     *
-     * @param event 진행 상황 이벤트
-     * @return 포맷된 문자열
-     */
-    private String formatProgress(SupervisorProgressEvent event) {
-        return formatProgress(event.stage(), event.progress(), event.message(), event.metadata());
-    }
-
-    /**
-     * 진행 상황을 문자열 포맷으로 변환한다.
-     *
-     * @param stage 진행 단계
-     * @param progress 진행률 (0-100)
-     * @param message 사용자 메시지
-     * @param metadata 추가 메타데이터
-     * @return 포맷된 문자열
-     */
-    private String formatProgress(String stage, int progress, String message, Map<String, Object> metadata) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("[supervisor]");
-        sb.append(" [").append(stage).append("]");
-        sb.append(" [").append(progress).append("%]");
-        sb.append(" ").append(message);
-
-        if (metadata != null && !metadata.isEmpty()) {
-            sb.append(" {");
-            metadata.forEach((key, value) -> sb.append(key).append("=").append(value).append(", "));
-            sb.setLength(sb.length() - 2); // 마지막 ", " 제거
-            sb.append("}");
-        }
-
-        sb.append("\n");
-        return sb.toString();
+        sink.tryEmitNext(SupervisorProgressSupport.line(stage, progress, message, metadata));
     }
 
     private String summarizeArguments(Map<String, Object> arguments) {
@@ -318,6 +294,14 @@ public class SupervisorAgentOrchestrator {
         void emit(String stage, int progress, String message, Map<String, Object> metadata);
     }
 
+    private void progress(ProgressEmitter emitter, String stage, int progress, String message) {
+        progress(emitter, stage, progress, message, Map.of());
+    }
+
+    private void progress(ProgressEmitter emitter, String stage, int progress, String message, Map<String, Object> metadata) {
+        emitter.emit(stage, progress, message, metadata == null ? Map.of() : metadata);
+    }
+
     private SupervisorPlanningContext invokeGraph(
             SupervisorAgentRequest request,
             String taskId,
@@ -327,17 +311,33 @@ public class SupervisorAgentOrchestrator {
         throwIfCanceled(taskId, canceled);
 
         // 1단계: 히스토리 로드 (10%)
-        progressEmitter.emit("analyzing", 10, "질문 의도 분석을 시작합니다.", Map.of());
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_ANALYZING, 10, "질문 의도 분석을 시작합니다.");
         List<String> history = conversationStore.load(request.sessionId());
         throwIfCanceled(taskId, canceled);
 
-        progressEmitter.emit("analyzing", 20, "히스토리 로드 완료", Map.of(
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_ANALYZING, 20, "히스토리 로드 완료", Map.of(
                 "historyCount", history.size()
+        ));
+
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_SWARM, 22, "Swarm 상태를 조회합니다.", Map.of(
+                "sessionId", shortSessionId(request.sessionId())
+        ));
+        Optional<SwarmState> latestSwarm = swarmCoordinator.loadLatestBySession(request.sessionId());
+        Map<String, Object> swarmFacts = latestSwarm.map(SwarmState::sharedFacts).orElse(Map.of());
+        long swarmStateVersion = latestSwarm.map(SwarmState::stateVersion).orElse(0L);
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_SWARM, 25, "Swarm 상태 로드 완료", Map.of(
+                "swarmFound", latestSwarm.isPresent(),
+                "swarmStateVersion", swarmStateVersion,
+                "swarmFactCount", swarmFacts.size()
+        ));
+        swarmCoordinator.recordNodeEvent(taskId, request.sessionId(), "GRAPH", "Graph execution started", Map.of(
+                "historyCount", history.size(),
+                "swarmStateVersion", swarmStateVersion
         ));
 
         // 2단계: 체크포인트 복원 (30%)
         String checkpointId = resolveCheckpointId(request.sessionId());
-        progressEmitter.emit("planning", 30, "라우팅 계획을 수립하고 있습니다...", Map.of(
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_PLANNING, 30, "라우팅 계획을 수립하고 있습니다...", Map.of(
                 "hasCheckpoint", !checkpointId.isBlank()
         ));
 
@@ -349,31 +349,34 @@ public class SupervisorAgentOrchestrator {
         }
 
         // 2.5단계: 그래프 실행 시작 (35%)
-        progressEmitter.emit("planning", 35, "Supervisor 그래프를 실행합니다. (Planning → Invoking → Merging)", Map.of(
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_PLANNING, 35, "Supervisor 그래프를 실행합니다. (Planning → Invoking → Merging)", Map.of(
                 "graphNodes", "PLAN, INVOKE, MERGE"
         ));
 
         // 그래프 입력 파라미터 출력
-        Map<String, Object> graphInput = Map.of(
-                SupervisorGraphState.SESSION_ID, request.sessionId(),
-                SupervisorGraphState.USER_MESSAGE, request.message(),
-                SupervisorGraphState.MODEL, request.model() == null ? "openai" : request.model(),
-                SupervisorGraphState.HISTORY, history,
-                SupervisorGraphState.CHECKPOINT_ID, checkpointId,
-                SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.HISTORY_LOADED.value(),
-                SupervisorGraphState.ROUTING_INDEX, 0,
-                SupervisorGraphState.ROUTING_PLANS, List.of(),
-                SupervisorGraphState.DOWNSTREAM_RESULTS, List.of()
+        Map<String, Object> graphInput = Map.ofEntries(
+                Map.entry(SupervisorGraphState.TASK_ID, taskId),
+                Map.entry(SupervisorGraphState.SESSION_ID, request.sessionId()),
+                Map.entry(SupervisorGraphState.USER_MESSAGE, request.message()),
+                Map.entry(SupervisorGraphState.MODEL, request.model() == null ? "openai" : request.model()),
+                Map.entry(SupervisorGraphState.HISTORY, history),
+                Map.entry(SupervisorGraphState.CHECKPOINT_ID, checkpointId),
+                Map.entry(SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.HISTORY_LOADED.value()),
+                Map.entry(SupervisorGraphState.ROUTING_INDEX, 0),
+                Map.entry(SupervisorGraphState.ROUTING_PLANS, List.of()),
+                Map.entry(SupervisorGraphState.DOWNSTREAM_RESULTS, List.of()),
+                Map.entry(SupervisorGraphState.SWARM_SHARED_FACTS, swarmFacts),
+                Map.entry(SupervisorGraphState.SWARM_STATE_VERSION, swarmStateVersion)
         );
 
-        progressEmitter.emit("graph", 36, "그래프 입력 파라미터 설정 완료", Map.of(
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_GRAPH, 36, "그래프 입력 파라미터 설정 완료", Map.of(
                 "sessionId", shortSessionId(request.sessionId()),
                 "model", request.model() == null ? "openai" : request.model(),
                 "historySize", history.size(),
                 "startNode", SupervisorRuntimeState.HISTORY_LOADED.value()
         ));
 
-        progressEmitter.emit("graph", 37, "→ PLAN 노드 실행 예정 (라우팅 계획 수립)", Map.of(
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_GRAPH, 37, "→ PLAN 노드 실행 예정 (라우팅 계획 수립)", Map.of(
                 "nodeType", "PLAN",
                 "agent", "plannerAgent",
                 "input", "userMessage + history"
@@ -385,7 +388,7 @@ public class SupervisorAgentOrchestrator {
         throwIfCanceled(taskId, canceled);
 
         // 3단계: 그래프 실행 완료 및 결과 확인 (38%)
-        progressEmitter.emit("graph", 38, "✓ 그래프 실행 완료. 노드별 결과를 확인합니다...", Map.of(
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_GRAPH, 38, "✓ 그래프 실행 완료. 노드별 결과를 확인합니다...", Map.of(
                 "finalNode", safe(context.getCurrentNode()),
                 "planCount", context.getRoutingPlans().size(),
                 "resultsCount", context.getResults().size()
@@ -393,7 +396,7 @@ public class SupervisorAgentOrchestrator {
 
         // PLAN 노드 결과 출력
         if (!context.getRoutingPlans().isEmpty()) {
-            progressEmitter.emit("graph", 39, "✓ PLAN 노드 실행 완료", Map.of(
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_GRAPH, 39, "✓ PLAN 노드 실행 완료", Map.of(
                     "nodeType", "PLAN",
                     "output", context.getRoutingPlans().size() + "개의 라우팅 계획 생성",
                     "agents", context.getRoutingPlans().stream().map(RoutingPlan::agentKey).toList().toString()
@@ -402,19 +405,24 @@ public class SupervisorAgentOrchestrator {
 
         // INVOKE 노드 결과 출력 (그래프 내에서 실행된 경우)
         if (!context.getResults().isEmpty()) {
-            progressEmitter.emit("graph", 39, "✓ INVOKE 노드 실행 완료 (그래프 내부)", Map.of(
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_GRAPH, 39, "✓ INVOKE 노드 실행 완료 (그래프 내부)", Map.of(
                     "nodeType", "INVOKE",
                     "output", context.getResults().size() + "개의 하위 에이전트 호출 결과",
                     "results", context.getResults().stream().map(r -> r.agentKey() + ":" + r.status()).toList().toString()
             ));
         }
 
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_SWARM, 41, "Swarm 라우팅 반영 완료", Map.of(
+                "swarmStateVersion", context.getSwarmStateVersion(),
+                "finalPlanCount", context.getRoutingPlans().size()
+        ));
+
         // 3.5단계: 라우팅 계획 완료 (40%)
         logger.info("Supervisor planning result sessionId={}, planCount={}, plans={}",
                 request.sessionId(), context.getRoutingPlans().size(),
                 context.getRoutingPlans().stream().map(plan -> plan.agentKey() + ":" + plan.method()).toList());
 
-        progressEmitter.emit("planning", 40, "라우팅 계획이 수립되었습니다.", Map.of(
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_PLANNING, 40, "라우팅 계획이 수립되었습니다.", Map.of(
                 "planCount", context.getRoutingPlans().size()
         ));
 
@@ -431,7 +439,7 @@ public class SupervisorAgentOrchestrator {
                     plan.arguments() == null ? List.of() : plan.arguments().keySet()
             );
 
-            progressEmitter.emit("routing", 50 + (planIndex * 2),
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_ROUTING, 50 + (planIndex * 2),
                     "📋 라우팅 계획 #" + (planIndex + 1) + ": " + plan.agentKey() + " → " + plan.method(),
                     Map.of(
                         "planIndex", planIndex + 1,
@@ -446,14 +454,14 @@ public class SupervisorAgentOrchestrator {
 
         // 5단계: 이미 실행된 결과가 있는 경우 출력 (60%)
         if (!context.getResults().isEmpty()) {
-            progressEmitter.emit("invoking", 60, "그래프 내에서 하위 에이전트가 이미 실행되었습니다. 결과를 확인합니다.", Map.of(
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60, "그래프 내에서 하위 에이전트가 이미 실행되었습니다. 결과를 확인합니다.", Map.of(
                     "resultsCount", context.getResults().size(),
                     "executedInGraph", true
             ));
 
             int resultIndex = 0;
             for (DownstreamCallResult result : context.getResults()) {
-                progressEmitter.emit("invoking", 60 + (resultIndex * 3), "✓ " + result.agentKey() + " 실행 완료", Map.of(
+                progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60 + (resultIndex * 3), "✓ " + result.agentKey() + " 실행 완료", Map.of(
                         "agentKey", result.agentKey(),
                         "status", result.status(),
                         "errorCode", safe(result.errorCode()),
@@ -462,7 +470,7 @@ public class SupervisorAgentOrchestrator {
                 resultIndex++;
             }
 
-            progressEmitter.emit("invoking", 75, "모든 하위 에이전트 실행 완료 (그래프 내에서 처리됨)", Map.of(
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 75, "모든 하위 에이전트 실행 완료 (그래프 내에서 처리됨)", Map.of(
                     "resultsCount", context.getResults().size()
             ));
         }
@@ -470,7 +478,7 @@ public class SupervisorAgentOrchestrator {
         // 6단계: 하위 에이전트 호출 (60-75%)
         if (context.getResults().isEmpty() && !context.getRoutingPlans().isEmpty()) {
             int maxIterations = Math.min(5, context.getRoutingPlans().size());
-            progressEmitter.emit("invoking", 60, "→ INVOKE 노드 수동 실행: 하위 에이전트 호출 시작", Map.of(
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60, "→ INVOKE 노드 수동 실행: 하위 에이전트 호출 시작", Map.of(
                     "nodeType", "INVOKE",
                     "executionMode", "manual(fallback)",
                     "totalCalls", maxIterations
@@ -481,7 +489,7 @@ public class SupervisorAgentOrchestrator {
                 RoutingPlan plan = context.getRoutingPlans().get(i);
 
                 int currentProgress = 60 + (i * 15 / maxIterations);
-                progressEmitter.emit("invoking", currentProgress,
+                progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, currentProgress,
                         "🔄 하위 에이전트 호출 #" + (i + 1) + "/" + maxIterations + ": " + plan.agentKey(),
                         Map.of(
                         "callIndex", i + 1,
@@ -494,11 +502,13 @@ public class SupervisorAgentOrchestrator {
 
                 DownstreamCallResult result = invocationService.invoke(plan, context);
                 context.addResult(result);
+                // 그래프 INVOKE 경로와 동일하게 fallback 수동 호출도 Swarm facts/eventLog에 반영한다.
+                swarmCoordinator.recordInvocationBatch(taskId, request.sessionId(), List.of(result));
 
                 logger.info("Supervisor downstream result sessionId={}, agentKey={}, status={}, errorCode={}",
                         request.sessionId(), result.agentKey(), result.status(), result.errorCode());
 
-                progressEmitter.emit("invoking", currentProgress + 3,
+                progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, currentProgress + 3,
                         "✓ 호출 완료 #" + (i + 1) + ": " + result.agentKey() + " → " + result.status(),
                         Map.of(
                         "callIndex", i + 1,
@@ -510,7 +520,7 @@ public class SupervisorAgentOrchestrator {
                 ));
             }
 
-            progressEmitter.emit("invoking", 75, "✓ INVOKE 노드 완료 (수동 실행)", Map.of(
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 75, "✓ INVOKE 노드 완료 (수동 실행)", Map.of(
                     "nodeType", "INVOKE",
                     "executionMode", "manual(fallback)",
                     "resultsCount", context.getResults().size()
@@ -521,7 +531,7 @@ public class SupervisorAgentOrchestrator {
         if (context.getRoutingPlans().isEmpty()) {
             logger.warn("Supervisor planned no downstream calls sessionId={}, message={}",
                     request.sessionId(), request.message());
-            progressEmitter.emit("routing", 75, "라우팅 계획: 직접 응답(하위 에이전트 호출 없음)", Map.of());
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_ROUTING, 75, "라우팅 계획: 직접 응답(하위 에이전트 호출 없음)");
         }
 
         return context;

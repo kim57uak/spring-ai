@@ -1,6 +1,7 @@
 package com.example.springsupervisorai.a2a.task;
 
 import com.example.springsupervisorai.model.SupervisorErrorCode;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -13,6 +14,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 
 @Component("supervisorInMemoryA2ATaskStore")
+@ConditionalOnProperty(name = "app.redis.enabled", havingValue = "false", matchIfMissing = true)
 public class InMemoryA2ATaskStore implements A2ATaskStore {
 
     private final ConcurrentMap<String, A2aTaskSnapshot> tasks = new ConcurrentHashMap<>();
@@ -62,6 +64,24 @@ public class InMemoryA2ATaskStore implements A2ATaskStore {
                 old.responsePayload(),
                 old.errorCode(),
                 old.errorMessage()
+        ));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Optional<A2aTaskSnapshot> markWaitingReview(String taskId, String reason) {
+        return update(taskId, old -> new A2aTaskSnapshot(
+                old.taskId(),
+                old.sessionId(),
+                A2aTaskStatus.WAITING_REVIEW,
+                old.createdAt(),
+                Instant.now(),
+                old.requestMessage(),
+                old.responsePayload(),
+                "HITL_REQUIRED",
+                reason == null ? "Human review is required" : reason
         ));
     }
 

@@ -34,7 +34,7 @@ dependencies {
 
 dependencyManagement {
     imports {
-        mavenBom "org.springframework.ai:spring-ai-bom:1.0.3"
+        mavenBom "org.springframework.ai:spring-ai-bom:1.1.4"
         mavenBom "org.bsc.langgraph4j:langgraph4j-bom:1.8.10"
         mavenBom "org.a2aproject.sdk:a2a-java-sdk-bom:1.0.0.Alpha4"
     }

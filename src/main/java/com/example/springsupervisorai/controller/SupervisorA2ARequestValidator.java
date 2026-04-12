@@ -3,6 +3,8 @@ package com.example.springsupervisorai.controller;
 import com.example.springsupervisorai.a2a.dto.JsonRpcRequest;
 import com.example.springsupervisorai.a2a.dto.JsonRpcResponse;
 import com.example.springsupervisorai.a2a.dto.TaskIdParams;
+import com.example.springsupervisorai.a2a.dto.TaskReviewDecisionParams;
+import com.example.springsupervisorai.a2a.dto.TaskReviewGetParams;
 import com.example.springsupervisorai.a2a.dto.TaskQueryParams;
 import com.example.springsupervisorai.a2a.dto.TaskSendParams;
 import com.example.springsupervisorai.a2a.dto.TasksListParams;
@@ -21,6 +23,7 @@ public class SupervisorA2ARequestValidator {
 
     private static final int DEFAULT_LIST_LIMIT = 20;
     private static final int MAX_LIST_LIMIT = 200;
+    private static final java.util.Set<String> ALLOWED_REVIEW_DECISIONS = java.util.Set.of("APPROVE", "CANCEL");
 
     /**
      * JSON-RPC 공통 precheck를 수행한다.
@@ -64,12 +67,20 @@ public class SupervisorA2ARequestValidator {
 
         JsonNode paramsNode = request.params();
         if (paramsNode == null || paramsNode.isNull()) {
-            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "messageText or message.parts[].text is required"));
+            return ValidationResult.error(JsonRpcResponse.error(
+                    request.id(),
+                    INVALID_PARAMS,
+                    "messageText is required (or message.parts[].text for v1.0)"
+            ));
         }
         JsonNode messageNode = paramsNode.path("message");
         String extractedText = extractTextFromMessage(messageNode);
         if (extractedText.isBlank()) {
-            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "messageText or message.parts[].text is required"));
+            return ValidationResult.error(JsonRpcResponse.error(
+                    request.id(),
+                    INVALID_PARAMS,
+                    "messageText is required (or message.parts[].text for v1.0)"
+            ));
         }
         String model = paramsNode.path("model").asText("");
         return ValidationResult.ok(new ResolvedSendParams(extractedText, model.isBlank() ? null : model));
@@ -173,6 +184,41 @@ public class SupervisorA2ARequestValidator {
             );
         }
         return ValidationResult.ok(params);
+    }
+
+    public ValidationResult<TaskReviewGetParams> validateReviewGet(JsonRpcRequest request, ObjectMapper objectMapper) {
+        TaskReviewGetParams params;
+        try {
+            params = request.paramsAs(objectMapper, TaskReviewGetParams.class);
+        } catch (RuntimeException ex) {
+            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "Invalid params schema"));
+        }
+        if (params == null || params.id() == null || params.id().isBlank()) {
+            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "id is required"));
+        }
+        return ValidationResult.ok(params);
+    }
+
+    public ValidationResult<TaskReviewDecisionParams> validateReviewDecision(JsonRpcRequest request, ObjectMapper objectMapper) {
+        TaskReviewDecisionParams params;
+        try {
+            params = request.paramsAs(objectMapper, TaskReviewDecisionParams.class);
+        } catch (RuntimeException ex) {
+            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "Invalid params schema"));
+        }
+        if (params == null || params.id() == null || params.id().isBlank()) {
+            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "id is required"));
+        }
+        String normalized = params.decision() == null ? "" : params.decision().trim().toUpperCase(java.util.Locale.ROOT);
+        if (!ALLOWED_REVIEW_DECISIONS.contains(normalized)) {
+            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "decision must be APPROVE or CANCEL"));
+        }
+        return ValidationResult.ok(new TaskReviewDecisionParams(
+                params.id(),
+                normalized,
+                params.reason(),
+                params.decisionId()
+        ));
     }
 
     /**

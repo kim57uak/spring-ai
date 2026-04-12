@@ -9,6 +9,7 @@ import java.util.Map;
 public class SupervisorGraphState extends AgentState {
 
     public static final String SESSION_ID = "sessionId";
+    public static final String TASK_ID = "taskId";
     public static final String USER_MESSAGE = "userMessage";
     public static final String MODEL = "model";
     public static final String HISTORY = "history";
@@ -18,6 +19,8 @@ public class SupervisorGraphState extends AgentState {
     public static final String ROUTING_INDEX = "routingIndex";
     public static final String CURRENT_PLAN = "currentPlan";
     public static final String DOWNSTREAM_RESULTS = "downstreamResults";
+    public static final String SWARM_SHARED_FACTS = "swarmSharedFacts";
+    public static final String SWARM_STATE_VERSION = "swarmStateVersion";
 
     public SupervisorGraphState(Map<String, Object> initData) {
         super(initData);
@@ -25,6 +28,7 @@ public class SupervisorGraphState extends AgentState {
 
     public SupervisorPlanningContext toPlanningContext() {
         SupervisorPlanningContext context = new SupervisorPlanningContext(
+                value(TASK_ID).map(String.class::cast).orElse(""),
                 value(SESSION_ID).map(String.class::cast).orElse(""),
                 value(USER_MESSAGE).map(String.class::cast).orElse(""),
                 value(MODEL).map(String.class::cast).orElse("openai")
@@ -35,6 +39,8 @@ public class SupervisorGraphState extends AgentState {
         context.setRoutingPlans(readPlans());
         context.setResults(readResults());
         context.setRoutingIndex(value(ROUTING_INDEX).map(Integer.class::cast).orElse(0));
+        context.setSwarmSharedFacts(readFlatMap(SWARM_SHARED_FACTS));
+        context.setSwarmStateVersion(readLong(SWARM_STATE_VERSION));
         return context;
     }
 
@@ -124,5 +130,28 @@ public class SupervisorGraphState extends AgentState {
         java.util.LinkedHashMap<String, Object> converted = new java.util.LinkedHashMap<>();
         source.forEach((k, v) -> converted.put(String.valueOf(k), v));
         return converted;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readFlatMap(String key) {
+        Object raw = value(key).orElse(Map.of());
+        if (!(raw instanceof Map<?, ?> source)) {
+            return Map.of();
+        }
+        java.util.LinkedHashMap<String, Object> converted = new java.util.LinkedHashMap<>();
+        source.forEach((k, v) -> converted.put(String.valueOf(k), v));
+        return converted;
+    }
+
+    private long readLong(String key) {
+        Object raw = value(key).orElse(0L);
+        if (raw instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(raw));
+        } catch (Exception ignored) {
+            return 0L;
+        }
     }
 }

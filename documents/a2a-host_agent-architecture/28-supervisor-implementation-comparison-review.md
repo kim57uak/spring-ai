@@ -2,12 +2,19 @@
 
 ## 1) 검토 기준
 
-- 기준 문서: `17, 20, 21, 23, 25, 26, 27`
+- 기준 문서: `17, 20, 21, 23, 25, 26, 27, 30, 31`
 - 코드 범위: `src/main/java/com/example/springsupervisorai` + 공통 예외처리(`com.example.springai.advice`)
 - 검증 일시: 2026-04-11
 - 실행 검증:
   - `./gradlew_unix test --tests com.example.springsupervisorai.SupervisorA2aIntegrationTest --tests com.example.springsupervisorai.controller.SupervisorA2AControllerStreamingTest --tests com.example.springsupervisorai.service.SupervisorAgentServiceTest --tests com.example.springsupervisorai.service.SupervisorAgentOrchestratorCheckpointTest --tests com.example.springsupervisorai.service.agent.invoke.DefaultA2AInvocationServiceTest --rerun-tasks`
   - 결과: **BUILD SUCCESSFUL (9 tests passed)**
+
+## 1-1) 30/31 기준 추가 검토 항목
+
+- HITL 결정 범위: `APPROVE/CANCEL`만 지원되는지
+- 데이터 생성·변경 요청의 강제 HITL 정책 적용 여부
+- `Graph + Swarm State` 하이브리드 저장 경계 분리 여부
+- `legacy + v1.0` A2A 메서드 호환 유지 여부
 
 ## 2) A2A 규약 준수 점검 결과
 
@@ -44,6 +51,8 @@
 
 - payload size guard(요청/응답 크기 제한) 미구현
 - 관측성 지표(latency/failure/token/cost/downstream success rate) 미구현
+- HITL review API(`tasks/review/get`, `tasks/review/decide`) 미구현
+- Swarm State 전용 저장소/버전 충돌 제어 미구현
 
 ## 3) 점수 재산정 (리팩토링 반영 후)
 
@@ -87,3 +96,13 @@
 
 현재 supervisor 구현은 A2A 핵심 계약(JSON-RPC method 처리, tasks 계열, stream 규약, 오류 표준화, 라우팅 정책)을 **실행 가능한 수준으로 준수**하고 있다.  
 다만 운영 안정성 완성도를 위해 `payload size guard`와 `관측성 지표`는 다음 스프린트 우선 반영이 필요하다.
+
+---
+
+## 2026-04-12 동기화 메모 (30/31 반영)
+
+- 본 문서는 `30`, `31`번 문서 기준으로 HITL/하이브리드 아키텍처 원칙을 상위 기준으로 따른다.
+- 이번 차례 구현 스코프는 `APPROVE`, `CANCEL`만 포함하며 `REVISE`는 다음 단계로 이관한다.
+- 상품/예약/주문 등 데이터 생성·변경(create/update/delete) 요청은 리스크 점수와 무관하게 HITL 강제 정책을 적용한다.
+- A2A 계약은 `legacy` + `v1.0`을 모두 충족하는 호환 모드로 유지한다(메서드 enum 기반 관리).
+- 사용자 추가정보 수집(이름/전화/이메일)은 향후 계획으로 분리하며, 입력 UX는 자연어/콤마 텍스트 수용 후 내부 구조화 원칙을 따른다.

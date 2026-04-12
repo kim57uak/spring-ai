@@ -13,6 +13,7 @@ public class A2aSupervisorRoutingProperties {
     private Map<String, Route> routing = new LinkedHashMap<>();
     private Retry retry = new Retry();
     private CircuitBreaker circuitBreaker = new CircuitBreaker();
+    private Execution execution = new Execution();
     private Set<String> allowedMethods = SupervisorA2aMethod.valuesSet();
 
     public Map<String, Route> getRouting() {
@@ -45,6 +46,14 @@ public class A2aSupervisorRoutingProperties {
 
     public void setCircuitBreaker(CircuitBreaker circuitBreaker) {
         this.circuitBreaker = circuitBreaker == null ? new CircuitBreaker() : circuitBreaker;
+    }
+
+    public Execution getExecution() {
+        return execution;
+    }
+
+    public void setExecution(Execution execution) {
+        this.execution = execution == null ? new Execution() : execution;
     }
 
     public static class Route {
@@ -150,6 +159,25 @@ public class A2aSupervisorRoutingProperties {
 
         public void setOpenDurationMs(long openDurationMs) {
             this.openDurationMs = openDurationMs;
+        }
+    }
+
+    /**
+     * 실행 정책 설정.
+     * <p>
+     * maxConcurrency:
+     * - 1: 순차 실행
+     * - 2 이상: 최대 동시 실행 개수 제한
+     */
+    public static class Execution {
+        private int maxConcurrency = 1;
+
+        public int getMaxConcurrency() {
+            return maxConcurrency;
+        }
+
+        public void setMaxConcurrency(int maxConcurrency) {
+            this.maxConcurrency = maxConcurrency;
         }
     }
 }

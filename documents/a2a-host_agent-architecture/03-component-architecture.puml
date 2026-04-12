@@ -4,70 +4,62 @@ title 03. A2A Supervisor Agent Component Architecture
 
 skinparam shadowing false
 skinparam componentStyle rectangle
-top to bottom direction
-skinparam ranksep 40
-skinparam nodesep 30
-skinparam linetype ortho
 
 package "01 Entry" {
-  [SupervisorA2AController] as SupervisorA2AController
-  [GlobalExceptionHandler] as Advice
+  [SupervisorA2A\nController] as SupervisorA2AController
+  [GlobalException\nHandler] as Advice
 }
 
 package "02 Application" {
-  [SupervisorAgentService] as SupervisorService
-  [SupervisorAgentOrchestrator] as SupervisorOrchestrator
+  [SupervisorAgent\nService] as SupervisorService
+  [SupervisorAgent\nOrchestrator] as SupervisorOrchestrator
 }
 
 package "03-1 Usecase Ports (Contracts)" {
-  together {
-    interface "Planning Port" as PlanningPort
-    interface "Invocation Port" as InvocationPort
-    interface "Compose Port" as ComposePort
-  }
-
-  PlanningPort -[hidden]down-> InvocationPort
-  InvocationPort -[hidden]down-> ComposePort
+  interface "Planning\nPort" as PlanningPort
+  interface "Invocation\nPort" as InvocationPort
+  interface "Compose\nPort" as ComposePort
+  interface "HITL Policy\nPort" as HitlPolicyPort
+  interface "HITL Decision\nPort" as HitlDecisionPort
 }
 
 package "03-2 Infra Ports (Contracts)" {
-  together {
-    interface "Graph Factory Port" as GraphFactoryPort
-    interface "Conversation Store Port" as ConversationStorePort
-    interface "Checkpoint Store Port" as CheckpointStorePort
-  }
-
-  GraphFactoryPort -[hidden]down-> ConversationStorePort
-  ConversationStorePort -[hidden]down-> CheckpointStorePort
+  interface "Graph Factory\nPort" as GraphFactoryPort
+  interface "Conversation Store\nPort" as ConversationStorePort
+  interface "Checkpoint Store\nPort" as CheckpointStorePort
+  interface "Swarm State Store\nPort" as SwarmStateStorePort
 }
 
 package "04 Adapters (Implementations)" {
   package "04-1 Usecase Adapters" {
-    [LlmSupervisorPlanningService] as PlanningImpl
-    [DefaultA2AInvocationService] as InvocationImpl
-    [LlmSupervisorResponseComposeService] as ComposeImpl
+    [LlmSupervisor\nPlanningService] as PlanningImpl
+    [DefaultA2A\nInvocationService] as InvocationImpl
+    [LlmSupervisorResponse\nComposeService] as ComposeImpl
+    [DefaultHitl\nPolicyService] as HitlPolicyImpl
+    [DefaultHitl\nDecisionService] as HitlDecisionImpl
   }
 
   package "04-2 Infra Adapters" {
-    [LangGraphSupervisorStateGraphFactory] as GraphFactoryImpl
-    [RedisConversationStore] as ConversationStoreImpl
-    [RedisGraphCheckpointStore] as CheckpointStoreImpl
+    [LangGraphSupervisor\nStateGraphFactory] as GraphFactoryImpl
+    [RedisConversation\nStore] as ConversationStoreImpl
+    [RedisGraphCheckpoint\nStore] as CheckpointStoreImpl
+    [RedisSupervisor\nSwarmStateStore] as SwarmStateStoreImpl
   }
 
-  package "04-3 A2A Gateway" #EAF4FF {
-    [A2AClientRegistry] as A2ARegistry #D6E9FF
-    [A2AJsonRpcClient] as A2AJsonRpcClient #D6E9FF
+  package "04-3 A2A Gateway" {
+    [A2AClient\nRegistry] as A2ARegistry
+    [A2AJsonRpc\nClient] as A2AJsonRpcClient
   }
 }
 
 package "05 Runtime / External" {
-  [DefaultSupervisorLlmRuntime] as LlmRuntime
-  [ModelChatServiceFactory] as ChatFactory
+  [DefaultSupervisor\nLlmRuntime] as LlmRuntime
+  [ModelChatService\nFactory] as ChatFactory
   [LlmCallPolicy] as LlmPolicy
   [a2a-supervisor.yml] as SupervisorConfig
-  [Product Agent A2A] as ProductAgent
-  [Reservation Agent A2A] as ReservationAgent
-  [Search Agent A2A] as SearchAgent
+  [Product Agent\nA2A] as ProductAgent
+  [Reservation Agent\nA2A] as ReservationAgent
+  [Search Agent\nA2A] as SearchAgent
 }
 
 SupervisorA2AController --> SupervisorService : request
@@ -77,9 +69,12 @@ SupervisorService --> SupervisorOrchestrator : orchestrate
 SupervisorOrchestrator --> PlanningPort : intent plan
 SupervisorOrchestrator --> InvocationPort : downstream call
 SupervisorOrchestrator --> ComposePort : response compose
+SupervisorOrchestrator --> HitlPolicyPort : risk evaluate
+SupervisorOrchestrator --> HitlDecisionPort : approve/cancel apply
 SupervisorOrchestrator --> GraphFactoryPort : state graph
 SupervisorOrchestrator --> ConversationStorePort : history load/save
 SupervisorOrchestrator --> CheckpointStorePort : checkpoint load/save
+SupervisorOrchestrator --> SwarmStateStorePort : shared state load/save
 
 note right of ComposePort
 Usecase mappings
@@ -98,9 +93,12 @@ end note
 PlanningPort <|.. PlanningImpl
 InvocationPort <|.. InvocationImpl
 ComposePort <|.. ComposeImpl
+HitlPolicyPort <|.. HitlPolicyImpl
+HitlDecisionPort <|.. HitlDecisionImpl
 GraphFactoryPort <|.. GraphFactoryImpl
 ConversationStorePort <|.. ConversationStoreImpl
 CheckpointStorePort <|.. CheckpointStoreImpl
+SwarmStateStorePort <|.. SwarmStateStoreImpl
 
 PlanningImpl --> LlmRuntime
 ComposeImpl --> LlmRuntime
@@ -114,17 +112,15 @@ A2AJsonRpcClient --> ProductAgent
 A2AJsonRpcClient --> ReservationAgent
 A2AJsonRpcClient --> SearchAgent
 
-legend bottom
-  == Reading Guide ==
-  1. Orchestrator depends only on Ports (contracts)
-  2. Adapters implement Ports
-  3. Downstream agents are called only via A2A Gateway
-endlegend
-
 note bottom of InvocationImpl
 Supervisor boundary rule
 - no sub-agent internal dependency
 - A2A endpoint allowlist + timeout/retry
 end note
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

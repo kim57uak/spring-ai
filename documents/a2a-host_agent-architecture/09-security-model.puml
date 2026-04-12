@@ -8,6 +8,7 @@ skinparam componentStyle rectangle
 rectangle "Input Guard" {
   [SupervisorA2AController] as SupervisorA2AController
   [PromptInjectionGuard] as PromptGuard
+  [PII Validation/Masking] as PiiGuard
 }
 
 rectangle "Routing & Invocation Guard" {
@@ -23,13 +24,22 @@ rectangle "Error Safety" {
   [GlobalExceptionHandler] as ErrorHandler
 }
 
+rectangle "HITL Safety Gate" {
+  [HitlPolicyService] as HitlPolicy
+  [HitlDecisionService] as HitlDecision
+  [Swarm State Integrity Check] as SwarmIntegrity
+}
+
 SupervisorA2AController --> PromptGuard : sanitize user text
+SupervisorA2AController --> PiiGuard : validate/mask name/phone/email
 Invoker --> Registry : resolve target
 Registry --> Allowlist : validate agent key/endpoint
 Invoker --> TimeoutRetry : bounded call
 Invoker --> CircuitBreaker : fail-fast on repeated errors
 Invoker --> PayloadGuard : truncate/validate payload
 ErrorHandler --> Invoker : sanitize exception mapping
+HitlPolicy --> HitlDecision : mandatory review for data mutation
+HitlDecision --> SwarmIntegrity : decision/version validation
 
 note right of Allowlist
 Supervisor agent can call only
@@ -45,4 +55,9 @@ No sensitive leak
 - credentials
 end note
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

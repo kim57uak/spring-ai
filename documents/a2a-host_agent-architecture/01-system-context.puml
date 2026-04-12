@@ -16,6 +16,7 @@ rectangle "Supervisor Agent (spring-ai + springsupervisorai)" {
   [SupervisorAgentService] as SupervisorService
   [SupervisorAgentOrchestrator] as SupervisorOrchestrator
   [LangGraph4J CompiledGraph] as StateGraph
+  [HITL Policy/Decision Service] as HitlService
   [SupervisorPlanningService] as Planner
   [A2AInvocationService] as A2AInvocationService
   [SupervisorResponseComposeService] as Composer
@@ -27,6 +28,7 @@ rectangle "Supervisor Agent (spring-ai + springsupervisorai)" {
 database "Redis" as Redis {
   [Conversation Store] as ConversationStore
   [Graph Checkpoint Store] as CheckpointStore
+  [Swarm State Store] as SwarmStateStore
 }
 
 cloud "Downstream A2A Agents" {
@@ -43,6 +45,7 @@ SupervisorA2AController --> SupervisorService
 SupervisorA2AController --> Advice
 SupervisorService --> SupervisorOrchestrator
 SupervisorOrchestrator --> StateGraph
+SupervisorOrchestrator --> HitlService
 SupervisorOrchestrator --> Planner
 SupervisorOrchestrator --> A2AInvocationService
 SupervisorOrchestrator --> Composer
@@ -55,6 +58,7 @@ A2AInvocationService --> ReservationAgent
 A2AInvocationService --> SearchAgent
 SupervisorOrchestrator --> ConversationStore
 SupervisorOrchestrator --> CheckpointStore
+SupervisorOrchestrator --> SwarmStateStore
 
 note right of SupervisorOrchestrator
 Supervisor flow
@@ -65,4 +69,9 @@ Supervisor flow
 - history/checkpoint persist
 end note
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

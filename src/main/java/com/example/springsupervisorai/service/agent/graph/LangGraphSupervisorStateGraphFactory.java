@@ -1,8 +1,8 @@
 package com.example.springsupervisorai.service.agent.graph;
 
+import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
 import com.example.springsupervisorai.model.RoutingPlan;
-import com.example.springsupervisorai.model.SupervisorA2aMethod;
 import com.example.springsupervisorai.model.SupervisorGraphRoute;
 import com.example.springsupervisorai.model.SupervisorGraphNode;
 import com.example.springsupervisorai.model.SupervisorGraphState;
@@ -10,6 +10,7 @@ import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.model.SupervisorRuntimeState;
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import com.example.springsupervisorai.service.agent.plan.SupervisorPlanningService;
+import com.example.springsupervisorai.service.agent.swarm.SupervisorSwarmCoordinator;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
@@ -50,6 +51,8 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
     private final CompiledGraph<SupervisorGraphState> compiledGraph;
     private final SupervisorPlanningService planningService;
     private final A2AInvocationService invocationService;
+    private final A2aSupervisorRoutingProperties routingProperties;
+    private final SupervisorSwarmCoordinator swarmCoordinator;
 
     /**
      * 그래프 의존성을 주입받아 컴파일된 그래프를 초기화한다.
@@ -60,10 +63,14 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
      */
     public LangGraphSupervisorStateGraphFactory(
             SupervisorPlanningService planningService,
-            A2AInvocationService invocationService
+            A2AInvocationService invocationService,
+            A2aSupervisorRoutingProperties routingProperties,
+            SupervisorSwarmCoordinator swarmCoordinator
     ) throws GraphStateException {
         this.planningService = planningService;
         this.invocationService = invocationService;
+        this.routingProperties = routingProperties;
+        this.swarmCoordinator = swarmCoordinator;
         this.compiledGraph = buildGraph().compile();
     }
 
@@ -115,7 +122,18 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
     private AsyncNodeAction<SupervisorGraphState> planNode() {
         return state -> {
             SupervisorPlanningContext context = state.toPlanningContext();
-            List<RoutingPlan> plans = planningService.plan(context);
+            List<RoutingPlan> planned = planningService.plan(context);
+            List<RoutingPlan> plans = swarmCoordinator.applyRoutingRule(
+                    context.getTaskId(),
+                    context.getSessionId(),
+                    planned,
+                    context.getSwarmSharedFacts()
+            );
+            swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "PLAN", "Routing plans created", Map.of(
+                    "plannedCount", planned.size(),
+                    "filteredCount", plans.size(),
+                    "swarmStateVersion", context.getSwarmStateVersion()
+            ));
             Map<String, Object> updates = new LinkedHashMap<>();
             updates.put(SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.PLANNED.value());
             updates.put(SupervisorGraphState.ROUTING_INDEX, 0);
@@ -143,8 +161,16 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
 
             if (index >= MAX_ITERATIONS || index >= plans.size()) {
                 updates.put(SupervisorGraphState.CURRENT_PLAN, Map.of());
+                swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "SELECT", "No further plan to invoke", Map.of(
+                        "routingIndex", index,
+                        "planCount", plans.size()
+                ));
             } else {
                 updates.put(SupervisorGraphState.CURRENT_PLAN, toPlanMap(plans.get(index)));
+                swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "SELECT", "Current plan selected", Map.of(
+                        "routingIndex", index,
+                        "agentKey", plans.get(index).agentKey()
+                ));
             }
             return CompletableFuture.completedFuture(updates);
         };
@@ -161,16 +187,30 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
     private AsyncNodeAction<SupervisorGraphState> invokeNode() {
         return state -> {
             SupervisorPlanningContext context = state.toPlanningContext();
-            RoutingPlan currentPlan = resolveCurrentPlan(context);
-            DownstreamCallResult result = invocationService.invoke(currentPlan, context);
+            int fromIndex = Math.max(0, context.getRoutingIndex());
+            int maxConcurrency = normalizedConcurrency();
+            List<RoutingPlan> batch = resolveBatch(context, fromIndex, maxConcurrency);
+            if (batch.isEmpty()) {
+                return CompletableFuture.completedFuture(Map.of(
+                        SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.A2A_CALLING.value(),
+                        SupervisorGraphState.ROUTING_INDEX, fromIndex
+                ));
+            }
+            swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "INVOKE", "Invoking downstream batch", Map.of(
+                    "fromIndex", fromIndex,
+                    "batchSize", batch.size(),
+                    "maxConcurrency", maxConcurrency
+            ));
+            List<DownstreamCallResult> batchResults = invokeBatch(batch, context);
+            swarmCoordinator.recordInvocationBatch(context.getTaskId(), context.getSessionId(), batchResults);
 
             List<DownstreamCallResult> mergedResults = new ArrayList<>(context.getResults());
-            mergedResults.add(result);
+            mergedResults.addAll(batchResults);
 
             Map<String, Object> updates = new LinkedHashMap<>();
             updates.put(SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.A2A_CALLING.value());
             updates.put(SupervisorGraphState.DOWNSTREAM_RESULTS, toResultList(mergedResults));
-            updates.put(SupervisorGraphState.ROUTING_INDEX, context.getRoutingIndex() + 1);
+            updates.put(SupervisorGraphState.ROUTING_INDEX, fromIndex + batch.size());
             return CompletableFuture.completedFuture(updates);
         };
     }
@@ -184,9 +224,15 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
      * @return MERGE 노드 비동기 액션
      */
     private AsyncNodeAction<SupervisorGraphState> mergeNode() {
-        return state -> CompletableFuture.completedFuture(Map.of(
-                SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.A2A_RESULT_MERGED.value()
-        ));
+        return state -> {
+            SupervisorPlanningContext context = state.toPlanningContext();
+            swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "MERGE", "Downstream results merged", Map.of(
+                    "resultsCount", context.getResults().size()
+            ));
+            return CompletableFuture.completedFuture(Map.of(
+                    SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.A2A_RESULT_MERGED.value()
+            ));
+        };
     }
 
     /**
@@ -197,9 +243,15 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
      * @return COMPOSE 노드 비동기 액션
      */
     private AsyncNodeAction<SupervisorGraphState> composeNode() {
-        return state -> CompletableFuture.completedFuture(Map.of(
-                SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.COMPOSING.value()
-        ));
+        return state -> {
+            SupervisorPlanningContext context = state.toPlanningContext();
+            swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "COMPOSE", "Compose node entered", Map.of(
+                    "resultsCount", context.getResults().size()
+            ));
+            return CompletableFuture.completedFuture(Map.of(
+                    SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.COMPOSING.value()
+            ));
+        };
     }
 
     /**
@@ -221,17 +273,61 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
     }
 
     /**
-     * 현재 라우팅 인덱스로 실행 대상 계획을 해석한다.
-     *
-     * @param context 그래프에서 복원된 planning context
-     * @return 실행 대상 계획(없으면 빈 agentKey 계획)
+     * 현재 인덱스에서 최대 동시 실행 개수만큼 실행 배치를 구성한다.
      */
-    private RoutingPlan resolveCurrentPlan(SupervisorPlanningContext context) {
-        int index = Math.max(0, context.getRoutingIndex());
-        if (index >= context.getRoutingPlans().size()) {
-            return new RoutingPlan("", SupervisorA2aMethod.MESSAGE_SEND.value(), "", 0, Map.of());
+    private List<RoutingPlan> resolveBatch(SupervisorPlanningContext context, int fromIndex, int maxConcurrency) {
+        if (fromIndex >= context.getRoutingPlans().size() || fromIndex >= MAX_ITERATIONS) {
+            return List.of();
         }
-        return context.getRoutingPlans().get(index);
+        int upper = Math.min(context.getRoutingPlans().size(), MAX_ITERATIONS);
+        int toIndex = Math.min(upper, fromIndex + Math.max(1, maxConcurrency));
+        if (fromIndex >= toIndex) {
+            return List.of();
+        }
+        return context.getRoutingPlans().subList(fromIndex, toIndex);
+    }
+
+    /**
+     * 실행 배치를 호출한다.
+     * <p>
+     * - 배치 1건은 순차 호출
+     * - 배치 2건 이상은 CompletableFuture 기반 병렬 호출
+     * - 일부 실패는 허용하고 성공한 결과만 반환 (resilience 패턴)
+     */
+    private List<DownstreamCallResult> invokeBatch(List<RoutingPlan> batch, SupervisorPlanningContext context) {
+        if (batch.size() == 1) {
+            return List.of(invocationService.invoke(batch.get(0), context));
+        }
+        List<CompletableFuture<DownstreamCallResult>> futures = batch.stream()
+                .map(plan -> CompletableFuture.supplyAsync(() -> invocationService.invoke(plan, context))
+                        .exceptionally(error -> {
+                            // 예외 발생 시 실패 결과 객체 반환 (전체 배치 중단 방지)
+                            return new DownstreamCallResult(
+                                    plan.agentKey(),
+                                    context.getTaskId(),
+                                    "FAILED",
+                                    "",
+                                    "BATCH_INVOCATION_ERROR",
+                                    sanitize(error.getMessage())
+                            );
+                        }))
+                .toList();
+        return futures.stream().map(CompletableFuture::join).toList();
+    }
+
+    private String sanitize(String message) {
+        if (message == null || message.isBlank()) {
+            return "Unknown error";
+        }
+        return message.length() > 500 ? message.substring(0, 500) : message;
+    }
+
+    private int normalizedConcurrency() {
+        A2aSupervisorRoutingProperties.Execution execution = routingProperties.getExecution();
+        if (execution == null) {
+            return 1;
+        }
+        return Math.max(1, execution.getMaxConcurrency());
     }
 
     /**

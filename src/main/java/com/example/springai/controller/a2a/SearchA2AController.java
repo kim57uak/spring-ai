@@ -10,6 +10,7 @@ import com.example.springai.service.AgentScopeActivationService;
 import com.example.springai.service.AgentScopeResolver;
 import com.example.springai.service.ScopedAgentChatService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,17 +49,22 @@ public class SearchA2AController extends BaseA2AControllerSupport {
     }
 
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public JsonRpcResponse handleRequest(@RequestBody JsonRpcRequest request, HttpSession session) {
-        return handle(request, session);
+    public JsonRpcResponse handleRequest(@RequestBody JsonRpcRequest request, HttpSession session, HttpServletRequest httpRequest) {
+        return handle(request, session, httpRequest);
     }
 
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE, headers = "Accept=text/event-stream")
-    public Flux<String> handleMainStream(@RequestBody JsonRpcRequest request, HttpSession session) {
-        return super.handleMainStream(request, session);
+    public Flux<String> handleMainStream(@RequestBody JsonRpcRequest request, HttpSession session, HttpServletRequest httpRequest) {
+        return super.handleMainStream(request, session, httpRequest);
     }
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> handleStream(@RequestBody JsonRpcRequest request, HttpSession session) {
-        return handleStreamAlias(request, session);
+    public Flux<String> handleStream(@RequestBody JsonRpcRequest request, HttpSession session, HttpServletRequest httpRequest) {
+        return handleStreamAlias(request, session, httpRequest);
+    }
+
+    @PostMapping("/clear")
+    public void clearHistory(HttpSession session, HttpServletRequest httpRequest) {
+        super.clearHistory(session, httpRequest);
     }
 }

@@ -18,11 +18,15 @@ public enum SupervisorA2aMethod {
     GET_TASK("GetTask"),
     LIST_TASKS("ListTasks"),
     CANCEL_TASK("CancelTask"),
+    GET_TASK_REVIEW("GetTaskReview"),
+    DECIDE_TASK_REVIEW("DecideTaskReview"),
     MESSAGE_SEND("message/send"),
     MESSAGE_STREAM("message/stream"),
     TASKS_GET("tasks/get"),
     TASKS_LIST("tasks/list"),
-    TASKS_CANCEL("tasks/cancel");
+    TASKS_CANCEL("tasks/cancel"),
+    TASKS_REVIEW_GET("tasks/review/get"),
+    TASKS_REVIEW_DECIDE("tasks/review/decide");
 
     private final String value;
 
@@ -98,6 +102,24 @@ public enum SupervisorA2aMethod {
      */
     public boolean isTaskCancel() {
         return this == CANCEL_TASK || this == TASKS_CANCEL;
+    }
+
+    /**
+     * task review 조회 계열 메서드인지 판별한다.
+     *
+     * @return review 조회 계열이면 true
+     */
+    public boolean isReviewGet() {
+        return this == GET_TASK_REVIEW || this == TASKS_REVIEW_GET;
+    }
+
+    /**
+     * task review 결정 계열 메서드인지 판별한다.
+     *
+     * @return review 결정 계열이면 true
+     */
+    public boolean isReviewDecide() {
+        return this == DECIDE_TASK_REVIEW || this == TASKS_REVIEW_DECIDE;
     }
 
     /**

@@ -1,18 +1,22 @@
 package com.example.springsupervisorai.a2a.idempotency;
 
+import com.example.common.redis.RedisKeyspace;
+import com.example.common.redis.RedisTtlPolicy;
 import com.example.springsupervisorai.a2a.dto.JsonRpcResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Iterator;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
@@ -25,10 +29,31 @@ import java.util.function.Supplier;
 public class SupervisorRequestIdempotencyService {
 
     private static final Logger logger = LoggerFactory.getLogger(SupervisorRequestIdempotencyService.class);
-    private static final Duration COMPLETED_TTL = Duration.ofMinutes(2);
+    // 요청하신 운영 기준: idempotency 응답/락 TTL 30분 통일
+    private static final Duration COMPLETED_TTL = RedisTtlPolicy.STANDARD;
+    private static final Duration LOCK_TTL = RedisTtlPolicy.STANDARD;
+    private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(130);
+    private static final Duration POLL_INTERVAL = Duration.ofMillis(120);
+    private static final String RESPONSE_PREFIX = RedisKeyspace.IDEMPOTENCY_SUPERVISOR_RESPONSE_PREFIX;
+    private static final String LOCK_PREFIX = RedisKeyspace.IDEMPOTENCY_SUPERVISOR_LOCK_PREFIX;
 
     private final ConcurrentMap<String, CompletableFuture<JsonRpcResponse>> inFlight = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, CachedResponse> completed = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, CachedResponse> localFallback = new ConcurrentHashMap<>();
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+
+    /**
+     * 테스트/로컬 호환용 생성자.
+     */
+    public SupervisorRequestIdempotencyService() {
+        this(null, new ObjectMapper());
+    }
+
+    @Autowired
+    public SupervisorRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
+    }
 
     public JsonRpcResponse executeOnce(
             String sessionId,
@@ -42,10 +67,10 @@ public class SupervisorRequestIdempotencyService {
         }
 
         evictExpired();
-        CachedResponse cached = completed.get(key);
-        if (cached != null && !cached.isExpired()) {
+        JsonRpcResponse cached = readCached(key);
+        if (cached != null) {
             logger.info("Supervisor idempotency cache hit key={}", key);
-            return cached.response();
+            return cached;
         }
 
         CompletableFuture<JsonRpcResponse> future = new CompletableFuture<>();
@@ -53,8 +78,7 @@ public class SupervisorRequestIdempotencyService {
         if (existing == null) {
             try {
                 logger.info("Supervisor idempotency owner key={}", key);
-                JsonRpcResponse response = action.get();
-                completed.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+                JsonRpcResponse response = runAsOwner(key, action);
                 future.complete(response);
                 return response;
             } catch (RuntimeException ex) {
@@ -89,17 +113,91 @@ public class SupervisorRequestIdempotencyService {
             return "";
         }
         String safeSessionId = sessionId == null ? "" : sessionId.trim();
+        // 세션 간 중복응답 오염 방지를 위해 dedupe key에 sessionId를 포함한다.
         return "SUPERVISOR|" + safeSessionId + "|" + method + "|" + id;
     }
 
     private void evictExpired() {
-        Iterator<Map.Entry<String, CachedResponse>> iterator = completed.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, CachedResponse> entry = iterator.next();
-            if (entry.getValue().isExpired()) {
-                iterator.remove();
+        localFallback.entrySet().removeIf(entry -> entry.getValue().isExpired());
+    }
+
+    private JsonRpcResponse runAsOwner(String key, Supplier<JsonRpcResponse> action) {
+        if (redisTemplate == null) {
+            JsonRpcResponse response = action.get();
+            localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+            return response;
+        }
+
+        String lockKey = lockKey(key);
+        Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (Boolean.TRUE.equals(lockAcquired)) {
+            try {
+                JsonRpcResponse response = action.get();
+                storeCached(key, response);
+                return response;
+            } finally {
+                redisTemplate.delete(lockKey);
             }
         }
+        return waitForOwnerResult(key, action);
+    }
+
+    private JsonRpcResponse waitForOwnerResult(String key, Supplier<JsonRpcResponse> action) {
+        long deadlineNanos = System.nanoTime() + WAIT_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadlineNanos) {
+            JsonRpcResponse cached = readCached(key);
+            if (cached != null) {
+                return cached;
+            }
+            if (redisTemplate == null || Boolean.FALSE.equals(redisTemplate.hasKey(lockKey(key)))) {
+                return runAsOwner(key, action);
+            }
+            try {
+                TimeUnit.MILLISECONDS.sleep(POLL_INTERVAL.toMillis());
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while waiting for supervisor idempotency owner", ex);
+            }
+        }
+        logger.warn("Supervisor idempotency wait timeout key={}. Executing action as fallback.", key);
+        JsonRpcResponse response = action.get();
+        storeCached(key, response);
+        return response;
+    }
+
+    private JsonRpcResponse readCached(String key) {
+        if (redisTemplate != null) {
+            try {
+                String raw = redisTemplate.opsForValue().get(responseKey(key));
+                if (raw != null && !raw.isBlank()) {
+                    return objectMapper.readValue(raw, JsonRpcResponse.class);
+                }
+            } catch (Exception ex) {
+                logger.warn("Supervisor idempotency redis read failed key={}: {}", key, ex.getMessage());
+            }
+        }
+        CachedResponse fallback = localFallback.get(key);
+        return fallback == null || fallback.isExpired() ? null : fallback.response();
+    }
+
+    private void storeCached(String key, JsonRpcResponse response) {
+        localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+        if (redisTemplate == null) {
+            return;
+        }
+        try {
+            redisTemplate.opsForValue().set(responseKey(key), objectMapper.writeValueAsString(response), COMPLETED_TTL);
+        } catch (Exception ex) {
+            logger.warn("Supervisor idempotency redis write failed key={}: {}", key, ex.getMessage());
+        }
+    }
+
+    private String responseKey(String key) {
+        return RESPONSE_PREFIX + key;
+    }
+
+    private String lockKey(String key) {
+        return LOCK_PREFIX + key;
     }
 
     private record CachedResponse(JsonRpcResponse response, Instant expiresAt) {

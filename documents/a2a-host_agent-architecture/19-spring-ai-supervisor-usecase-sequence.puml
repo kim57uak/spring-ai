@@ -9,22 +9,43 @@ participant "SupervisorA2AController" as Controller
 participant "SupervisorAgentService" as Service
 participant "SupervisorAgentOrchestrator" as Orchestrator
 participant "SupervisorPlanningService" as Planner
+participant "HITL Policy Service" as HitlPolicy
+participant "HITL Decision Service" as HitlDecision
 participant "A2AInvocationService" as Invoker
 participant "SupervisorResponseComposeService" as Composer
 participant "DefaultSupervisorLlmRuntime" as Runtime
+participant "Swarm State Store" as SwarmStore
 
 User -> Controller : JSON-RPC message/send|message/stream
 Controller -> Service : send(...) or stream(...)
 Service -> Orchestrator : execute(supervisorRequest)
+Orchestrator -> SwarmStore : load shared state
 Orchestrator -> Planner : plan(context)
 Planner -> Runtime : complete(planning prompt)
 Runtime --> Planner : routing plans
-Orchestrator -> Invoker : invoke(plans)
-Invoker --> Orchestrator : downstream results
-Orchestrator -> Composer : streamCompose(context + results)
+Orchestrator -> HitlPolicy : evaluate risk + data-mutation
+HitlPolicy --> Orchestrator : required?
+alt HITL required
+  Orchestrator -> HitlDecision : wait decision
+  HitlDecision --> Orchestrator : APPROVE or CANCEL
+else no HITL
+end
+alt APPROVE
+  Orchestrator -> Invoker : invoke(plans)
+  Invoker --> Orchestrator : downstream results
+  Orchestrator -> Composer : streamCompose(context + results)
+else CANCEL
+  Orchestrator --> Controller : canceled response
+end
 Composer -> Runtime : stream(compose prompt)
 Runtime --> Composer : token chunks
 Composer --> Controller : chunks
 Controller --> User : JSON-RPC/SSE response
+Orchestrator -> SwarmStore : save review/decision events
 
+' 2026-04-12 sync with docs 30/31
+' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
+' - Data mutation requests (create/update/delete) require mandatory HITL
+' - A2A compatibility mode keeps both legacy and v1.0 methods
+' - User profile input collection is deferred to next phase
 @enduml

@@ -9,7 +9,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8082}"
 MODEL="${MODEL:-mistral}"
-PROMPT="${1:- AAZ115260411OZ1 여행예약해죠. 예약자 : 김병두,연락처 : 01038569626, 예약인원수 1명,생년월일 : 19740308.}"
+PROMPT="${1:- 판매상품코드 : AAP331260523TG1 여행예약해죠. 예약자 : 김병두,연락처 : 01038569626, 예약인원수 1명,생년월일 : 19740308.}"
 STREAM_MODE="${2:-}"
 REQUEST_ID="reservation-$(date +%s)"
 
