@@ -21,6 +21,9 @@ public final class SupervisorProgressSupport {
     public static final String STAGE_GRAPH = "graph";
     public static final String STAGE_ROUTING = "routing";
     public static final String STAGE_INVOKING = "invoking";
+    public static final String STAGE_HANDOFF = "handoff";
+    public static final String STAGE_HANDOFF_SKIPPED = "handoff_skipped";
+    public static final String STAGE_HANDOFF_APPLIED = "handoff_applied";
     public static final String STAGE_COMPOSING = "composing";
     public static final String STAGE_COMPLETED = "completed";
     public static final String STAGE_ERROR = "error";

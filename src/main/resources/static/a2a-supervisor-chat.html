@@ -39,7 +39,7 @@
 
     body {
       margin: 0;
-      height: 100vh;
+      height: 100dvh;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", "Noto Sans KR", sans-serif;
       color: var(--text-primary);
@@ -51,7 +51,7 @@
       width: 100%;
       max-width: 1400px;
       margin: 0 auto;
-      height: 100vh;
+      height: 100dvh;
       display: grid;
       grid-template-rows: auto 1fr auto;
       overflow: hidden;
@@ -654,13 +654,36 @@
       background: linear-gradient(90deg,
         rgba(59, 130, 246, 0.08),
         rgba(139, 92, 246, 0.08));
-      transition: width 0.3s ease;
+      transition: width 0.22s linear;
       z-index: 0;
       opacity: 0;
     }
 
     #status-progress.active {
       opacity: 1;
+    }
+
+    #status-progress::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.28) 45%,
+        transparent 100%);
+      transform: translateX(-120%);
+      opacity: 0;
+    }
+
+    #status-progress.active::after {
+      opacity: 1;
+      animation: statusSweep 1.6s linear infinite;
+    }
+
+    @keyframes statusSweep {
+      to {
+        transform: translateX(120%);
+      }
     }
 
     #status {
@@ -670,20 +693,48 @@
       align-items: center;
       justify-content: center;
       gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    #status-task {
+      color: var(--text-muted);
+      font-weight: 500;
     }
 
     .status-indicator {
-      width: 8px;
-      height: 8px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: var(--text-muted);
       opacity: 0;
-      transition: all 0.3s ease;
+      transition: all 0.2s ease;
+      position: relative;
     }
 
     .status-indicator.active {
       opacity: 1;
       animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .status-indicator.active::after {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      opacity: 0.45;
+      animation: pingRing 1.8s ease-out infinite;
+    }
+
+    @keyframes pingRing {
+      0% {
+        transform: scale(0.8);
+        opacity: 0.5;
+      }
+      100% {
+        transform: scale(1.8);
+        opacity: 0;
+      }
     }
 
     .status-indicator.streaming {
@@ -701,6 +752,12 @@
       background: var(--error);
       box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
       animation: none;
+    }
+
+    .status-indicator.complete::after,
+    .status-indicator.error::after {
+      animation: none;
+      opacity: 0;
     }
 
     @keyframes pulse {
@@ -721,23 +778,38 @@
     }
 
     .input-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 12px;
-      align-items: flex-end;
+      align-items: end;
       max-width: 1000px;
       margin: 0 auto;
     }
 
-    #prompt {
-      flex: 1;
-      min-height: 56px;
-      max-height: 200px;
-      resize: vertical;
+    .composer {
       border: 1px solid var(--border-medium);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #ffffff, #f8fbff);
+      box-shadow: var(--shadow-sm);
+      padding: 10px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .composer:focus-within {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    #prompt {
+      width: 100%;
+      min-height: 56px;
+      max-height: 180px;
+      resize: none;
+      border: none;
       border-radius: 10px;
-      padding: 14px 18px;
+      padding: 10px 12px 8px;
       color: var(--text-primary);
-      background: var(--bg-secondary);
+      background: transparent;
       font-size: 15px;
       line-height: 1.5;
       transition: all 0.2s;
@@ -745,18 +817,83 @@
 
     #prompt:focus {
       outline: none;
-      border-color: var(--accent-primary);
-      background: var(--bg-secondary);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
     }
 
     #prompt::placeholder {
       color: var(--text-muted);
     }
 
+    .composer-meta {
+      margin-top: 4px;
+      padding: 0 10px 4px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .send-btn {
+      min-width: 112px;
+      height: 56px;
+      border-radius: 12px;
+      align-self: stretch;
+    }
+
+    @media (max-width: 1024px) {
+      .top {
+        padding: 16px 20px;
+        gap: 14px;
+      }
+
+      .chat {
+        padding: 24px 20px;
+        gap: 20px;
+      }
+
+      .msg {
+        max-width: 100%;
+      }
+
+      .input {
+        padding: 18px 20px;
+      }
+    }
+
     @media (max-width: 768px) {
       .top {
         padding: 12px 16px;
+        align-items: flex-start;
+      }
+
+      .title {
+        width: 100%;
+      }
+
+      .logo {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+      }
+
+      h1 {
+        font-size: 20px;
+      }
+
+      .subtitle {
+        font-size: 12px;
+      }
+
+      .tools {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .tools .btn {
+        width: 100%;
       }
 
       .chat {
@@ -769,21 +906,105 @@
         font-size: 14px;
       }
 
+      .supervisor-head {
+        flex-wrap: wrap;
+      }
+
+      .supervisor-current-stage {
+        font-size: 12px;
+      }
+
+      .supervisor-stream {
+        max-height: 120px;
+      }
+
+      .hint {
+        padding: 10px 14px;
+        font-size: 12px;
+      }
+
+      #status {
+        gap: 6px;
+        line-height: 1.4;
+      }
+
+      #status-task {
+        width: 100%;
+      }
+
       .input {
         padding: 16px;
       }
 
       .input-row {
-        flex-direction: column;
+        grid-template-columns: 1fr;
         gap: 10px;
       }
 
-      .btn {
+      .send-btn {
         width: 100%;
+        min-width: 0;
+        height: 50px;
       }
 
       #model {
         width: 100%;
+        min-width: 0;
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .chat {
+        padding: 14px 10px;
+        gap: 12px;
+      }
+
+      .msg {
+        gap: 10px;
+      }
+
+      .avatar {
+        width: 34px;
+        height: 34px;
+        font-size: 16px;
+      }
+
+      .bubble {
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+
+      .composer {
+        padding: 8px;
+        border-radius: 12px;
+      }
+
+      #prompt {
+        min-height: 52px;
+        font-size: 14px;
+        padding: 8px 10px 6px;
+      }
+
+      .composer-meta {
+        padding: 0 8px 2px;
+        font-size: 10px;
+      }
+
+      .tools {
+        grid-template-columns: 1fr;
+      }
+
+      #model {
+        grid-column: auto;
+      }
+
+      .composer-meta span:last-child {
+        display: none;
+      }
+
+      .review-actions {
+        flex-direction: column;
       }
     }
   </style>
@@ -819,13 +1040,20 @@
       <div id="status">
         <span class="status-indicator" id="status-indicator"></span>
         <span id="status-text">준비됨</span>
+        <span id="status-task"></span>
       </div>
     </div>
 
     <section class="input">
       <div class="input-row">
-        <textarea id="prompt" placeholder="메시지를 입력하세요... (Enter: 전송 / Shift+Enter: 줄바꿈)"></textarea>
-        <button class="btn main" id="sendBtn">전송</button>
+        <div class="composer">
+          <textarea id="prompt" placeholder="메시지를 입력하세요..."></textarea>
+          <div class="composer-meta">
+            <span>Shift + Enter 줄바꿈</span>
+            <span>Enter 전송</span>
+          </div>
+        </div>
+        <button class="btn main send-btn" id="sendBtn">전송</button>
       </div>
     </section>
   </main>
@@ -844,6 +1072,7 @@
     const endpoint = '/a2a/supervisor/stream';
     const chatEl = document.getElementById('chat');
     const statusTextEl = document.getElementById('status-text');
+    const statusTaskEl = document.getElementById('status-task');
     const statusIndicatorEl = document.getElementById('status-indicator');
     const statusProgressEl = document.getElementById('status-progress');
     const promptEl = document.getElementById('prompt');
@@ -854,31 +1083,92 @@
 
     let streaming = false;
     let abortController = null;
+    let statusTicking = false;
+    let statusTargetProgress = 0;
+    let statusDisplayProgress = 0;
+    let statusLastUpdateAt = 0;
 
-    function setStatus(text, type = 'ready') {
-      statusTextEl.textContent = text;
+    function autoResizePrompt() {
+      if (!promptEl) return;
+      promptEl.style.height = 'auto';
+      const nextHeight = Math.max(56, Math.min(180, promptEl.scrollHeight));
+      promptEl.style.height = `${nextHeight}px`;
+    }
+
+    function updateStatusVisual(type) {
       statusIndicatorEl.className = 'status-indicator';
-      statusProgressEl.className = '';
-      statusProgressEl.style.width = '0%';
+      statusProgressEl.classList.remove('active');
 
       if (type === 'streaming') {
         statusIndicatorEl.classList.add('active', 'streaming');
         statusProgressEl.classList.add('active');
-        statusProgressEl.style.width = '100%';
       } else if (type === 'complete') {
         statusIndicatorEl.classList.add('active', 'complete');
-        statusProgressEl.style.width = '100%';
-        setTimeout(() => {
-          statusIndicatorEl.classList.remove('active', 'complete');
-          statusProgressEl.style.width = '0%';
-        }, 2000);
       } else if (type === 'error') {
         statusIndicatorEl.classList.add('active', 'error');
+      }
+    }
+
+    function animateStatusProgress() {
+      if (!statusTicking) return;
+      const now = Date.now();
+      if (now - statusLastUpdateAt > 1500 && statusTargetProgress < 94) {
+        statusTargetProgress = Math.min(94, statusTargetProgress + 0.7);
+      }
+      if (statusDisplayProgress < statusTargetProgress) {
+        statusDisplayProgress = Math.min(statusTargetProgress, statusDisplayProgress + 0.9);
+      } else if (statusDisplayProgress > statusTargetProgress) {
+        statusDisplayProgress = Math.max(statusTargetProgress, statusDisplayProgress - 1.2);
+      }
+      statusProgressEl.style.width = `${Math.max(0, Math.min(100, statusDisplayProgress)).toFixed(1)}%`;
+      requestAnimationFrame(animateStatusProgress);
+    }
+
+    function beginStatusTicker() {
+      if (statusTicking) return;
+      statusTicking = true;
+      statusLastUpdateAt = Date.now();
+      requestAnimationFrame(animateStatusProgress);
+    }
+
+    function stopStatusTicker() {
+      statusTicking = false;
+    }
+
+    function setStatus(text, type = 'ready', options = {}) {
+      statusTextEl.textContent = text;
+      statusTaskEl.textContent = options.activity ? `· ${options.activity}` : '';
+
+      if (type === 'streaming') {
+        updateStatusVisual('streaming');
+        statusLastUpdateAt = Date.now();
+        if (typeof options.progress === 'number') {
+          statusTargetProgress = Math.max(statusTargetProgress, Math.min(99, options.progress));
+        } else if (statusTargetProgress < 14) {
+          statusTargetProgress = 14;
+        }
+        beginStatusTicker();
+        return;
+      }
+
+      stopStatusTicker();
+      updateStatusVisual(type);
+
+      if (type === 'complete') {
+        statusTargetProgress = 100;
+        statusDisplayProgress = 100;
         statusProgressEl.style.width = '100%';
         setTimeout(() => {
-          statusIndicatorEl.classList.remove('active', 'error');
-          statusProgressEl.style.width = '0%';
-        }, 3000);
+          statusProgressEl.classList.remove('active');
+        }, 1200);
+      } else if (type === 'error') {
+        statusTargetProgress = Math.max(statusTargetProgress, 100);
+        statusDisplayProgress = 100;
+        statusProgressEl.style.width = '100%';
+      } else {
+        statusTargetProgress = 0;
+        statusDisplayProgress = 0;
+        statusProgressEl.style.width = '0%';
       }
     }
 
@@ -1137,6 +1427,47 @@
       return labels[stage] || stage;
     }
 
+    function progressAgentDetail(progress) {
+      if (!progress || !progress.metadata) return '';
+      const md = progress.metadata;
+      const parts = [];
+      if (md.agentKey) parts.push(md.agentKey);
+      if (md.method) parts.push(md.method);
+      if (md.status) parts.push(md.status);
+      if (parts.length === 0 && md.nodeType) parts.push(md.nodeType);
+      return parts.join(' · ');
+    }
+
+    function stageLine(progress) {
+      const detail = progressAgentDetail(progress);
+      if (!detail) return `${getStageLabel(progress.stage)} - ${progress.message}`;
+      return `${getStageLabel(progress.stage)} - ${progress.message} (${detail})`;
+    }
+
+    function applySupervisorProgress(ai, progress, opts = {}) {
+      if (!progress) return 0;
+      const previous = Number(opts.lastProgress || 0);
+      const pct = Math.max(previous, Math.min(100, Number(progress.progress || 0)));
+      ai.progressFill.style.width = `${pct}%`;
+      ai.currentStage.textContent = stageLine(progress);
+      if (pct >= 100 || progress.stage === 'completed') {
+        ai.progressFill.classList.add('completed');
+      }
+
+      const detail = progressAgentDetail(progress);
+      setStatus(
+        detail
+          ? `${getStageLabel(progress.stage)} (${detail}, ${pct}%)`
+          : `${getStageLabel(progress.stage)} (${pct}%)`,
+        'streaming',
+        {
+          progress: pct,
+          activity: progress.message
+        }
+      );
+      return pct;
+    }
+
     async function rpcCall(method, params) {
       const body = {
         jsonrpc: '2.0',
@@ -1273,19 +1604,7 @@
 
         const progress = parseSupervisorProgress(line);
         if (progress) {
-          const pct = Math.max(lastProgress, Math.min(100, progress.progress));
-          lastProgress = pct;
-          ai.progressFill.style.width = `${pct}%`;
-          ai.currentStage.textContent = `${getStageLabel(progress.stage)} - ${progress.message}`;
-          statusProgressEl.classList.add('active');
-          statusProgressEl.style.width = `${pct}%`;
-          statusTextEl.textContent = `${getStageLabel(progress.stage)} (${pct}%)`;
-          statusIndicatorEl.className = 'status-indicator active streaming';
-          if (pct >= 100 || progress.stage === 'completed') {
-            ai.progressFill.classList.add('completed');
-            statusIndicatorEl.className = 'status-indicator active complete';
-            statusProgressEl.classList.remove('active');
-          }
+          lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
         }
         await sleep(90);
       }
@@ -1317,9 +1636,12 @@
 
       addMessage('user', text.replace(/\n/g, '<br>'));
       promptEl.value = '';
+      autoResizePrompt();
       streaming = true;
       abortController = new AbortController();
-      setStatus('전송 중...', 'streaming');
+      statusTargetProgress = 0;
+      statusDisplayProgress = 0;
+      setStatus('요청 전송 중...', 'streaming', { progress: 10, activity: 'Supervisor 호출 준비' });
 
       const ai = createAiResponseShell();
       let acc = '';
@@ -1327,6 +1649,7 @@
       let lineBuffer = '';
       let answerStarted = false;
       let lastProgress = 0;
+      let doneReceived = false;
       let waitingReviewDetected = false;
       let streamedAnswer = '';
       let pendingChars = '';
@@ -1387,7 +1710,7 @@
           throw new Error(`Non-SSE response: ${body}`);
         }
 
-        setStatus('응답 수신 중...', 'streaming');
+        setStatus('응답 수신 중...', 'streaming', { progress: 16, activity: 'SSE 스트림 연결됨' });
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -1420,27 +1743,12 @@
 
                   // 진행 상황 파싱 및 UI 업데이트
                   const progress = parseSupervisorProgress(line.trim());
-                    if (progress) {
-                    // 진행률 업데이트
-                    ai.progressFill.style.width = `${progress.progress}%`;
-                    lastProgress = progress.progress;
-
-                    // 100% 완료 시 시각적 피드백
-                    if (progress.progress >= 100) {
-                      ai.progressFill.classList.add('completed');
-                      // 완료되면 panel은 접힌 상태로 유지 (사라지지 않음)
+                  if (progress) {
+                    lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
+                    if (progress.stage === 'hitl_waiting') {
+                      waitingReviewDetected = true;
+                      await showHitlReviewPanel(ai, progress.message);
                     }
-
-                    // 현재 단계 표시
-                      ai.currentStage.textContent = `${getStageLabel(progress.stage)} - ${progress.message}`;
-                      if (progress.stage === 'hitl_waiting') {
-                        waitingReviewDetected = true;
-                        await showHitlReviewPanel(ai, progress.message);
-                      }
-
-                    // 하단 상태바 업데이트
-                    setStatus(`${getStageLabel(progress.stage)} (${progress.progress}%)`,
-                              progress.progress >= 100 ? 'complete' : 'streaming');
                   }
                 } else if (line.length > 0) {
                   assistantDelta += rawLine + '\n';
@@ -1449,7 +1757,20 @@
 
               if (trailing.length > 0) {
                 if (trailing.trim().startsWith('[supervisor]')) {
-                  lineBuffer = trailing;
+                  const trailingProgress = parseSupervisorProgress(trailing.trim());
+                  if (trailingProgress) {
+                    supervisorLogs.push(trailing.trim());
+                    ai.panel.style.display = 'block';
+                    ai.stream.textContent = supervisorLogs.join('\n');
+                    ai.stream.scrollTop = ai.stream.scrollHeight;
+                    lastProgress = applySupervisorProgress(ai, trailingProgress, { lastProgress });
+                    if (trailingProgress.stage === 'hitl_waiting') {
+                      waitingReviewDetected = true;
+                      await showHitlReviewPanel(ai, trailingProgress.message);
+                    }
+                  } else {
+                    lineBuffer = trailing;
+                  }
                 } else {
                   assistantDelta += trailing;
                 }
@@ -1490,7 +1811,11 @@
             }
 
             if (event === 'done') {
-              setStatus('완료', 'complete');
+              doneReceived = true;
+              setStatus('응답 마무리 중...', 'streaming', {
+                progress: Math.max(lastProgress, 97),
+                activity: '최종 응답 조합 중'
+              });
             }
           }
         }
@@ -1501,6 +1826,11 @@
           supervisorLogs.push(trimmedRemainder);
           ai.panel.style.display = 'block';
           ai.stream.textContent = supervisorLogs.join('\n');
+          ai.stream.scrollTop = ai.stream.scrollHeight;
+          const remainderProgress = parseSupervisorProgress(trimmedRemainder);
+          if (remainderProgress) {
+            lastProgress = applySupervisorProgress(ai, remainderProgress, { lastProgress });
+          }
         } else if (remainder.length > 0) {
           acc += remainder;
           enqueueAssistantChars(remainder);
@@ -1513,7 +1843,10 @@
         if (!acc) {
           if (waitingReviewDetected) {
             ai.answer.innerText = '요청이 HITL 승인 대기 상태입니다. 아래 버튼으로 승인/취소를 선택하세요.';
-            setStatus('HITL 대기 중', 'streaming');
+            setStatus('HITL 승인 대기 중', 'streaming', {
+              progress: Math.max(lastProgress, 82),
+              activity: '사용자 결정 대기'
+            });
           } else {
             ai.answer.innerText = '[응답 없음] 스트림에서 chunk를 받지 못했습니다.';
             setStatus('응답 없음', 'error');
@@ -1521,7 +1854,11 @@
         } else {
           renderAssistantMarkdown(ai.answer, acc);
           await enhanceBubble(ai.answer);
-          setStatus('완료', 'complete');
+          if (doneReceived || lastProgress >= 100) {
+            setStatus('완료', 'complete', { activity: '최종 응답 렌더 완료' });
+          } else {
+            setStatus('응답 수신 완료', 'complete', { activity: '스트림 종료' });
+          }
         }
       } catch (e) {
         if (e.name === 'AbortError') {
@@ -1559,6 +1896,8 @@
         send();
       }
     });
+    promptEl.addEventListener('input', autoResizePrompt);
+    autoResizePrompt();
 
     addMessage('ai', '안녕하세요. A2A Supervisor에 오신 것을 환영합니다. 무엇을 도와드릴까요?');
 

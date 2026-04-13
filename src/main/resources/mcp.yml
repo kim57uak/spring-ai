@@ -11,6 +11,16 @@ mcp:
       allow-tools:
         - createAutoCopySaleProducts
         - getSaleProductDetails
+      tool-policies:
+        createAutoCopySaleProducts:
+          operation: mutation
+          retryable: false
+          max-calls-per-request: 1
+          require-idempotency-key: true
+        getSaleProductDetails:
+          operation: query
+          retryable: false
+          max-calls-per-request: 1
     reservation:
       transport: sse
       host: http://10.225.18.50:8080
@@ -21,6 +31,12 @@ mcp:
         - action-execution
       allow-tools:
         - createReservation
+      tool-policies:
+        createReservation:
+          operation: mutation
+          retryable: false
+          max-calls-per-request: 1
+          require-idempotency-key: true
     search-mcp-server:
       transport: stdio
       command: ${MCP_NODE_PATH:/opt/homebrew/bin/node}
@@ -32,6 +48,7 @@ mcp:
       capabilities:
         - knowledge-retrieval
       allow-tools: []
+      tool-policies: {}
     search-economy-index:
       transport: stdio
       command: ${MCP_ECONOMY_PYTHON_PATH:/Users/dolpaks/Downloads/project/search-economy-index/venv/bin/python}
@@ -43,6 +60,7 @@ mcp:
       capabilities:
         - live-data-query
       allow-tools: []
+      tool-policies: {}
 
 agent:
   scopes:

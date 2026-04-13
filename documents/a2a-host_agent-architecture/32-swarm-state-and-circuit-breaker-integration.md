@@ -133,6 +133,11 @@ if (state.stateVersion() > 0 && current != null) {
     "circuitBreakerOpenUntilEpochMs": {
       "product": 1714694370000
     },
+    "handoffHopCount": 1,
+    "handoffPath": ["search", "product"],
+    "handoffBlockedCount": 0,
+    "lastHandoffAgent": "product",
+    "lastHandoffAt": "2026-04-13T10:00:00Z",
     "lastInvokeFailedCount": 2,
     "lastInvokeSuccessCount": 1
   },
@@ -143,6 +148,14 @@ if (state.stateVersion() > 0 && current != null) {
       "batchSize": 3,
       "failedCount": 2,
       "successCount": 1
+    },
+    {
+      "type": "HANDOFF_APPLIED",
+      "at": "2026-04-13T10:00:01Z",
+      "fromAgent": "search",
+      "toAgent": "product",
+      "reason": "domain_delegate",
+      "handoffEnabled": true
     }
   ]
 }
@@ -226,6 +239,10 @@ if (events.size() > MAX_EVENT_LOG_SIZE) {
 
 - `GRAPH_NODE_EVENT`: 그래프 노드 실행
 - `INVOKE_BATCH_RECORDED`: 배치 호출 결과
+- `HANDOFF_REQUESTED`: invoke 결과에서 handoff 지시가 발견됨
+- `HANDOFF_ACCEPTED`: handoff 정책 검증 통과
+- `HANDOFF_REJECTED`: allowlist/method/hop-limit/stream 검증 실패
+- `HANDOFF_SKIPPED_BY_FLAG`: `handoff.enabled=false`로 스킵
 - `PLAN`: 라우팅 계획 수립
 - `SELECT`: 라우팅 선택
 - `INVOKE`: 하위 에이전트 호출
@@ -234,9 +251,31 @@ if (events.size() > MAX_EVENT_LOG_SIZE) {
 
 ---
 
-## 6. 병렬 실행 및 예외 처리
+## 6. Handoff 정책 통합
 
-### 6.1 병렬 실행 설정
+### 6.1 Feature Flag
+
+- `handoff.enabled=false` (기본): handoff directive는 실행하지 않고 이벤트만 기록
+- `handoff.enabled=true`: handoff 정책 검증 후 동적 routing plan 반영
+
+### 6.2 검증 규칙
+
+1. handoff method는 기존 허용 enum만 사용
+2. stream 미지원 agent 대상 stream handoff 금지
+3. `maxHops`, duplicate path, rate-limit 정책 적용
+4. 검증 실패 시 기존 plan 경로로 폴백
+
+### 6.3 Progress/Trace 출력
+
+- handoff 단계 진행상태는 `SupervisorProgressSupport` 공통 모듈을 사용
+- 표준 포맷: `stage/progress/message/metadata`
+- 권장 stage: `handoff`, `handoff-skipped`, `handoff-applied`
+
+---
+
+## 7. 병렬 실행 및 예외 처리
+
+### 7.1 병렬 실행 설정
 
 ```yaml
 # a2a-supervisor.yml
@@ -246,7 +285,7 @@ host:
       max-concurrency: 3  # 최대 동시 호출 수 (1이면 순차)
 ```
 
-### 6.2 Resilience 패턴
+### 7.2 Resilience 패턴
 
 병렬 실행 시 일부 실패를 허용합니다:
 
@@ -276,9 +315,9 @@ private List<DownstreamCallResult> invokeBatch(
 
 ---
 
-## 7. 운영 가이드
+## 8. 운영 가이드
 
-### 7.1 모니터링 지표
+### 8.1 모니터링 지표
 
 SwarmState를 통해 다음 지표를 추적할 수 있습니다:
 
@@ -287,7 +326,7 @@ SwarmState를 통해 다음 지표를 추적할 수 있습니다:
 - `agentCooldownUntilEpochMs`: 에이전트별 cooldown 만료 시각
 - `circuitBreakerOpenUntilEpochMs`: 에이전트별 circuit open 만료 시각
 
-### 7.2 튜닝 파라미터
+### 8.2 튜닝 파라미터
 
 ```java
 // DefaultSupervisorSwarmCoordinator.java
@@ -302,7 +341,7 @@ private static final int MAX_ENTRIES_PER_MAP = 10_000;
 private static final Duration DEFAULT_TTL = Duration.ofHours(1);
 ```
 
-### 7.3 트러블슈팅
+### 8.3 트러블슈팅
 
 #### 문제: SwarmStateVersionConflictException 빈번 발생
 
@@ -329,7 +368,7 @@ private static final Duration DEFAULT_TTL = Duration.ofHours(1);
 
 ---
 
-## 8. 참고 자료
+## 9. 참고 자료
 
 - [낙관적 락 vs 비관적 락](https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html)
 - [Circuit Breaker 패턴](https://martinfowler.com/bliki/CircuitBreaker.html)

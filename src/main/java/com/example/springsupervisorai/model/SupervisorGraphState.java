@@ -19,6 +19,9 @@ public class SupervisorGraphState extends AgentState {
     public static final String ROUTING_INDEX = "routingIndex";
     public static final String CURRENT_PLAN = "currentPlan";
     public static final String DOWNSTREAM_RESULTS = "downstreamResults";
+    public static final String LAST_INVOKE_BATCH_RESULTS = "lastInvokeBatchResults";
+    public static final String HANDOFF_VALIDATIONS = "handoffValidations";
+    public static final String HANDOFF_ENABLED = "handoffEnabled";
     public static final String SWARM_SHARED_FACTS = "swarmSharedFacts";
     public static final String SWARM_STATE_VERSION = "swarmStateVersion";
 
@@ -75,7 +78,10 @@ public class SupervisorGraphState extends AgentState {
                     readString(map, "method"),
                     readString(map, "reason"),
                     readInt(map, "priority"),
-                    readMap(map, "arguments")
+                    readMap(map, "arguments"),
+                    readString(map, "sourceType"),
+                    readInt(map, "handoffDepth"),
+                    readString(map, "parentAgentKey")
             ));
         }
         return plans;
@@ -98,10 +104,23 @@ public class SupervisorGraphState extends AgentState {
                     readString(map, "status"),
                     readString(map, "payload"),
                     readString(map, "errorCode"),
-                    readString(map, "errorMessage")
+                    readString(map, "errorMessage"),
+                    readBoolean(map, "handoffRequested"),
+                    readString(map, "nextAgentKey"),
+                    readString(map, "handoffMethod"),
+                    readString(map, "handoffReason"),
+                    readMap(map, "handoffArguments")
             ));
         }
         return results;
+    }
+
+    private boolean readBoolean(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return "true".equalsIgnoreCase(String.valueOf(value));
     }
 
     private String readString(Map<?, ?> map, String key) {

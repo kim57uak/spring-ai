@@ -29,6 +29,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.concurrent.CancellationException;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,9 @@ public class SupervisorAgentOrchestrator {
             SupervisorRuntimeState.PLANNED.value(),
             SupervisorRuntimeState.ROUTING_SELECTED.value(),
             SupervisorRuntimeState.A2A_CALLING.value(),
+            SupervisorRuntimeState.HANDOFF_EVALUATING.value(),
+            SupervisorRuntimeState.HANDOFF_APPLIED.value(),
+            SupervisorRuntimeState.HANDOFF_SKIPPED.value(),
             SupervisorRuntimeState.A2A_RESULT_MERGED.value(),
             SupervisorRuntimeState.COMPOSING.value(),
             SupervisorRuntimeState.COMPLETED.value()
@@ -365,6 +369,9 @@ public class SupervisorAgentOrchestrator {
                 Map.entry(SupervisorGraphState.ROUTING_INDEX, 0),
                 Map.entry(SupervisorGraphState.ROUTING_PLANS, List.of()),
                 Map.entry(SupervisorGraphState.DOWNSTREAM_RESULTS, List.of()),
+                Map.entry(SupervisorGraphState.LAST_INVOKE_BATCH_RESULTS, List.of()),
+                Map.entry(SupervisorGraphState.HANDOFF_VALIDATIONS, List.of()),
+                Map.entry(SupervisorGraphState.HANDOFF_ENABLED, false),
                 Map.entry(SupervisorGraphState.SWARM_SHARED_FACTS, swarmFacts),
                 Map.entry(SupervisorGraphState.SWARM_STATE_VERSION, swarmStateVersion)
         );
@@ -412,6 +419,14 @@ public class SupervisorAgentOrchestrator {
             ));
         }
 
+        long handoffPlanCount = context.getRoutingPlans().stream().filter(RoutingPlan::isHandoff).count();
+        Map<String, Object> handoffProgressMetadata = handoffProgressMetadata(state, handoffPlanCount, context.getRoutingPlans().size());
+        if (handoffPlanCount > 0) {
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_HANDOFF_APPLIED, 40, "handoff 계획이 반영되었습니다.", handoffProgressMetadata);
+        } else {
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_HANDOFF_SKIPPED, 40, "handoff 적용 없이 기본 라우팅을 유지합니다.", handoffProgressMetadata);
+        }
+
         progress(progressEmitter, SupervisorProgressSupport.STAGE_SWARM, 41, "Swarm 라우팅 반영 완료", Map.of(
                 "swarmStateVersion", context.getSwarmStateVersion(),
                 "finalPlanCount", context.getRoutingPlans().size()
@@ -454,6 +469,12 @@ public class SupervisorAgentOrchestrator {
 
         // 5단계: 이미 실행된 결과가 있는 경우 출력 (60%)
         if (!context.getResults().isEmpty()) {
+            logger.info("Supervisor graph downstream aggregation sessionId={}, resultsCount={}",
+                    request.sessionId(), context.getResults().size());
+            for (DownstreamCallResult result : context.getResults()) {
+                logger.info("Supervisor graph downstream result sessionId={}, {}",
+                        request.sessionId(), summarizeResult(result));
+            }
             progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60, "그래프 내에서 하위 에이전트가 이미 실행되었습니다. 결과를 확인합니다.", Map.of(
                     "resultsCount", context.getResults().size(),
                     "executedInGraph", true
@@ -532,9 +553,96 @@ public class SupervisorAgentOrchestrator {
             logger.warn("Supervisor planned no downstream calls sessionId={}, message={}",
                     request.sessionId(), request.message());
             progress(progressEmitter, SupervisorProgressSupport.STAGE_ROUTING, 75, "라우팅 계획: 직접 응답(하위 에이전트 호출 없음)");
+        } else if (context.getResults().isEmpty()) {
+            logger.warn("Supervisor routing exists but downstream results are empty sessionId={}, planCount={}",
+                    request.sessionId(), context.getRoutingPlans().size());
         }
 
         return context;
+    }
+
+    private Map<String, Object> handoffProgressMetadata(
+            SupervisorGraphState state,
+            long handoffPlanCount,
+            int totalPlanCount
+    ) {
+        LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("handoffEnabled", state.value(SupervisorGraphState.HANDOFF_ENABLED).map(this::toBoolean).orElse(false));
+        metadata.put("handoffPlanCount", handoffPlanCount);
+        metadata.put("totalPlanCount", totalPlanCount);
+
+        Map<String, Object> representative = representativeHandoffValidation(state);
+        metadata.put("fromAgent", readString(representative, "fromAgentKey"));
+        metadata.put("toAgent", readString(representative, "nextAgentKey"));
+        metadata.put("reason", firstNonBlank(readString(representative, "reason"), readString(representative, "reasonCode")));
+        metadata.put("hopCount", readInt(representative, "hopCount"));
+        return Map.copyOf(metadata);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> representativeHandoffValidation(SupervisorGraphState state) {
+        Object raw = state.value(SupervisorGraphState.HANDOFF_VALIDATIONS).orElse(List.of());
+        if (!(raw instanceof List<?> list) || list.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, Object> first = Map.of();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> source)) {
+                continue;
+            }
+            LinkedHashMap<String, Object> mapped = new LinkedHashMap<>();
+            source.forEach((k, v) -> mapped.put(String.valueOf(k), v));
+            if (first.isEmpty()) {
+                first = mapped;
+            }
+            if (toBoolean(mapped.get("accepted"))) {
+                return mapped;
+            }
+        }
+        return first;
+    }
+
+    private boolean toBoolean(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return "true".equalsIgnoreCase(String.valueOf(value));
+    }
+
+    private String readString(Map<String, Object> map, String key) {
+        if (map == null || map.isEmpty()) {
+            return "";
+        }
+        Object value = map.get(key);
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private int readInt(Map<String, Object> map, String key) {
+        if (map == null || map.isEmpty()) {
+            return 0;
+        }
+        Object value = map.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private boolean isCanceled(String taskId, AtomicBoolean canceled) {

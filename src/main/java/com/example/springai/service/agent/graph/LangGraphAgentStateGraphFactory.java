@@ -11,6 +11,8 @@ import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.AsyncEdgeAction;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -29,6 +31,7 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
 
+    private static final Logger logger = LoggerFactory.getLogger(LangGraphAgentStateGraphFactory.class);
     private static final String START = "__START__";
     private static final String END = "__END__";
 
@@ -109,6 +112,7 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
             ToolExecutionResult firstExecuted = null;
             boolean allSuccess = true;
             boolean anyExecuted = false;
+            boolean terminalAfterExecution = false;
             int iterations = 0;
             List<String> executedTrace = new java.util.ArrayList<>();
 
@@ -124,11 +128,13 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
                 executedSignatures.add(signature);
 
                 ToolExecutionResult result = toolExecutionService.execute(plan, context);
+                logExecutionResult(context, plan, result);
                 if (firstExecuted == null && result.executed()) {
                     firstExecuted = result;
                 }
                 anyExecuted = anyExecuted || result.executed();
                 allSuccess = allSuccess && result.success();
+                terminalAfterExecution = terminalAfterExecution || result.terminalAfterExecution();
                 context.setExecutionResult(result);
                 String executedLine = result.serverName() + "/" + result.toolName()
                         + " args=" + result.usedArguments()
@@ -136,6 +142,12 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
                 context.addToolTrace(executedLine);
                 executedTrace.add(executedLine);
                 iterations++;
+
+                if (result.terminalAfterExecution()) {
+                    // mutation 정책 도구는 1회 처리(성공/실패/정책차단 포함) 후 즉시 종료한다.
+                    // 큐에 중복 mutation plan이 남아 있어도 추가 시도를 하지 않는다.
+                    queue.clear();
+                }
 
                 payload.append("[")
                         .append(plan.capability())
@@ -147,7 +159,7 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
                         .append(result.rawPayload())
                         .append("\n\n");
 
-                if (iterations < MAX_TOOL_ITERATIONS) {
+                if (!terminalAfterExecution && iterations < MAX_TOOL_ITERATIONS) {
                     List<ToolPlan> nextPlans = planningService.plan(context);
                     for (ToolPlan next : nextPlans) {
                         if (!next.toolRequired()) {
@@ -163,6 +175,12 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
 
             if (!anyExecuted) {
                 payload.append("NO_TOOL_EXECUTED");
+                logger.warn("Agent tool execution skipped all plans. sessionId={}, requestedPlans={}, iterations={}",
+                        context.getSessionId(), context.getPlans().size(), iterations);
+            }
+            if (!allSuccess) {
+                logger.warn("Agent tool execution completed with failures. sessionId={}, iterations={}, traceCount={}",
+                        context.getSessionId(), iterations, executedTrace.size());
             }
 
             Map<String, Object> updates = new HashMap<>();
@@ -174,6 +192,7 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
             updates.put(AgentGraphState.EXEC_TRACE, executedTrace);
             updates.put(AgentGraphState.EXEC_SUCCESS, allSuccess);
             updates.put(AgentGraphState.EXEC_EXECUTED, anyExecuted);
+            updates.put(AgentGraphState.EXEC_TERMINAL, terminalAfterExecution);
             return CompletableFuture.completedFuture(updates);
         };
     }
@@ -181,6 +200,44 @@ public class LangGraphAgentStateGraphFactory implements AgentStateGraphFactory {
     private String signature(ToolPlan plan) {
         // 동일 도구 중복 실행 방지를 위한 식별자.
         return plan.serverName() + "|" + plan.toolName() + "|" + plan.arguments();
+    }
+
+    /**
+     * 하위 MCP 실행 결과를 운영 로그로 남긴다.
+     * 실패/스킵을 WARN으로 기록해 장애 분석 시점을 명확히 한다.
+     */
+    private void logExecutionResult(PlanningContext context, ToolPlan plan, ToolExecutionResult result) {
+        String sessionId = context == null ? "" : context.getSessionId();
+        if (result == null) {
+            logger.warn("Agent tool execution returned null result. sessionId={}, server={}, tool={}",
+                    sessionId, plan.serverName(), plan.toolName());
+            return;
+        }
+        if (!result.executed()) {
+            logger.warn("Agent tool execution skipped. sessionId={}, server={}, tool={}, reason={}, payloadPreview={}",
+                    sessionId, plan.serverName(), plan.toolName(), plan.reason(), preview(result.rawPayload()));
+            return;
+        }
+        if (!result.success()) {
+            logger.warn("Agent tool execution failed. sessionId={}, server={}, tool={}, reason={}, argsKeys={}, payloadPreview={}",
+                    sessionId,
+                    result.serverName(),
+                    result.toolName(),
+                    plan.reason(),
+                    result.usedArguments() == null ? List.of() : result.usedArguments().keySet(),
+                    preview(result.rawPayload()));
+            return;
+        }
+        logger.info("Agent tool execution success. sessionId={}, server={}, tool={}, payloadLength={}",
+                sessionId, result.serverName(), result.toolName(), result.rawPayload() == null ? 0 : result.rawPayload().length());
+    }
+
+    private String preview(String rawPayload) {
+        if (rawPayload == null || rawPayload.isBlank()) {
+            return "";
+        }
+        String oneLine = rawPayload.replace('\n', ' ').replace('\r', ' ');
+        return oneLine.length() <= 220 ? oneLine : oneLine.substring(0, 220) + "...";
     }
 
     private AsyncNodeAction<AgentGraphState> composeNode() {

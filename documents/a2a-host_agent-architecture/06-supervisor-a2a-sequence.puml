@@ -3,23 +3,28 @@
 title 06. Supervisor Agent A2A Routing Sequence
 
 skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 20
 
 actor User
 participant "SupervisorA2AController" as Controller
 participant "SupervisorAgentService" as Service
 participant "SupervisorAgentOrchestrator" as Orchestrator
 participant "LangGraph CompiledGraph" as StateGraph
-participant "SupervisorPlanningService" as Planner
+participant "Swarm State Store" as SwarmStore
+participant "SupervisorPlanningService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Planner #FFE7A8
+participant "DefaultSupervisorLlmRuntime" as Runtime #FFF4CC
 participant "HITL Policy Service" as HitlPolicy
 participant "HITL Decision Service" as HitlDecision
 participant "A2AInvocationService" as Invoker
+participant "Handoff Policy Service" as HandoffPolicy
 participant "A2AClientRegistry" as Registry
 participant "A2AJsonRpcClient" as A2AClient
-participant "Swarm State Store" as SwarmStore
+participant "SupervisorProgressSupport" as Progress
+participant "SupervisorResponseComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Composer #FFE7A8
 participant "Product Agent A2A" as ProductAgent
 participant "Reservation Agent A2A" as ReservationAgent
 participant "Search Agent A2A" as SearchAgent
-participant "SupervisorResponseComposeService" as Composer
 
 User -> Controller : POST /a2a/supervisor (Accept: text/event-stream)
 Controller -> Service : stream(sessionId, message, model)
@@ -28,6 +33,8 @@ Orchestrator -> StateGraph : invoke(state)
 Orchestrator -> SwarmStore : load shared state
 
 StateGraph -> Planner : plan(context)
+Planner -> Runtime : complete(planning prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
+Runtime --> Planner : routing plans
 Planner --> StateGraph : routing plans
 StateGraph -> HitlPolicy : evaluate(context, plans)
 HitlPolicy --> StateGraph : required? + reason
@@ -56,7 +63,18 @@ alt decision=APPROVE
   end
 
   Invoker --> StateGraph : DownstreamCallResult
+  StateGraph -> HandoffPolicy : evaluate(result, context)
+  alt handoff.enabled=false
+    HandoffPolicy --> StateGraph : skip (HANDOFF_SKIPPED_BY_FLAG)
+  else handoff applicable
+    HandoffPolicy --> StateGraph : append next RoutingPlan (source=HANDOFF)
+  else policy reject
+    HandoffPolicy --> StateGraph : skip (reason=allowlist/method/hop-limit)
+  end
+  StateGraph -> Progress : line(stage=handoff, metadata)
   StateGraph -> Composer : compose(context + all results)
+  Composer -> Runtime : stream(compose prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
+  Runtime --> Composer : token chunks
   Composer --> Orchestrator : response chunks
 else decision=CANCEL
   StateGraph --> Orchestrator : canceled
@@ -66,6 +84,16 @@ Service --> Controller : chunks
 Controller --> User : SSE stream
 Orchestrator -> SwarmStore : save decision/event log
 
+note right of HandoffPolicy
+Handoff guardrails
+- method enum allowlist only
+- stream handoff only if downstream supports streaming
+- max handoff hops + duplicate path guard
+end note
+
+' 2026-04-13 sync with doc 34
+' - add handoff policy evaluation and feature-flag skip path
+' - handoff status is emitted through SupervisorProgressSupport
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

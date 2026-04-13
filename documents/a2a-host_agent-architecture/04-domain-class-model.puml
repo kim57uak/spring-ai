@@ -43,6 +43,9 @@ class RoutingPlan {
   +reason: String
   +priority: int
   +arguments: Map<String, Object>
+  +sourceType: String  ' PLANNER | HANDOFF
+  +handoffDepth: int
+  +parentAgentKey: String
 }
 
 class DownstreamCallResult {
@@ -52,6 +55,24 @@ class DownstreamCallResult {
   +payload: String
   +errorCode: String
   +errorMessage: String
+  +handoffRequested: boolean
+  +nextAgentKey: String
+  +handoffMethod: String
+  +handoffReason: String
+  +handoffArguments: Map<String, Object>
+}
+
+class HandoffDirective {
+  +nextAgentKey: String
+  +method: String
+  +reason: String
+  +arguments: Map<String, Object>
+}
+
+class HandoffValidationResult {
+  +accepted: boolean
+  +rejectReason: String
+  +hopCount: int
 }
 
 class SupervisorGraphState {
@@ -72,6 +93,10 @@ interface A2AInvocationService {
   +invoke(plan, context): DownstreamCallResult
 }
 
+interface HandoffPolicyService {
+  +evaluate(result, context): HandoffValidationResult
+}
+
 interface SupervisorResponseComposeService {
   +streamCompose(context): Flux<String>
 }
@@ -79,10 +104,15 @@ interface SupervisorResponseComposeService {
 SupervisorAgentRequest --> SupervisorPlanningContext
 SupervisorPlanningContext --> RoutingPlan
 SupervisorPlanningContext --> DownstreamCallResult
+DownstreamCallResult --> HandoffDirective
+SupervisorPlanningContext --> HandoffValidationResult
 SupervisorPlanningContext --> SwarmSharedState
 SupervisorPlanningContext --> HitlReviewContext
 SupervisorGraphState --> SupervisorPlanningContext
 
+' 2026-04-13 sync with doc 34
+' - add handoff domain objects and routing/result extensions
+' - handoff is feature-flagged and validated by policy service
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

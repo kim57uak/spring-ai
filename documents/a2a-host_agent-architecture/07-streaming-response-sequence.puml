@@ -9,7 +9,9 @@ participant "SupervisorA2AController" as Controller
 participant "SupervisorAgentService" as Service
 participant "SupervisorAgentOrchestrator" as Orchestrator
 participant "HITL Decision Service" as HitlDecision
+participant "Handoff Policy Service" as HandoffPolicy
 participant "SupervisorResponseComposeService" as Composer
+participant "SupervisorProgressSupport" as Progress
 participant "DefaultSupervisorLlmRuntime" as Runtime
 participant "ModelChatServiceFactory" as Factory
 participant "Provider ChatService" as Provider
@@ -25,6 +27,9 @@ Controller --> User : SSE(summary)
 
 Orchestrator -> HitlDecision : check APPROVE/CANCEL
 alt decision=APPROVE
+  Orchestrator -> HandoffPolicy : evaluate(results/context)
+  HandoffPolicy --> Orchestrator : handoff apply/skip
+  Orchestrator -> Progress : line(stage=handoff, metadata)
   Orchestrator -> Composer : streamCompose(context)
   Composer -> Runtime : stream(prompt, model, sessionId)
   Runtime -> Factory : resolveStream(model)
@@ -49,6 +54,9 @@ Orchestrator -> CheckpointStore : save checkpoint
 Orchestrator -> SwarmStore : save hitl/event state
 Controller --> User : SSE complete
 
+' 2026-04-13 sync with doc 34
+' - stream response path includes handoff evaluate/apply or skip
+' - progress/trace emitted via SupervisorProgressSupport
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

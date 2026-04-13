@@ -12,11 +12,13 @@ node "Supervisor Agent Spring Boot Runtime" {
   [LangGraphSupervisorStateGraphFactory] as GraphFactory
   [LlmSupervisorPlanningService] as Planner
   [DefaultA2AInvocationService] as Invoker
+  [DefaultHandoffPolicyService] as HandoffPolicy
   [LlmSupervisorResponseComposeService] as Composer
   [DefaultHitlPolicyService] as HitlPolicy
   [DefaultHitlDecisionService] as HitlDecision
   [A2AClientRegistry] as Registry
   [A2AJsonRpcClient] as A2AClient
+  [SupervisorProgressSupport] as ProgressSupport
   [DefaultSupervisorLlmRuntime] as LlmRuntime
 }
 
@@ -41,12 +43,14 @@ SupervisorService --> SupervisorOrchestrator
 SupervisorOrchestrator --> GraphFactory
 SupervisorOrchestrator --> Planner
 SupervisorOrchestrator --> Invoker
+SupervisorOrchestrator --> HandoffPolicy
 SupervisorOrchestrator --> Composer
 SupervisorOrchestrator --> HitlPolicy
 SupervisorOrchestrator --> HitlDecision
 SupervisorOrchestrator --> ConversationStore
 SupervisorOrchestrator --> CheckpointStore
 SupervisorOrchestrator --> SwarmStateStore
+SupervisorOrchestrator --> ProgressSupport
 Planner --> LlmRuntime
 Composer --> LlmRuntime
 LlmRuntime --> LlmProviders
@@ -57,6 +61,9 @@ A2AClient --> ProductAgent
 A2AClient --> ReservationAgent
 A2AClient --> SearchAgent
 
+' 2026-04-13 sync with doc 34
+' - deploy handoff policy service as dedicated runtime component
+' - use SupervisorProgressSupport for unified trace/progress formatting
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL
