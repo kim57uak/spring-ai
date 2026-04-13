@@ -11,11 +11,14 @@ import com.example.springsupervisorai.model.SupervisorInvocationStatus;
 import com.example.springsupervisorai.model.SupervisorA2aMethod;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -37,6 +40,7 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
     private final A2AClientRegistry clientRegistry;
     private final A2ARequestMapper requestMapper;
     private final A2AJsonRpcClient jsonRpcClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentMap<String, CircuitState> circuitStateByAgent = new ConcurrentHashMap<>();
 
     /**
@@ -271,8 +275,87 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
         String taskId = readAny(result, "id", "");
         String status = readAny(result, "status", SupervisorInvocationStatus.COMPLETED.value());
         String payload = result.isMissingNode() ? response.toString() : result.toString();
+        HandoffPayload handoff = extractHandoff(agentKey, result);
 
-        return new DownstreamCallResult(agentKey, taskId, status, payload, "", "");
+        return new DownstreamCallResult(
+                agentKey,
+                taskId,
+                status,
+                payload,
+                "",
+                "",
+                handoff.requested(),
+                handoff.nextAgentKey(),
+                handoff.method(),
+                handoff.reason(),
+                handoff.arguments()
+        );
+    }
+
+    /**
+     * downstream 응답에서 handoff 지시를 추출한다.
+     * <p>
+     * 호환 포맷:
+     * - result.handoff.{requested,nextAgentKey,method,reason,arguments}
+     * - result.{handoffRequested,nextAgentKey,handoffMethod,handoffReason,handoffArguments}
+     */
+    private HandoffPayload extractHandoff(String fallbackFromAgent, JsonNode resultNode) {
+        if (resultNode == null || resultNode.isMissingNode() || resultNode.isNull()) {
+            return HandoffPayload.empty();
+        }
+        JsonNode handoffNode = resultNode.path("handoff");
+        boolean requested = handoffNode.path("requested").asBoolean(false)
+                || resultNode.path("handoffRequested").asBoolean(false);
+        String nextAgentKey = firstNonBlank(
+                handoffNode.path("nextAgentKey").asText(""),
+                resultNode.path("nextAgentKey").asText("")
+        );
+        String method = firstNonBlank(
+                handoffNode.path("method").asText(""),
+                resultNode.path("handoffMethod").asText("")
+        );
+        String reason = firstNonBlank(
+                handoffNode.path("reason").asText(""),
+                resultNode.path("handoffReason").asText(""),
+                "handoff requested by " + safe(fallbackFromAgent)
+        );
+
+        JsonNode argumentsNode = handoffNode.path("arguments");
+        if (argumentsNode == null || argumentsNode.isMissingNode() || argumentsNode.isNull()) {
+            argumentsNode = resultNode.path("handoffArguments");
+        }
+        Map<String, Object> arguments = readJsonMap(argumentsNode);
+        if (!requested || nextAgentKey.isBlank()) {
+            return HandoffPayload.empty();
+        }
+        return new HandoffPayload(true, nextAgentKey, method, reason, arguments);
+    }
+
+    private Map<String, Object> readJsonMap(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull() || !node.isObject()) {
+            return Map.of();
+        }
+        LinkedHashMap<String, Object> mapped = objectMapper.convertValue(
+                node,
+                objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class)
+        );
+        return Map.copyOf(mapped);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
     /**
@@ -365,6 +448,18 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
         private void reset() {
             consecutiveFailures = 0;
             openUntilEpochMs = 0;
+        }
+    }
+
+    private record HandoffPayload(
+            boolean requested,
+            String nextAgentKey,
+            String method,
+            String reason,
+            Map<String, Object> arguments
+    ) {
+        private static HandoffPayload empty() {
+            return new HandoffPayload(false, "", "", "", Map.of());
         }
     }
 }

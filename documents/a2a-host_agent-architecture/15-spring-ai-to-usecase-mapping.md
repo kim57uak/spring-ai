@@ -12,8 +12,12 @@
   - review 상태, 공유 facts, event log를 버전 기반으로 저장/복원
 - `A2AInvocationService`
   - 계획에 따라 downstream A2A 호출 실행
+- `HandoffPolicyService`
+  - invoke 결과의 handoff directive를 검증하고 동적 routing plan 삽입 여부를 결정
 - `SupervisorResponseComposeService`
   - 다중 downstream 결과를 최종 응답으로 합성
+- `SupervisorProgressSupport`
+  - 생각 과정 UI 표시를 위한 공통 progress/trace 포맷 생성
 - `DefaultSupervisorLlmRuntime`
   - planning/compose 공통 모델 호출 포트
 - `LlmCallPolicy`
@@ -29,6 +33,20 @@
   - 특정 agent 실패 시 제한된 partial result로 응답
 - `mandatory hitl route`
   - 상품/예약/주문 생성·변경 요청은 자동 실행 없이 review 대기 후 승인 시 진행
+- `handoff route (feature-flagged)`
+  - `handoff.enabled=true`일 때만 invoke 이후 다음 agent로 동적 이관을 허용
+  - `handoff.enabled=false`면 기존 정적 plan 소비 경로 유지
+- `handoff guard route`
+  - handoff method는 허용 enum만 통과
+  - stream 미지원 agent로의 stream handoff는 차단
+
+---
+
+## 2026-04-13 동기화 메모 (34 반영)
+
+- handoff는 supervisor 그래프의 invoke 이후 분기로 추가되며 feature flag(`handoff.enabled`)로 즉시 on/off 가능해야 한다.
+- handoff 적용 여부/사유/hopCount는 `SupervisorProgressSupport` 공통 포맷과 swarm event log로 함께 기록한다.
+- handoff method는 기존 허용 enum만 사용하고, downstream streaming capability 없는 agent 대상 stream handoff는 금지한다.
 
 ---
 

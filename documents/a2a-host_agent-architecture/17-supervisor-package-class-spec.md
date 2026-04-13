@@ -12,10 +12,12 @@ src/main/java/com/example/springsupervisorai
 │   └── SupervisorA2AController
 ├── service
 │   ├── SupervisorAgentService
-│   └── SupervisorAgentOrchestrator
+│   ├── SupervisorAgentOrchestrator
+│   └── SupervisorProgressSupport
 ├── service/agent
 │   ├── plan/{SupervisorPlanningService, LlmSupervisorPlanningService}
 │   ├── invoke/{A2AInvocationService, DefaultA2AInvocationService, A2AClientRegistry}
+│   ├── handoff/{HandoffPolicyService, DefaultHandoffPolicyService}
 │   ├── compose/{SupervisorResponseComposeService, LlmSupervisorResponseComposeService}
 │   ├── graph/{SupervisorStateGraphFactory, LangGraphSupervisorStateGraphFactory}
 │   ├── hitl/{HitlPolicyService, HitlDecisionService}
@@ -30,17 +32,31 @@ src/main/java/com/example/springsupervisorai
     ├── SwarmSharedState
     ├── HitlReviewContext
     ├── RoutingPlan
-    └── DownstreamCallResult
+    ├── DownstreamCallResult
+    ├── HandoffDirective
+    └── HandoffValidationResult
 ```
 
 ## Core Contracts
 
 - `SupervisorPlanningService#plan(context): List<RoutingPlan>`
 - `A2AInvocationService#invoke(plan, context): DownstreamCallResult`
+- `HandoffPolicyService#evaluate(result, context): HandoffValidationResult`
+- `HandoffPolicyService#apply(context, validation): SupervisorPlanningContext`
 - `SupervisorResponseComposeService#streamCompose(context): Flux<String>`
 - `HitlPolicyService#evaluate(context, plans): HitlReviewContext`
 - `HitlDecisionService#decide(taskId, decision): HitlReviewContext`
 - `SupervisorStateGraphFactory#getCompiledGraph(): CompiledGraph<SupervisorGraphState>`
+- `SupervisorProgressSupport#line(stage, progress, message, metadata): String`
+
+---
+
+## 2026-04-13 동기화 메모 (34 반영)
+
+- handoff 기능은 `service/agent/handoff` 패키지로 분리해 SOLID(단일 책임/의존 역전) 원칙을 유지한다.
+- 진행상태/생각과정 출력은 `SupervisorProgressSupport` 공통 모듈을 사용한다.
+- handoff method는 기존 허용 enum만 통과시키고, stream 미지원 agent 대상 stream handoff는 차단한다.
+- 신규/수정 public 타입과 핵심 메서드는 Javadoc 필수 적용 대상으로 관리한다.
 
 ---
 

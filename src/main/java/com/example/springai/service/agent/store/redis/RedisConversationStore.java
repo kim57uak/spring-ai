@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -30,8 +31,8 @@ public class RedisConversationStore implements ConversationStore {
     private final ObjectMapper objectMapper;
     private final Map<String, List<String>> localFallback = new ConcurrentHashMap<>();
 
-    public RedisConversationStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
-        this.redisTemplate = redisTemplate;
+    public RedisConversationStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper) {
+        this.redisTemplate = redisTemplateProvider.getIfAvailable();
         this.objectMapper = objectMapper;
     }
 
@@ -40,6 +41,9 @@ public class RedisConversationStore implements ConversationStore {
      */
     @Override
     public List<String> load(String sessionId) {
+        if (redisTemplate == null) {
+            return localCopy(sessionId);
+        }
         return runOrDefault(() -> {
             String raw = redisTemplate.opsForValue().get(key(sessionId));
             if (raw == null || raw.isBlank()) {
@@ -58,6 +62,9 @@ public class RedisConversationStore implements ConversationStore {
     public void save(String sessionId, List<String> messages) {
         List<String> safeMessages = messages == null ? Collections.emptyList() : messages;
         localFallback.put(sessionId, List.copyOf(safeMessages));
+        if (redisTemplate == null) {
+            return;
+        }
         runSafely(() -> {
             String payload = objectMapper.writeValueAsString(safeMessages);
             redisTemplate.opsForValue().set(key(sessionId), payload, TTL);
@@ -70,6 +77,9 @@ public class RedisConversationStore implements ConversationStore {
     @Override
     public void clear(String sessionId) {
         localFallback.remove(sessionId);
+        if (redisTemplate == null) {
+            return;
+        }
         runSafely(() -> redisTemplate.delete(key(sessionId)), "clear conversation", sessionId);
     }
 

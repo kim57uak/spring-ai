@@ -19,6 +19,8 @@
         </rollingPolicy>
     </appender>
 
+    <logger name="com.example.springai.service.agent.prompt.DefaultPromptTemplateService" level="DEBUG"/>
+
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE"/>

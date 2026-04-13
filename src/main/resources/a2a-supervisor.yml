@@ -16,9 +16,9 @@ host:
       mygenie:
         endpoint: ${MYGENIE_A2A_ENDPOINT:http://localhost:8001/a2a}
         method: message/send
-        timeout-ms: 120000
+        timeout-ms: 1200000
     retry:
-      max-retries: 1
+      max-retries: 0
       initial-backoff-ms: 500
       max-backoff-ms: 3000
     circuit-breaker:
@@ -28,5 +28,15 @@ host:
     execution:
       # 1이면 순차, 2 이상이면 최대 동시 호출 수
       max-concurrency: 2
+    handoff:
+      enabled: true
+      max-hops: 3
+      block-same-agent-within-steps: 2
+      max-per-minute: 10
+      allow-methods:
+        - message/send
+        - SendMessage
+        - message/stream
+        - SendStreamingMessage
     stream:
       timeout-ms: 120000

@@ -19,7 +19,9 @@ rectangle "Supervisor Agent (spring-ai + springsupervisorai)" {
   [HITL Policy/Decision Service] as HitlService
   [SupervisorPlanningService] as Planner
   [A2AInvocationService] as A2AInvocationService
+  [HandoffPolicyService] as HandoffPolicyService
   [SupervisorResponseComposeService] as Composer
+  [SupervisorProgressSupport] as ProgressSupport
   [DefaultSupervisorLlmRuntime] as LlmRuntime
   [A2AClientRegistry] as A2ARegistry
   [GlobalExceptionHandler] as Advice
@@ -48,7 +50,9 @@ SupervisorOrchestrator --> StateGraph
 SupervisorOrchestrator --> HitlService
 SupervisorOrchestrator --> Planner
 SupervisorOrchestrator --> A2AInvocationService
+SupervisorOrchestrator --> HandoffPolicyService
 SupervisorOrchestrator --> Composer
+SupervisorOrchestrator --> ProgressSupport
 Planner --> LlmRuntime
 Composer --> LlmRuntime
 A2AInvocationService --> A2ARegistry
@@ -65,10 +69,15 @@ Supervisor flow
 - intent planning
 - downstream agent selection
 - A2A call (sync/stream)
+- handoff evaluate/apply (feature flag)
 - result compose
 - history/checkpoint persist
 end note
 
+' 2026-04-13 sync with doc 34
+' - add handoff policy boundary and feature-flag flow
+' - progress/trace should be emitted via SupervisorProgressSupport
+' - handoff method enum allowlist + stream capability guard
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

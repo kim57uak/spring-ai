@@ -19,14 +19,20 @@ import java.net.Inet6Address;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,6 +52,7 @@ public class McpToolExecutionService implements ToolExecutionService {
             "169.254.169.254",
             "100.100.100.200"
     );
+    private static final int DEFAULT_QUERY_MAX_CALLS_PER_REQUEST = 4;
     private static final Pattern SALE_PRODUCT_CODE_PATTERN = Pattern.compile("\\b[A-Z]{3}[A-Z0-9]{8,}\\b");
 
     private final McpClientFactory mcpClientFactory;
@@ -79,57 +86,216 @@ public class McpToolExecutionService implements ToolExecutionService {
             return ToolExecutionResult.skipped();
         }
 
+        String sessionId = context == null ? "" : stringValue(context.getSessionId());
         String serverName = plan.serverName();
         if (!context.getScope().isServerAllowed(serverName)) {
-            logger.warn("Blocked MCP tool execution by scope. server={}", serverName);
-            return new ToolExecutionResult(serverName, "", "Server not allowed by scope", Map.of(), false, false);
+            logger.warn("Blocked MCP tool execution by scope. sessionId={}, server={}", sessionId, serverName);
+            return new ToolExecutionResult(serverName, "", "Server not allowed by scope", Map.of(), false, false, false);
         }
         McpProperties.ServerConfig serverConfig = mcpProperties.getServers().get(serverName);
         if (serverConfig == null) {
-            logger.warn("Blocked MCP tool execution. Unknown server: {}", serverName);
-            return new ToolExecutionResult(serverName, "", "Unknown MCP server", Map.of(), false, false);
+            logger.warn("Blocked MCP tool execution. sessionId={}, unknownServer={}", sessionId, serverName);
+            return new ToolExecutionResult(serverName, "", "Unknown MCP server", Map.of(), false, false, false);
         }
 
         McpClient client = mcpClientFactory.createClient(serverName);
         List<Map<String, Object>> availableTools = toolSchemaRegistry.loadTools(serverName, context.getScope());
         String resolvedTool = resolveToolName(client, serverConfig, plan.toolName(), serverName, availableTools);
         if (resolvedTool.isBlank()) {
-            return new ToolExecutionResult(serverName, "", "No allowed/available MCP tool", Map.of(), false, false);
+            return new ToolExecutionResult(serverName, "", "No allowed/available MCP tool", Map.of(), false, false, false);
         }
         if (!context.getScope().isToolAllowed(serverName, resolvedTool)) {
-            logger.warn("Blocked MCP tool execution by scope. server={}, tool={}", serverName, resolvedTool);
-            return new ToolExecutionResult(serverName, resolvedTool, "Tool not allowed by scope", Map.of(), false, false);
+            logger.warn("Blocked MCP tool execution by scope. sessionId={}, server={}, tool={}", sessionId, serverName, resolvedTool);
+            return new ToolExecutionResult(serverName, resolvedTool, "Tool not allowed by scope", Map.of(), false, false, false);
         }
+        ToolExecutionPolicy policy = resolvePolicy(serverName, serverConfig, resolvedTool);
+        boolean terminalAfterExecution = policy.operation() == McpProperties.ToolOperation.MUTATION;
 
         try {
             Map<String, Object> params = plan.arguments() != null && !plan.arguments().isEmpty()
                     ? plan.arguments()
                     : buildParamsForTool(resolvedTool, context.getUserMessage(), availableTools);
             params = normalizeArgumentsForKnownTools(resolvedTool, params, context.getUserMessage());
-            logger.info("Executing MCP tool server={}, tool={}, paramsKeys={}",
-                    serverName, resolvedTool, params.keySet());
+            params = applyIdempotencyIfRequired(policy, params, context, serverName, resolvedTool);
+            Map<String, Object> selectedToolSchema = findToolSchema(resolvedTool, availableTools);
+            List<String> missingRequiredParams = detectMissingRequiredParams(params, selectedToolSchema);
+            if (!missingRequiredParams.isEmpty()) {
+                String missingPayload = buildMissingRequiredPayload(resolvedTool, missingRequiredParams, selectedToolSchema);
+                logger.warn("MCP tool required params missing. sessionId={}, server={}, tool={}, missing={}",
+                        sessionId, serverName, resolvedTool, missingRequiredParams);
+                return new ToolExecutionResult(
+                        serverName,
+                        resolvedTool,
+                        missingPayload,
+                        Map.copyOf(params),
+                        false,
+                        true,
+                        terminalAfterExecution
+                );
+            }
+            int currentCallCount = context.getToolCallCount(serverName, resolvedTool);
+            if (currentCallCount >= policy.maxCallsPerRequest()) {
+                logger.warn("MCP tool call blocked by policy. sessionId={}, server={}, tool={}, operation={}, maxCallsPerRequest={}, currentCallCount={}",
+                        sessionId, serverName, resolvedTool, policy.operation(), policy.maxCallsPerRequest(), currentCallCount);
+                return new ToolExecutionResult(
+                        serverName,
+                        resolvedTool,
+                        "[POLICY_SKIPPED][MAX_CALLS_PER_REQUEST] server=" + serverName + ", tool=" + resolvedTool + ", max=" + policy.maxCallsPerRequest(),
+                        Map.copyOf(params),
+                        true,
+                        false,
+                        terminalAfterExecution
+                );
+            }
+            context.incrementToolCallCount(serverName, resolvedTool);
+            logger.info("Executing MCP tool sessionId={}, server={}, tool={}, paramsKeys={}",
+                    sessionId, serverName, resolvedTool, params.keySet());
             String payload = client.callTool(resolvedTool, params);
             String normalizedPayload = normalizePayload(payload);
-            if (isRetryableUpstreamFailure(normalizedPayload)) {
-                logger.warn("MCP tool returned retryable upstream failure. server={}, tool={}, retry=1", serverName, resolvedTool);
+            if (policy.retryable() && isRetryableUpstreamFailure(normalizedPayload)) {
+                logger.warn("MCP tool returned retryable upstream failure. sessionId={}, server={}, tool={}, retry=1",
+                        sessionId, serverName, resolvedTool);
                 payload = client.callTool(resolvedTool, params);
                 normalizedPayload = normalizePayload(payload);
             }
             boolean success = !isErrorPayload(normalizedPayload);
-            logger.info("MCP tool result server={}, tool={}, payloadLength={}, preview={}",
+            logger.info("MCP tool result sessionId={}, server={}, tool={}, payloadLength={}, preview={}",
+                    sessionId,
                     serverName,
                     resolvedTool,
                     normalizedPayload.length(),
                     preview(normalizedPayload, 300));
             if (!success) {
-                logger.warn("MCP tool responded with error payload. server={}, tool={}, preview={}",
-                        serverName, resolvedTool, preview(normalizedPayload, 160));
+                logger.warn("MCP tool responded with error payload. sessionId={}, server={}, tool={}, payloadPreview={}",
+                        sessionId, serverName, resolvedTool, preview(normalizedPayload, 200));
             }
-            return new ToolExecutionResult(serverName, resolvedTool, normalizedPayload, Map.copyOf(params), success, true);
+            return new ToolExecutionResult(serverName, resolvedTool, normalizedPayload, Map.copyOf(params), success, true, terminalAfterExecution);
         } catch (Exception e) {
-            logger.warn("MCP execution failed for server={}, tool={}: {}", serverName, resolvedTool, e.getMessage());
-            return new ToolExecutionResult(serverName, resolvedTool, "Tool call failed", Map.of(), false, true);
+            logger.warn("MCP execution failed. sessionId={}, server={}, tool={}, error={}",
+                    sessionId, serverName, resolvedTool, e.getMessage(), e);
+            return new ToolExecutionResult(serverName, resolvedTool, "Tool call failed", Map.of(), false, true, terminalAfterExecution);
         }
+    }
+
+    private ToolExecutionPolicy resolvePolicy(
+            String serverName,
+            McpProperties.ServerConfig serverConfig,
+            String toolName
+    ) {
+        McpProperties.ToolPolicy configured = findToolPolicy(serverConfig, toolName);
+        if (configured != null) {
+            ToolExecutionPolicy resolved = new ToolExecutionPolicy(
+                    configured.getOperation(),
+                    configured.isRetryable(),
+                    Math.max(1, configured.getMaxCallsPerRequest()),
+                    configured.isRequireIdempotencyKey()
+            );
+            logger.info("MCP tool policy resolved. server={}, tool={}, operation={}, retryable={}, maxCallsPerRequest={}, requireIdempotencyKey={}",
+                    serverName, toolName, resolved.operation(), resolved.retryable(), resolved.maxCallsPerRequest(), resolved.requireIdempotencyKey());
+            return resolved;
+        }
+        logger.warn("MCP tool policy not configured. Applying default query policy. server={}, tool={}", serverName, toolName);
+        return new ToolExecutionPolicy(
+                McpProperties.ToolOperation.QUERY,
+                true,
+                DEFAULT_QUERY_MAX_CALLS_PER_REQUEST,
+                false
+        );
+    }
+
+    private McpProperties.ToolPolicy findToolPolicy(McpProperties.ServerConfig serverConfig, String toolName) {
+        if (serverConfig == null || serverConfig.getToolPolicies() == null || serverConfig.getToolPolicies().isEmpty()) {
+            return null;
+        }
+        Map<String, McpProperties.ToolPolicy> policies = serverConfig.getToolPolicies();
+        McpProperties.ToolPolicy exact = policies.get(toolName);
+        if (exact != null) {
+            return exact;
+        }
+        String normalized = safeLookupKey(toolName);
+        for (Map.Entry<String, McpProperties.ToolPolicy> entry : policies.entrySet()) {
+            if (safeLookupKey(entry.getKey()).equals(normalized)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private String safeLookupKey(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Map<String, Object> applyIdempotencyIfRequired(
+            ToolExecutionPolicy policy,
+            Map<String, Object> originalParams,
+            PlanningContext context,
+            String serverName,
+            String toolName
+    ) {
+        if (!policy.requireIdempotencyKey()) {
+            return originalParams;
+        }
+        Map<String, Object> params = originalParams == null ? new LinkedHashMap<>() : new LinkedHashMap<>(originalParams);
+        String existing = stringValue(params.get("idempotencyKey"));
+        if (!existing.isBlank()) {
+            return params;
+        }
+        params.put("idempotencyKey", buildIdempotencyKey(context, serverName, toolName, params));
+        return params;
+    }
+
+    private String buildIdempotencyKey(
+            PlanningContext context,
+            String serverName,
+            String toolName,
+            Map<String, Object> params
+    ) {
+        String sessionId = context == null ? "" : stringValue(context.getSessionId());
+        String fingerprint = paramsFingerprint(params);
+        return "mcp:" + sessionId + ":" + safeToken(serverName) + ":" + safeToken(toolName) + ":" + fingerprint;
+    }
+
+    private String safeToken(String value) {
+        if (value == null || value.isBlank()) {
+            return "na";
+        }
+        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");
+    }
+
+    private String paramsFingerprint(Map<String, Object> params) {
+        Map<String, Object> safe = params == null ? Map.of() : params;
+        try {
+            String canonicalJson = objectMapper.writeValueAsString(canonicalizeValue(safe));
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(canonicalJson.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            return UUID.randomUUID().toString();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object canonicalizeValue(Object raw) {
+        if (raw instanceof Map<?, ?> map) {
+            TreeMap<String, Object> sorted = new TreeMap<>();
+            map.forEach((key, value) -> sorted.put(String.valueOf(key), canonicalizeValue(value)));
+            return sorted;
+        }
+        if (raw instanceof List<?> list) {
+            List<Object> normalized = new ArrayList<>(list.size());
+            for (Object item : list) {
+                normalized.add(canonicalizeValue(item));
+            }
+            return normalized;
+        }
+        return raw;
     }
 
     private Map<String, Object> normalizeArgumentsForKnownTools(
@@ -300,6 +466,168 @@ public class McpToolExecutionService implements ToolExecutionService {
         return extractInputFields(toolSchema).contains("query");
     }
 
+    @SuppressWarnings("unchecked")
+    private List<String> detectMissingRequiredParams(
+            Map<String, Object> params,
+            Map<String, Object> toolSchema
+    ) {
+        if (toolSchema == null || toolSchema.isEmpty()) {
+            return List.of();
+        }
+        Object inputSchemaObj = toolSchema.get("inputSchema");
+        if (!(inputSchemaObj instanceof Map<?, ?> inputSchema)) {
+            return List.of();
+        }
+
+        LinkedHashSet<String> missing = new LinkedHashSet<>();
+        Object root = params == null ? Map.of() : params;
+        collectMissingRequired(inputSchema, root, "", true, missing);
+        return List.copyOf(missing);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void collectMissingRequired(
+            Map<?, ?> schema,
+            Object currentValue,
+            String prefix,
+            boolean enforceCurrentObject,
+            LinkedHashSet<String> missing
+    ) {
+        if (schema == null || missing == null) {
+            return;
+        }
+
+        Map<?, ?> currentMap = currentValue instanceof Map<?, ?> map ? map : Map.of();
+        Object requiredObj = schema.get("required");
+        Object propertiesObj = schema.get("properties");
+        if (!(propertiesObj instanceof Map<?, ?> properties)) {
+            return;
+        }
+
+        // 1) 현재 object의 required 필드는 무조건 검사(단, 기술 필드는 제외)
+        if (enforceCurrentObject && requiredObj instanceof Collection<?> requiredFields) {
+            for (Object rawField : requiredFields) {
+                String field = stringValue(rawField).trim();
+                if (field.isBlank()) {
+                    continue;
+                }
+                String path = prefix.isBlank() ? field : prefix + "." + field;
+                if (isTechnicalRequiredField(path)) {
+                    continue;
+                }
+                if (!currentMap.containsKey(field) || isBlankValue(currentMap.get(field))) {
+                    missing.add(path);
+                    continue;
+                }
+                Object childSchemaObj = properties.get(field);
+                if (childSchemaObj instanceof Map<?, ?> childSchema) {
+                    collectMissingRequired(childSchema, currentMap.get(field), path, true, missing);
+                }
+            }
+        }
+
+        // 2) optional 객체가 실제로 전달된 경우에만 내부 required 검사
+        for (Map.Entry<?, ?> entry : properties.entrySet()) {
+            String field = stringValue(entry.getKey()).trim();
+            if (field.isBlank()) {
+                continue;
+            }
+            if (!currentMap.containsKey(field)) {
+                continue;
+            }
+            Object childValue = currentMap.get(field);
+            Object childSchemaObj = entry.getValue();
+            if (!(childSchemaObj instanceof Map<?, ?> childSchema)) {
+                continue;
+            }
+            String childPath = prefix.isBlank() ? field : prefix + "." + field;
+            boolean childIsObjectLike = childValue instanceof Map<?, ?>;
+            if (childIsObjectLike) {
+                collectMissingRequired(childSchema, childValue, childPath, true, missing);
+            }
+        }
+    }
+
+    private boolean isBlankValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String text) {
+            return text.trim().isBlank();
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.isEmpty();
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.isEmpty();
+        }
+        return false;
+    }
+
+    private boolean isTechnicalRequiredField(String path) {
+        String normalized = path == null ? "" : path.trim().toLowerCase(Locale.ROOT);
+        return normalized.endsWith("guid")
+                || normalized.endsWith("idempotencykey");
+    }
+
+    private String buildMissingRequiredPayload(String toolName, List<String> missingPaths, Map<String, Object> toolSchema) {
+        LinkedHashSet<String> labels = new LinkedHashSet<>();
+        for (String path : missingPaths) {
+            labels.add(toParamLabel(path, toolSchema));
+        }
+        String requested = String.join(", ", labels);
+        return "[MISSING_REQUIRED_PARAMS] tool=" + toolName
+                + ", missing=" + missingPaths
+                + ", message=필수 입력값이 부족합니다. 다음 정보를 입력해 주세요: " + requested;
+    }
+
+    private String toParamLabel(String path, Map<String, Object> toolSchema) {
+        String fromSchema = resolveSchemaLabel(path, toolSchema);
+        if (!fromSchema.isBlank()) {
+            return fromSchema;
+        }
+        String key = path == null ? "" : path.substring(path.lastIndexOf('.') + 1).trim();
+        return key.isBlank() ? "필수 입력값" : key;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolveSchemaLabel(String path, Map<String, Object> toolSchema) {
+        if (path == null || path.isBlank() || toolSchema == null || toolSchema.isEmpty()) {
+            return "";
+        }
+        Object inputSchemaObj = toolSchema.get("inputSchema");
+        if (!(inputSchemaObj instanceof Map<?, ?> inputSchema)) {
+            return "";
+        }
+        Map<?, ?> current = inputSchema;
+        Map<?, ?> propertySchema = null;
+        String[] parts = path.split("\\.");
+        for (String part : parts) {
+            Object propertiesObj = current.get("properties");
+            if (!(propertiesObj instanceof Map<?, ?> properties)) {
+                return "";
+            }
+            Object child = properties.get(part);
+            if (!(child instanceof Map<?, ?> childSchema)) {
+                return "";
+            }
+            propertySchema = childSchema;
+            current = childSchema;
+        }
+        if (propertySchema == null) {
+            return "";
+        }
+        String title = stringValue(propertySchema.get("title")).trim();
+        if (!title.isBlank()) {
+            return title;
+        }
+        String description = stringValue(propertySchema.get("description")).trim();
+        if (!description.isBlank()) {
+            return description;
+        }
+        return "";
+    }
+
     private String extractFirstUrl(String text) {
         if (text == null || text.isBlank()) {
             return null;
@@ -466,5 +794,13 @@ public class McpToolExecutionService implements ToolExecutionService {
             return allowTools.contains(toolName);
         }
         return client.hasTool(toolName);
+    }
+
+    private record ToolExecutionPolicy(
+            McpProperties.ToolOperation operation,
+            boolean retryable,
+            int maxCallsPerRequest,
+            boolean requireIdempotencyKey
+    ) {
     }
 }

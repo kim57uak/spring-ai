@@ -18,8 +18,13 @@ HITL_CANCELED --> COMPLETED
 ROUTING_SELECTED --> A2A_CALLING : plans exist
 ROUTING_SELECTED --> COMPOSING : no plan
 
-A2A_CALLING --> A2A_RESULT_MERGED : call success
+A2A_CALLING --> HANDOFF_EVALUATING : call success
 A2A_CALLING --> HUMAN_MESSAGE : call failed and unrecoverable
+HANDOFF_EVALUATING --> HANDOFF_SKIPPED : handoff.enabled=false
+HANDOFF_EVALUATING --> HANDOFF_APPLIED : valid handoff directive
+HANDOFF_EVALUATING --> HANDOFF_SKIPPED : no/invalid handoff directive
+HANDOFF_APPLIED --> A2A_RESULT_MERGED
+HANDOFF_SKIPPED --> A2A_RESULT_MERGED
 A2A_RESULT_MERGED --> ROUTING_SELECTED : next plan exists
 A2A_RESULT_MERGED --> COMPOSING : all plans done
 
@@ -34,6 +39,14 @@ Per-call policy
 - circuit breaker
 end note
 
+note right of HANDOFF_EVALUATING
+Handoff policy
+- feature flag (`handoff.enabled`)
+- method enum allowlist
+- stream support validation
+- max hop / duplicate path guard
+end note
+
 note left of HITL_WAITING
 Swarm state snapshot is updated
 - review request metadata
@@ -41,6 +54,9 @@ Swarm state snapshot is updated
 - decision event log
 end note
 
+' 2026-04-13 sync with doc 34
+' - add handoff evaluating/applied/skipped states
+' - include feature-flag and handoff guardrails
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

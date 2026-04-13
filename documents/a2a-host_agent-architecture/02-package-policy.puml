@@ -19,6 +19,7 @@ package "com.example.springsupervisorai" {
   package "service" {
     class SupervisorAgentService
     class SupervisorAgentOrchestrator
+    class SupervisorProgressSupport
   }
 
   package "service.agent" {
@@ -30,6 +31,10 @@ package "com.example.springsupervisorai" {
       interface A2AInvocationService
       class DefaultA2AInvocationService
       class A2AClientRegistry
+    }
+    package "handoff" {
+      interface HandoffPolicyService
+      class DefaultHandoffPolicyService
     }
     package "compose" {
       interface SupervisorResponseComposeService
@@ -58,6 +63,8 @@ package "com.example.springsupervisorai" {
     class HitlReviewContext
     class RoutingPlan
     class DownstreamCallResult
+    class HandoffDirective
+    class HandoffValidationResult
     class SupervisorGraphState
   }
 
@@ -75,8 +82,13 @@ Rules
 - SupervisorA2AController는 orchestration 세부를 알지 않는다
 - orchestrator는 포트(interface)에만 의존한다
 - Spring AI + LangGraph4J + Redis 구성은 기존 정책과 동일하게 유지한다
+- handoff는 `service.agent.handoff`로 분리하고 feature flag로 on/off한다
+- 진행상태/생각과정 출력은 SupervisorProgressSupport 공통 모듈을 사용한다
 end note
 
+' 2026-04-13 sync with doc 34
+' - add handoff package/model and progress support
+' - enforce handoff guardrails as policy-layer concern
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

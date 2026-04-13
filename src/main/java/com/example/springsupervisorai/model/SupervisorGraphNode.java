@@ -7,6 +7,8 @@ public enum SupervisorGraphNode {
     PLAN("plan"),
     SELECT("select"),
     INVOKE("invoke"),
+    HANDOFF_EVALUATE("handoff_evaluate"),
+    HANDOFF_APPLY("handoff_apply"),
     MERGE("merge"),
     COMPOSE("compose");
 
@@ -25,4 +27,3 @@ public enum SupervisorGraphNode {
         return nodeId;
     }
 }
-

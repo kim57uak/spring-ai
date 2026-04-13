@@ -8,10 +8,11 @@ public record ToolExecutionResult(
         String rawPayload,
         Map<String, Object> usedArguments,
         boolean success,
-        boolean executed
+        boolean executed,
+        boolean terminalAfterExecution
 ) {
 
     public static ToolExecutionResult skipped() {
-        return new ToolExecutionResult("", "", "", Map.of(), true, false);
+        return new ToolExecutionResult("", "", "", Map.of(), true, false, false);
     }
 }

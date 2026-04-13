@@ -5,6 +5,7 @@ import com.example.common.redis.RedisTtlPolicy;
 import com.example.springai.service.agent.store.GraphCheckpointStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -27,8 +28,8 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
     private final StringRedisTemplate redisTemplate;
     private final Map<String, String> localFallback = new ConcurrentHashMap<>();
 
-    public RedisGraphCheckpointStore(StringRedisTemplate redisTemplate) {
-        this.redisTemplate = redisTemplate;
+    public RedisGraphCheckpointStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider) {
+        this.redisTemplate = redisTemplateProvider.getIfAvailable();
     }
 
     /**
@@ -36,6 +37,9 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
      */
     @Override
     public Optional<String> loadCheckpoint(String sessionId) {
+        if (redisTemplate == null) {
+            return Optional.ofNullable(localFallback.get(sessionId));
+        }
         return runOrDefault(
                 () -> {
                     String value = redisTemplate.opsForValue().get(key(sessionId));
@@ -58,6 +62,9 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
         if (payload != null) {
             localFallback.put(sessionId, payload);
         }
+        if (redisTemplate == null) {
+            return;
+        }
         runSafely(() -> redisTemplate.opsForValue().set(key(sessionId), payload, TTL), "save checkpoint", sessionId);
     }
 
@@ -67,6 +74,9 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
     @Override
     public void clear(String sessionId) {
         localFallback.remove(sessionId);
+        if (redisTemplate == null) {
+            return;
+        }
         runSafely(() -> redisTemplate.delete(key(sessionId)), "clear checkpoint", sessionId);
     }
 

@@ -3,6 +3,8 @@ package com.example.springai.service.agent.prompt;
 import com.example.springai.config.PromptProperties;
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.service.agent.security.PromptInjectionGuard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -14,6 +16,8 @@ import java.util.stream.Collectors;
  */
 @Component
 public class DefaultPromptTemplateService implements PromptTemplateService {
+
+    private static final Logger logger = LoggerFactory.getLogger(DefaultPromptTemplateService.class);
 
     private final PromptProperties promptProperties;
     private final PromptInjectionGuard promptInjectionGuard;
@@ -39,13 +43,13 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
                 .collect(Collectors.joining("\n"));
         String protectedHistory = promptInjectionGuard.protectHistory(history);
         String toolResult = context.getExecutionResult().executed()
-                ? promptInjectionGuard.protectToolResult(context.getExecutionResult().rawPayload())
+                ? buildToolResultSection(context)
                 : "NO_TOOL_EXECUTED";
         String protectedUserMessage = promptInjectionGuard.protectUserInput(context.getUserMessage());
         String composeRules = required(promptProperties.getComposeRules(), "prompts.compose-rules");
         String baseSystem = resolveBaseSystemPrompt();
         String template = required(promptProperties.getComposePromptTemplate(), "prompts.compose-prompt-template");
-        return promptRenderService.render(template, Map.of(
+        String rendered = promptRenderService.render(template, Map.of(
                 "baseSystem", baseSystem,
                 "finalAnswer", promptProperties.getFinalAnswer(),
                 "composeRules", composeRules,
@@ -55,6 +59,30 @@ public class DefaultPromptTemplateService implements PromptTemplateService {
                 "toolExecuted", context.getExecutionResult().executed(),
                 "toolSuccess", context.getExecutionResult().success()
         ));
+        if (logger.isDebugEnabled()) {
+            logger.debug("compose prompt sessionId={}, toolExecuted={}, toolSuccess={}\n{}",
+                    context.getSessionId(),
+                    context.getExecutionResult().executed(),
+                    context.getExecutionResult().success(),
+                    rendered);
+        }
+        return rendered;
+    }
+
+    private String buildToolResultSection(PlanningContext context) {
+        String trace = context.getToolTrace() == null || context.getToolTrace().isEmpty()
+                ? "- 없음"
+                : context.getToolTrace().stream()
+                .map(line -> "- " + line)
+                .collect(Collectors.joining("\n"));
+        String rawPayload = promptInjectionGuard.protectToolResult(context.getExecutionResult().rawPayload());
+        return """
+                [실행 경로]
+                %s
+
+                [실행 결과]
+                %s
+                """.formatted(trace, rawPayload == null || rawPayload.isBlank() ? "EMPTY_RESULT" : rawPayload);
     }
 
     private String resolveBaseSystemPrompt() {

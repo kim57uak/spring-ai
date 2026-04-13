@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -46,11 +47,15 @@ public class SupervisorRequestIdempotencyService {
      * 테스트/로컬 호환용 생성자.
      */
     public SupervisorRequestIdempotencyService() {
-        this(null, new ObjectMapper());
+        this((StringRedisTemplate) null, new ObjectMapper());
     }
 
     @Autowired
-    public SupervisorRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public SupervisorRequestIdempotencyService(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper) {
+        this(redisTemplateProvider.getIfAvailable(), objectMapper);
+    }
+
+    private SupervisorRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
     }

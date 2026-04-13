@@ -7,6 +7,8 @@
 - A2A 메서드는 `legacy + v1.0` 동시 지원을 기본 계약으로 유지한다.
 - HITL 결정은 이번 단계에서 `APPROVE/CANCEL`만 지원한다.
 - shared context는 `SupervisorSwarmStateStore`를 통해 관리한다.
+- handoff는 feature flag(`handoff.enabled`)로 on/off 가능해야 한다.
+- handoff method는 기존 허용 enum만 허용하며, stream 미지원 agent 대상 stream handoff는 금지한다.
 
 ## Core Classes
 
@@ -18,16 +20,29 @@
 - `SupervisorResponseComposeService`
 - `HitlPolicyService`
 - `HitlDecisionService`
+- `HandoffPolicyService`
 - `A2AClientRegistry`
 - `A2AJsonRpcClient`
+- `SupervisorProgressSupport`
 
 ## Core Contracts
 
 - `SupervisorPlanningService#plan(context): List<RoutingPlan>`
 - `A2AInvocationService#invoke(plan, context): DownstreamCallResult`
+- `HandoffPolicyService#evaluate(result, context): HandoffValidationResult`
 - `SupervisorResponseComposeService#streamCompose(context): Flux<String>`
 - `HitlPolicyService#evaluate(context, plans): HitlReviewContext`
 - `HitlDecisionService#decide(taskId, decision): HitlReviewContext`
+- `SupervisorProgressSupport#line(stage, progress, message, metadata): String`
+
+---
+
+## 2026-04-13 동기화 메모 (34 반영)
+
+- `invoke -> handoff_evaluate -> (handoff_apply|handoff_skip) -> merge` 분기 흐름을 routing 사양에 반영한다.
+- `handoff.enabled=false`일 때 기존 plan 소비 경로와 동등 동작을 보장한다.
+- 진행상태 출력은 공통 모듈(`SupervisorProgressSupport`) 사용을 기본 규칙으로 한다.
+- 신규/수정 public 타입과 핵심 메서드에는 Javadoc을 필수로 적용한다.
 
 ---
 

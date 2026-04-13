@@ -8,6 +8,7 @@
 
 - `controller -> service -> orchestrator -> ports(plan/invoke/compose/store/graph)`
 - `controller -> service -> orchestrator -> ports(plan/invoke/compose/hitl/store/graph)`
+- `controller -> service -> orchestrator -> ports(plan/invoke/handoff/compose/hitl/store/graph)`
 - `invoke -> a2a client/registry` only
 - `plan/compose -> runtime(DefaultSupervisorLlmRuntime)` only
 - 상위 계층은 구현체가 아니라 interface에 의존한다.
@@ -20,6 +21,9 @@
 - supervisor 진입점은 `/a2a/supervisor`(stream 포함)만 사용한다.
 - HITL 결정은 `approve/cancel` 인터페이스로 분리하고 orchestrator에서만 조합한다.
 - Swarm shared state는 `SupervisorSwarmStateStore` 포트를 통해서만 접근한다.
+- handoff 검증/적용은 `HandoffPolicyService`로 분리한다.
+- 진행상태 출력은 `SupervisorProgressSupport` 공통 모듈을 사용한다.
+- handoff method는 기존 허용 enum만 허용하고 stream 미지원 agent 대상 stream handoff는 금지한다.
 
 ---
 
@@ -30,3 +34,11 @@
 - 상품/예약/주문 등 데이터 생성·변경(create/update/delete) 요청은 리스크 점수와 무관하게 HITL 강제 정책을 적용한다.
 - A2A 계약은 `legacy` + `v1.0`을 모두 충족하는 호환 모드로 유지한다(메서드 enum 기반 관리).
 - 사용자 추가정보 수집(이름/전화/이메일)은 향후 계획으로 분리하며, 입력 UX는 자연어/콤마 텍스트 수용 후 내부 구조화 원칙을 따른다.
+
+---
+
+## 2026-04-13 동기화 메모 (34 반영)
+
+- handoff 관련 의존성은 `service.agent.handoff` 경계로 캡슐화한다.
+- on/off feature flag(`handoff.enabled`)를 통해 orchestrator 변경 리스크를 제어한다.
+- 신규/수정 public 타입은 Javadoc을 필수로 적용한다.

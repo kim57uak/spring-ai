@@ -70,7 +70,7 @@ public class SseMcpClient implements McpClient {
         requestParams.put("name", toolName);
         requestParams.put("arguments", params == null ? Map.of() : params);
         try {
-            Map<String, Object> response = sendRequest("tools/call", requestParams);
+            Map<String, Object> response = sendRequestWithRecovery("tools/call", requestParams);
             if (response.containsKey("error")) {
                 throw new McpToolCallException(toolName, String.valueOf(response.get("error")));
             }
@@ -85,6 +85,43 @@ public class SseMcpClient implements McpClient {
             }
             throw new McpToolCallException(toolName, e.getMessage(), e);
         }
+    }
+
+    private Map<String, Object> sendRequestWithRecovery(String method, Object params) throws IOException, InterruptedException {
+        try {
+            return sendRequest(method, params);
+        } catch (IOException e) {
+            if (!shouldReinitializeForStatus(e)) {
+                throw e;
+            }
+            logger.warn("SSE MCP endpoint looks stale ({}). Reinitializing session and retrying once.", e.getMessage());
+            reinitializeSession();
+            return sendRequest(method, params);
+        }
+    }
+
+    private boolean shouldReinitializeForStatus(IOException error) {
+        String message = error == null ? "" : String.valueOf(error.getMessage());
+        return message.contains("MCP HTTP error: 404")
+                || message.contains("MCP HTTP error: 410");
+    }
+
+    private synchronized void reinitializeSession() throws IOException, InterruptedException {
+        closeSseSession();
+        initialized = false;
+        messageEndpointUri = null;
+        openSseSession();
+        Map<String, Object> initParams = new HashMap<>();
+        initParams.put("protocolVersion", "2024-11-05");
+        initParams.put("clientInfo", Map.of("name", "spring-ai", "version", "2.0.0"));
+        initParams.put("capabilities", Map.of(
+                "roots", Map.of("listChanged", false),
+                "sampling", Map.of(),
+                "tools", Map.of("listChanged", false)
+        ));
+        sendRequest("initialize", initParams);
+        sendNotification("notifications/initialized", Map.of());
+        initialized = true;
     }
 
     @Override

@@ -29,6 +29,22 @@ host:
       enabled: true
       state-versioning: optimistic-lock
       event-log-enabled: true
+    handoff:
+      enabled: false
+      max-hops: 3
+      block-same-agent-within-steps: 2
+      max-per-minute: 10
+      allow-methods:
+        - SendMessage
+        - message/send
+        - SendStreamingMessage
+        - message/stream
+    progress:
+      use-common-module: true  # SupervisorProgressSupport
+      emit-trace-stage:
+        - handoff
+        - handoff-skipped
+        - handoff-applied
 ```
 
 ## Rules
@@ -37,7 +53,18 @@ host:
 - method는 `legacy + v1.0` 호환 기준(`message/send`, `SendMessage`, `message/stream`, `SendStreamingMessage`, `tasks/*`)으로 허용
 - timeout/retry는 supervisor 경계에서 일원화
 - 상품/예약/주문 생성·변경 요청은 `hitl.mandatory-data-mutation=true`일 때 무조건 review 대기
+- `handoff.enabled=false`면 handoff directive는 실행하지 않고 skip 이벤트만 기록
+- handoff method는 허용 enum만 통과시키며 stream 미지원 agent 대상 stream handoff는 차단
+- handoff 진행상태는 `SupervisorProgressSupport` 공통 포맷(`stage/progress/message/metadata`)으로 출력
 
+
+---
+
+## 2026-04-13 동기화 메모 (34 반영)
+
+- handoff 기능은 기본 OFF로 배포하고 canary부터 점진 활성화한다.
+- handoff 정책값(`max-hops`, `max-per-minute`, `allow-methods`)은 운영 중 조정 가능해야 한다.
+- 공통 progress 모듈을 통해 생각과정 UI에 handoff 단계를 노출한다.
 
 ---
 

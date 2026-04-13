@@ -2,12 +2,16 @@ package com.example.springsupervisorai.service.agent.graph;
 
 import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
+import com.example.springsupervisorai.model.HandoffDirective;
+import com.example.springsupervisorai.model.HandoffValidationResult;
 import com.example.springsupervisorai.model.RoutingPlan;
 import com.example.springsupervisorai.model.SupervisorGraphRoute;
 import com.example.springsupervisorai.model.SupervisorGraphNode;
 import com.example.springsupervisorai.model.SupervisorGraphState;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.model.SupervisorRuntimeState;
+import com.example.springsupervisorai.service.SupervisorProgressSupport;
+import com.example.springsupervisorai.service.agent.handoff.HandoffPolicyService;
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import com.example.springsupervisorai.service.agent.plan.SupervisorPlanningService;
 import com.example.springsupervisorai.service.agent.swarm.SupervisorSwarmCoordinator;
@@ -43,6 +47,8 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
     private static final String PLAN_NODE = SupervisorGraphNode.PLAN.nodeId();
     private static final String SELECT_NODE = SupervisorGraphNode.SELECT.nodeId();
     private static final String INVOKE_NODE = SupervisorGraphNode.INVOKE.nodeId();
+    private static final String HANDOFF_EVALUATE_NODE = SupervisorGraphNode.HANDOFF_EVALUATE.nodeId();
+    private static final String HANDOFF_APPLY_NODE = SupervisorGraphNode.HANDOFF_APPLY.nodeId();
     private static final String MERGE_NODE = SupervisorGraphNode.MERGE.nodeId();
     private static final String COMPOSE_NODE = SupervisorGraphNode.COMPOSE.nodeId();
 
@@ -51,6 +57,7 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
     private final CompiledGraph<SupervisorGraphState> compiledGraph;
     private final SupervisorPlanningService planningService;
     private final A2AInvocationService invocationService;
+    private final HandoffPolicyService handoffPolicyService;
     private final A2aSupervisorRoutingProperties routingProperties;
     private final SupervisorSwarmCoordinator swarmCoordinator;
 
@@ -64,11 +71,13 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
     public LangGraphSupervisorStateGraphFactory(
             SupervisorPlanningService planningService,
             A2AInvocationService invocationService,
+            HandoffPolicyService handoffPolicyService,
             A2aSupervisorRoutingProperties routingProperties,
             SupervisorSwarmCoordinator swarmCoordinator
     ) throws GraphStateException {
         this.planningService = planningService;
         this.invocationService = invocationService;
+        this.handoffPolicyService = handoffPolicyService;
         this.routingProperties = routingProperties;
         this.swarmCoordinator = swarmCoordinator;
         this.compiledGraph = buildGraph().compile();
@@ -96,6 +105,8 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
         graph.addNode(PLAN_NODE, planNode());
         graph.addNode(SELECT_NODE, selectNode());
         graph.addNode(INVOKE_NODE, invokeNode());
+        graph.addNode(HANDOFF_EVALUATE_NODE, handoffEvaluateNode());
+        graph.addNode(HANDOFF_APPLY_NODE, handoffApplyNode());
         graph.addNode(MERGE_NODE, mergeNode());
         graph.addNode(COMPOSE_NODE, composeNode());
 
@@ -105,7 +116,9 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
                 SupervisorGraphRoute.INVOKE.value(), INVOKE_NODE,
                 SupervisorGraphRoute.COMPOSE.value(), COMPOSE_NODE
         ));
-        graph.addEdge(INVOKE_NODE, MERGE_NODE);
+        graph.addEdge(INVOKE_NODE, HANDOFF_EVALUATE_NODE);
+        graph.addEdge(HANDOFF_EVALUATE_NODE, HANDOFF_APPLY_NODE);
+        graph.addEdge(HANDOFF_APPLY_NODE, MERGE_NODE);
         graph.addEdge(MERGE_NODE, SELECT_NODE);
         graph.addEdge(COMPOSE_NODE, END);
         return graph;
@@ -210,7 +223,100 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
             Map<String, Object> updates = new LinkedHashMap<>();
             updates.put(SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.A2A_CALLING.value());
             updates.put(SupervisorGraphState.DOWNSTREAM_RESULTS, toResultList(mergedResults));
+            updates.put(SupervisorGraphState.LAST_INVOKE_BATCH_RESULTS, toResultList(batchResults));
             updates.put(SupervisorGraphState.ROUTING_INDEX, fromIndex + batch.size());
+            return CompletableFuture.completedFuture(updates);
+        };
+    }
+
+    /**
+     * HANDOFF_EVALUATE 노드 액션을 생성한다.
+     * <p>
+     * 직전 invoke 배치 결과에서 handoff 지시를 추출/검증하고 결과를 상태에 저장한다.
+     *
+     * @return HANDOFF_EVALUATE 노드 비동기 액션
+     */
+    private AsyncNodeAction<SupervisorGraphState> handoffEvaluateNode() {
+        return state -> {
+            SupervisorPlanningContext context = state.toPlanningContext();
+            List<DownstreamCallResult> batchResults = readResults(state.value(SupervisorGraphState.LAST_INVOKE_BATCH_RESULTS).orElse(List.of()));
+            List<HandoffValidationResult> validations = handoffPolicyService.evaluate(context, batchResults);
+            boolean handoffEnabled = routingProperties.getHandoff() != null && routingProperties.getHandoff().isEnabled();
+
+            long acceptedCount = validations.stream().filter(HandoffValidationResult::accepted).count();
+            long skippedByFlag = validations.stream()
+                    .filter(result -> !result.accepted() && "FLAG_DISABLED".equals(result.reasonCode()))
+                    .count();
+            swarmCoordinator.recordHandoffEvaluations(context.getTaskId(), context.getSessionId(), validations, handoffEnabled);
+
+            swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "HANDOFF_EVALUATE", "Handoff directives evaluated", Map.of(
+                    "stage", SupervisorProgressSupport.STAGE_HANDOFF,
+                    "progress", 60,
+                    "batchResultCount", batchResults.size(),
+                    "validationCount", validations.size(),
+                    "acceptedCount", acceptedCount,
+                    "skippedByFlag", skippedByFlag,
+                    "handoffEnabled", handoffEnabled
+            ));
+
+            Map<String, Object> updates = new LinkedHashMap<>();
+            updates.put(SupervisorGraphState.CURRENT_NODE, SupervisorRuntimeState.HANDOFF_EVALUATING.value());
+            updates.put(SupervisorGraphState.HANDOFF_VALIDATIONS, toHandoffValidationList(validations));
+            updates.put(SupervisorGraphState.HANDOFF_ENABLED, handoffEnabled);
+            return CompletableFuture.completedFuture(updates);
+        };
+    }
+
+    /**
+     * HANDOFF_APPLY 노드 액션을 생성한다.
+     * <p>
+     * 검증을 통과한 handoff plan을 routing queue에 동적으로 삽입한다.
+     * feature flag 비활성/정책 차단 시에는 기존 queue를 유지한다.
+     *
+     * @return HANDOFF_APPLY 노드 비동기 액션
+     */
+    private AsyncNodeAction<SupervisorGraphState> handoffApplyNode() {
+        return state -> {
+            SupervisorPlanningContext context = state.toPlanningContext();
+            List<HandoffValidationResult> validations = readHandoffValidations(state.value(SupervisorGraphState.HANDOFF_VALIDATIONS).orElse(List.of()));
+            List<RoutingPlan> updatedPlans = new ArrayList<>(context.getRoutingPlans());
+            int insertIndex = Math.min(Math.max(0, context.getRoutingIndex()), updatedPlans.size());
+            int appliedCount = 0;
+            int skippedCount = 0;
+
+            for (HandoffValidationResult validation : validations) {
+                if (!validation.accepted() || validation.plan() == null) {
+                    skippedCount++;
+                    swarmCoordinator.recordNodeEvent(
+                            context.getTaskId(),
+                            context.getSessionId(),
+                            "HANDOFF_APPLY",
+                            "Handoff validation rejected, fallback to original plan",
+                            rejectedHandoffMetadata(validation)
+                    );
+                    continue;
+                }
+                updatedPlans.add(insertIndex++, validation.plan());
+                appliedCount++;
+            }
+
+            String stage = appliedCount > 0
+                    ? SupervisorProgressSupport.STAGE_HANDOFF_APPLIED
+                    : SupervisorProgressSupport.STAGE_HANDOFF_SKIPPED;
+            int progress = appliedCount > 0 ? 65 : 62;
+            swarmCoordinator.recordNodeEvent(context.getTaskId(), context.getSessionId(), "HANDOFF_APPLY", "Handoff plans applied", Map.of(
+                    "stage", stage,
+                    "progress", progress,
+                    "appliedCount", appliedCount,
+                    "skippedCount", skippedCount,
+                    "routingPlanCount", updatedPlans.size()
+            ));
+
+            Map<String, Object> updates = new LinkedHashMap<>();
+            updates.put(SupervisorGraphState.CURRENT_NODE, appliedCount > 0
+                    ? SupervisorRuntimeState.HANDOFF_APPLIED.value()
+                    : SupervisorRuntimeState.HANDOFF_SKIPPED.value());
+            updates.put(SupervisorGraphState.ROUTING_PLANS, toPlanList(updatedPlans));
             return CompletableFuture.completedFuture(updates);
         };
     }
@@ -352,7 +458,10 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
                 "method", plan.method(),
                 "reason", plan.reason(),
                 "priority", plan.priority(),
-                "arguments", plan.arguments() == null ? Map.of() : plan.arguments()
+                "arguments", plan.arguments() == null ? Map.of() : plan.arguments(),
+                "sourceType", safe(plan.sourceType()),
+                "handoffDepth", plan.handoffDepth(),
+                "parentAgentKey", safe(plan.parentAgentKey())
         );
     }
 
@@ -372,9 +481,131 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
                     mapped.put("payload", safe(result.payload()));
                     mapped.put("errorCode", safe(result.errorCode()));
                     mapped.put("errorMessage", safe(result.errorMessage()));
+                    mapped.put("handoffRequested", result.handoffRequested());
+                    mapped.put("nextAgentKey", safe(result.nextAgentKey()));
+                    mapped.put("handoffMethod", safe(result.handoffMethod()));
+                    mapped.put("handoffReason", safe(result.handoffReason()));
+                    mapped.put("handoffArguments", result.handoffArguments() == null ? Map.of() : result.handoffArguments());
                     return mapped;
                 })
                 .toList();
+    }
+
+    private List<Map<String, Object>> toHandoffValidationList(List<HandoffValidationResult> validations) {
+        if (validations == null || validations.isEmpty()) {
+            return List.of();
+        }
+        return validations.stream().map(validation -> {
+            Map<String, Object> mapped = new LinkedHashMap<>();
+            mapped.put("accepted", validation.accepted());
+            mapped.put("reasonCode", safe(validation.reasonCode()));
+            mapped.put("hopCount", validation.hopCount());
+
+            HandoffDirective directive = validation.directive();
+            if (directive != null) {
+                mapped.put("fromAgentKey", safe(directive.fromAgentKey()));
+                mapped.put("nextAgentKey", safe(directive.nextAgentKey()));
+                mapped.put("method", safe(directive.method()));
+                mapped.put("reason", safe(directive.reason()));
+                mapped.put("arguments", directive.arguments() == null ? Map.of() : directive.arguments());
+            } else {
+                mapped.put("fromAgentKey", "");
+                mapped.put("nextAgentKey", "");
+                mapped.put("method", "");
+                mapped.put("reason", "");
+                mapped.put("arguments", Map.of());
+            }
+
+            RoutingPlan plan = validation.plan();
+            mapped.put("plan", plan == null ? Map.of() : toPlanMap(plan));
+            return mapped;
+        }).toList();
+    }
+
+    /**
+     * 검증 실패 handoff의 fallback 사유를 이벤트 메타데이터로 구성한다.
+     *
+     * @param validation handoff 검증 결과
+     * @return fallback 분석용 메타데이터
+     */
+    private Map<String, Object> rejectedHandoffMetadata(HandoffValidationResult validation) {
+        HandoffDirective directive = validation == null ? null : validation.directive();
+        return Map.of(
+                "stage", SupervisorProgressSupport.STAGE_HANDOFF_SKIPPED,
+                "progress", 62,
+                "fallback", true,
+                "reasonCode", validation == null ? "" : safe(validation.reasonCode()),
+                "fromAgent", directive == null ? "" : safe(directive.fromAgentKey()),
+                "toAgent", directive == null ? "" : safe(directive.nextAgentKey()),
+                "reason", directive == null ? "" : safe(directive.reason()),
+                "hopCount", validation == null ? 0 : validation.hopCount()
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<DownstreamCallResult> readResults(Object raw) {
+        if (!(raw instanceof List<?> list) || list.isEmpty()) {
+            return List.of();
+        }
+        ArrayList<DownstreamCallResult> converted = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            converted.add(new DownstreamCallResult(
+                    readString(map, "agentKey"),
+                    readString(map, "taskId"),
+                    readString(map, "status"),
+                    readString(map, "payload"),
+                    readString(map, "errorCode"),
+                    readString(map, "errorMessage"),
+                    readBoolean(map, "handoffRequested"),
+                    readString(map, "nextAgentKey"),
+                    readString(map, "handoffMethod"),
+                    readString(map, "handoffReason"),
+                    readMap(map, "handoffArguments")
+            ));
+        }
+        return converted;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<HandoffValidationResult> readHandoffValidations(Object raw) {
+        if (!(raw instanceof List<?> list) || list.isEmpty()) {
+            return List.of();
+        }
+        ArrayList<HandoffValidationResult> converted = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            HandoffDirective directive = new HandoffDirective(
+                    readString(map, "fromAgentKey"),
+                    readString(map, "nextAgentKey"),
+                    readString(map, "method"),
+                    readString(map, "reason"),
+                    readMap(map, "arguments")
+            );
+            Map<String, Object> planMap = readMap(map, "plan");
+            RoutingPlan plan = planMap.isEmpty() ? null : new RoutingPlan(
+                    readString(planMap, "agentKey"),
+                    readString(planMap, "method"),
+                    readString(planMap, "reason"),
+                    readInt(planMap, "priority"),
+                    readMap(planMap, "arguments"),
+                    readString(planMap, "sourceType"),
+                    readInt(planMap, "handoffDepth"),
+                    readString(planMap, "parentAgentKey")
+            );
+            converted.add(new HandoffValidationResult(
+                    readBoolean(map, "accepted"),
+                    readString(map, "reasonCode"),
+                    directive,
+                    plan,
+                    readInt(map, "hopCount")
+            ));
+        }
+        return converted;
     }
 
     /**
@@ -416,6 +647,14 @@ public class LangGraphSupervisorStateGraphFactory implements SupervisorStateGrap
         } catch (Exception ignored) {
             return 0;
         }
+    }
+
+    private boolean readBoolean(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return "true".equalsIgnoreCase(String.valueOf(value));
     }
 
     /**
