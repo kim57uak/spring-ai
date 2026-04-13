@@ -41,6 +41,7 @@ public class McpProperties {
         private List<String> capabilities = Collections.emptyList();
 
         private List<String> allowTools = Collections.emptyList();
+        private Map<String, ToolPolicy> toolPolicies = Collections.emptyMap();
         private int timeoutMs = 30_000;
 
         public String getTransport() {
@@ -107,12 +108,64 @@ public class McpProperties {
             this.allowTools = allowTools;
         }
 
+        public Map<String, ToolPolicy> getToolPolicies() {
+            return toolPolicies != null ? toolPolicies : Collections.emptyMap();
+        }
+
+        public void setToolPolicies(Map<String, ToolPolicy> toolPolicies) {
+            this.toolPolicies = toolPolicies;
+        }
+
         public int getTimeoutMs() {
             return timeoutMs;
         }
 
         public void setTimeoutMs(int timeoutMs) {
             this.timeoutMs = timeoutMs;
+        }
+    }
+
+    public enum ToolOperation {
+        QUERY,
+        MUTATION
+    }
+
+    public static class ToolPolicy {
+        private ToolOperation operation = ToolOperation.QUERY;
+        private boolean retryable = true;
+        private int maxCallsPerRequest = 4;
+        private boolean requireIdempotencyKey = false;
+
+        public ToolOperation getOperation() {
+            return operation == null ? ToolOperation.QUERY : operation;
+        }
+
+        public void setOperation(ToolOperation operation) {
+            this.operation = operation;
+        }
+
+        public boolean isRetryable() {
+            return retryable;
+        }
+
+        public void setRetryable(boolean retryable) {
+            this.retryable = retryable;
+        }
+
+        public int getMaxCallsPerRequest() {
+            return maxCallsPerRequest;
+        }
+
+        public void setMaxCallsPerRequest(int maxCallsPerRequest) {
+            this.maxCallsPerRequest = maxCallsPerRequest;
+        }
+
+        public boolean isRequireIdempotencyKey() {
+            return requireIdempotencyKey;
+        }
+
+        public void setRequireIdempotencyKey(boolean requireIdempotencyKey) {
+            this.requireIdempotencyKey = requireIdempotencyKey;
         }
     }
 }

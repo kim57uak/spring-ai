@@ -14,6 +14,7 @@ public class A2aSupervisorRoutingProperties {
     private Retry retry = new Retry();
     private CircuitBreaker circuitBreaker = new CircuitBreaker();
     private Execution execution = new Execution();
+    private Handoff handoff = new Handoff();
     private Set<String> allowedMethods = SupervisorA2aMethod.valuesSet();
 
     public Map<String, Route> getRouting() {
@@ -54,6 +55,14 @@ public class A2aSupervisorRoutingProperties {
 
     public void setExecution(Execution execution) {
         this.execution = execution == null ? new Execution() : execution;
+    }
+
+    public Handoff getHandoff() {
+        return handoff;
+    }
+
+    public void setHandoff(Handoff handoff) {
+        this.handoff = handoff == null ? new Handoff() : handoff;
     }
 
     public static class Route {
@@ -178,6 +187,64 @@ public class A2aSupervisorRoutingProperties {
 
         public void setMaxConcurrency(int maxConcurrency) {
             this.maxConcurrency = maxConcurrency;
+        }
+    }
+
+    /**
+     * handoff 적용 정책 설정.
+     * <p>
+     * 운영 제어 목적:
+     * - enabled: handoff 기능 토글
+     * - maxHops: 세션 당 최대 handoff 체인 깊이 제한
+     * - blockSameAgentWithinSteps: 최근 경로에서 동일 에이전트 재방문 제한
+     * - maxPerMinute: 세션 당 분당 handoff 최대 허용 횟수
+     * - allowMethods: handoff에서 허용할 메서드 allow-list
+     */
+    public static class Handoff {
+        private boolean enabled = false;
+        private int maxHops = 3;
+        private int blockSameAgentWithinSteps = 2;
+        private int maxPerMinute = 10;
+        private Set<String> allowMethods = SupervisorA2aMethod.valuesSet();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxHops() {
+            return maxHops;
+        }
+
+        public void setMaxHops(int maxHops) {
+            this.maxHops = maxHops;
+        }
+
+        public int getBlockSameAgentWithinSteps() {
+            return blockSameAgentWithinSteps;
+        }
+
+        public void setBlockSameAgentWithinSteps(int blockSameAgentWithinSteps) {
+            this.blockSameAgentWithinSteps = blockSameAgentWithinSteps;
+        }
+
+        public int getMaxPerMinute() {
+            return maxPerMinute;
+        }
+
+        public void setMaxPerMinute(int maxPerMinute) {
+            this.maxPerMinute = maxPerMinute;
+        }
+
+        public Set<String> getAllowMethods() {
+            return allowMethods;
+        }
+
+        public void setAllowMethods(Set<String> allowMethods) {
+            this.allowMethods = allowMethods == null || allowMethods.isEmpty() ? this.allowMethods : allowMethods;
         }
     }
 }

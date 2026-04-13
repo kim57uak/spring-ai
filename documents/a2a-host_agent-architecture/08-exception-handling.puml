@@ -9,6 +9,7 @@ class SupervisorA2AController
 class SupervisorAgentService
 class SupervisorAgentOrchestrator
 class HitlDecisionService
+class HandoffPolicyService
 class DefaultA2AInvocationService
 class A2AJsonRpcClient
 class GlobalExceptionHandler
@@ -19,11 +20,13 @@ class DownstreamA2AException
 class A2ARoutingException
 class HitlDecisionRequiredException
 class HitlCanceledException
+class HandoffValidationException
 class WebClientResponseException
 
 SupervisorA2AController --> SupervisorAgentService
 SupervisorAgentService --> SupervisorAgentOrchestrator
 SupervisorAgentOrchestrator --> HitlDecisionService
+SupervisorAgentOrchestrator --> HandoffPolicyService
 SupervisorAgentOrchestrator --> DefaultA2AInvocationService
 SupervisorAgentOrchestrator --> SupervisorSwarmStateStore
 DefaultA2AInvocationService --> A2AJsonRpcClient
@@ -33,12 +36,14 @@ DefaultA2AInvocationService --> A2ARoutingException : throw
 SupervisorAgentOrchestrator --> ChatProcessingException : throw
 HitlDecisionService --> HitlDecisionRequiredException : throw
 HitlDecisionService --> HitlCanceledException : throw
+HandoffPolicyService --> HandoffValidationException : throw
 
 GlobalExceptionHandler --> ChatProcessingException : @ExceptionHandler
 GlobalExceptionHandler --> DownstreamA2AException : @ExceptionHandler
 GlobalExceptionHandler --> A2ARoutingException : @ExceptionHandler
 GlobalExceptionHandler --> HitlDecisionRequiredException : @ExceptionHandler
 GlobalExceptionHandler --> HitlCanceledException : @ExceptionHandler
+GlobalExceptionHandler --> HandoffValidationException : @ExceptionHandler
 GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
 GlobalExceptionHandler --> IllegalArgumentException : @ExceptionHandler
 GlobalExceptionHandler --> IllegalStateException : @ExceptionHandler
@@ -49,6 +54,9 @@ Return sanitized response
 - no downstream raw payload leak
 end note
 
+' 2026-04-13 sync with doc 34
+' - add handoff validation exception mapping
+' - when handoff.enabled=false, directive is skipped (not failed)
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

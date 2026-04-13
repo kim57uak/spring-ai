@@ -101,6 +101,14 @@ public class ToolSchemaRegistry {
             return serverLevel.tools();
         }
 
+        // cold-start에서는 한 번 동기 원격 조회를 시도해 static fallback으로 인한 planner 변동성을 줄인다.
+        if (current == null && serverLevel == null) {
+            List<Map<String, Object>> remoteSync = refreshFromRemoteSync(serverName, safeScope);
+            if (!remoteSync.isEmpty()) {
+                return remoteSync;
+            }
+        }
+
         scheduleRefresh(serverName, safeScope);
 
         if (current != null) {
@@ -217,15 +225,29 @@ public class ToolSchemaRegistry {
      * 성공 시 scope/server 캐시를 함께 갱신하고, 실패 시 기존 캐시는 유지한다.
      */
     private void refreshFromRemote(String serverName, AgentScope scope) {
+        List<Map<String, Object>> refreshed = refreshFromRemoteSync(serverName, scope);
+        if (!refreshed.isEmpty()) {
+            return;
+        }
+        logger.warn(
+                "MCP schema lookup failed server={} source=remote reason=no-tools-returned (async)",
+                serverName
+        );
+    }
+
+    private List<Map<String, Object>> refreshFromRemoteSync(String serverName, AgentScope scope) {
         McpProperties.ServerConfig config = mcpProperties.getServers().get(serverName);
         if (config == null) {
-            return;
+            return List.of();
         }
         try {
             // 원격 조회 성공 시 scope/server 캐시를 동시에 갱신한다.
             McpClient client = mcpClientFactory.createClient(serverName);
             List<Map<String, Object>> remoteTools = normalizeTools(client.listTools());
             List<Map<String, Object>> filtered = filterByAllowTools(remoteTools, config.getAllowTools());
+            if (filtered.isEmpty()) {
+                return List.of();
+            }
             long expiresAt = System.currentTimeMillis() + CACHE_TTL.toMillis();
             String toolSetHash = hashOf(filtered.stream().map(map -> String.valueOf(map.get("name"))).sorted().collect(Collectors.joining(",")));
             CachedTools cached = new CachedTools(filtered, expiresAt, toolSetHash);
@@ -237,12 +259,14 @@ public class ToolSchemaRegistry {
                     filtered.size(),
                     CACHE_TTL.toMillis()
             );
+            return filtered;
         } catch (Exception e) {
             logger.warn(
-                    "MCP schema lookup failed server={} source=remote reason={} (async)",
+                    "MCP schema lookup failed server={} source=remote reason={}",
                     serverName,
                     e.getMessage()
             );
+            return List.of();
         }
     }
 

@@ -31,6 +31,7 @@ public class AgentGraphState extends AgentState {
     public static final String EXEC_TRACE = "execTrace";
     public static final String EXEC_SUCCESS = "execSuccess";
     public static final String EXEC_EXECUTED = "execExecuted";
+    public static final String EXEC_TERMINAL = "execTerminal";
 
     public AgentGraphState(Map<String, Object> initData) {
         super(initData);
@@ -84,7 +85,8 @@ public class AgentGraphState extends AgentState {
                 value(EXEC_PAYLOAD).map(String.class::cast).orElse(""),
                 readMapFromState(EXEC_ARGS),
                 value(EXEC_SUCCESS).map(Boolean.class::cast).orElse(true),
-                value(EXEC_EXECUTED).map(Boolean.class::cast).orElse(false)
+                value(EXEC_EXECUTED).map(Boolean.class::cast).orElse(false),
+                value(EXEC_TERMINAL).map(Boolean.class::cast).orElse(false)
         );
         context.setExecutionResult(executionResult);
         for (String trace : readStringListFromState(EXEC_TRACE)) {

@@ -10,6 +10,8 @@ import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
@@ -61,11 +63,8 @@ public class A2ARequestMapper {
      * @return legacy TaskSendParams
      */
     private TaskSendParams buildTaskSendParams(RoutingPlan plan, SupervisorPlanningContext context) {
-        StringBuilder message = new StringBuilder(context.getUserMessage() == null ? "" : context.getUserMessage());
-        if (plan.arguments() != null && !plan.arguments().isEmpty()) {
-            message.append("\n\n[supervisor-arguments]\n").append(plan.arguments());
-        }
-        return new TaskSendParams(message.toString(), context.getModel());
+        String message = resolveDownstreamMessage(plan, context);
+        return new TaskSendParams(message, context.getModel());
     }
 
     /**
@@ -76,16 +75,117 @@ public class A2ARequestMapper {
      * @return v1.0 message wrapper params
      */
     private Map<String, Object> buildSendMessageParams(RoutingPlan plan, SupervisorPlanningContext context) {
-        StringBuilder text = new StringBuilder(context.getUserMessage() == null ? "" : context.getUserMessage());
-        if (plan.arguments() != null && !plan.arguments().isEmpty()) {
-            text.append("\n\n[supervisor-arguments]\n").append(plan.arguments());
-        }
+        String text = resolveDownstreamMessage(plan, context);
         return Map.of(
                 "message", Map.of(
                         "role", "user",
-                        "parts", java.util.List.of(Map.of("type", "text", "text", text.toString()))
+                        "parts", java.util.List.of(Map.of("type", "text", "text", text))
                 )
         );
+    }
+
+    private String resolveDownstreamMessage(RoutingPlan plan, SupervisorPlanningContext context) {
+        String extracted = extractAgentPrompt(plan.arguments());
+        if (!extracted.isBlank()) {
+            return extracted;
+        }
+        return context.getUserMessage() == null ? "" : context.getUserMessage();
+    }
+
+    private String extractAgentPrompt(Map<String, Object> args) {
+        if (args == null || args.isEmpty()) {
+            return "";
+        }
+        String direct = firstNonBlank(
+                readString(args, "message"),
+                readString(args, "content"),
+                readString(args, "prompt"),
+                readString(args, "userMessage")
+        );
+        if (!direct.isBlank()) {
+            return direct;
+        }
+
+        java.util.List<String> fragments = new ArrayList<>();
+        collectPromptFragments(args.get("content"), fragments);
+        collectPromptFragments(args.get("query"), fragments);
+        collectPromptFragments(args.get("request_detail"), fragments);
+        collectPromptFragments(args.get("tasks"), fragments);
+        if (!fragments.isEmpty()) {
+            return String.join("\n", fragments);
+        }
+
+        return "";
+    }
+
+    @SuppressWarnings("unchecked")
+    private void collectPromptFragments(Object value, java.util.List<String> out) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof String text) {
+            String normalized = text.trim();
+            if (!normalized.isBlank()) {
+                out.add(normalized);
+            }
+            return;
+        }
+        if (value instanceof Map<?, ?> map) {
+            String direct = firstNonBlank(
+                    asString(map.get("message")),
+                    asString(map.get("content")),
+                    asString(map.get("prompt")),
+                    asString(map.get("userMessage")),
+                    asString(map.get("query")),
+                    asString(map.get("task_type")),
+                    asString(map.get("product_code")),
+                    asString(map.get("keywords"))
+            );
+            if (!direct.isBlank()) {
+                out.add(direct);
+            }
+            Object nestedContent = map.get("content");
+            if (nestedContent != null && nestedContent != value) {
+                collectPromptFragments(nestedContent, out);
+            }
+            Object nestedDetails = map.get("details");
+            if (nestedDetails != null && nestedDetails != value) {
+                collectPromptFragments(nestedDetails, out);
+            }
+            Object nestedTasks = map.get("tasks");
+            if (nestedTasks != null && nestedTasks != value) {
+                collectPromptFragments(nestedTasks, out);
+            }
+            Object nestedQuery = map.get("query");
+            if (nestedQuery != null && nestedQuery != value) {
+                collectPromptFragments(nestedQuery, out);
+            }
+            return;
+        }
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                collectPromptFragments(item, out);
+            }
+        }
+    }
+
+    private String asString(Object value) {
+        if (value instanceof String text) {
+            return text.trim();
+        }
+        return "";
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     private String readString(Map<String, Object> args, String key) {

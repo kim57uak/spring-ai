@@ -6,6 +6,8 @@ import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
 import com.example.springsupervisorai.service.prompt.SupervisorPromptRenderService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
@@ -22,6 +24,7 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
 
     // 적절한 컨텍스트 유지 및 과의존 방지를 위해 최대 4개로 제한
     private static final int MAX_HISTORY_MESSAGES = 4;
+    private static final Logger logger = LoggerFactory.getLogger(LlmSupervisorResponseComposeService.class);
     private final SupervisorLlmRuntime llmRuntime;
     private final SupervisorPromptProperties promptProperties;
     private final SupervisorPromptRenderService promptRenderService;
@@ -66,6 +69,7 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
      * @return compose prompt 문자열
      */
     private String buildComposePrompt(SupervisorPlanningContext context) {
+        logDownstreamResultsForCompose(context);
         String recentHistoryRaw = recentHistory(context).stream()
                 .reduce("", (acc, value) -> acc.isBlank() ? value : acc + "\n" + value);
         String protectedUserMessage = promptInjectionGuard.protectUserInput(context.getUserMessage());
@@ -132,6 +136,21 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             return "NO_DOWNSTREAM_RESULTS";
         }
         return builder.toString();
+    }
+
+    private void logDownstreamResultsForCompose(SupervisorPlanningContext context) {
+        logger.info("Supervisor compose input sessionId={}, resultsCount={}",
+                context.getSessionId(), context.getResults().size());
+        for (DownstreamCallResult result : context.getResults()) {
+            int payloadLength = result.payload() == null ? 0 : result.payload().length();
+            logger.info("Supervisor compose result sessionId={}, agentKey={}, status={}, errorCode={}, payloadLength={}",
+                    context.getSessionId(),
+                    safe(result.agentKey()),
+                    safe(result.status()),
+                    safe(result.errorCode()),
+                    payloadLength
+            );
+        }
     }
 
     /**

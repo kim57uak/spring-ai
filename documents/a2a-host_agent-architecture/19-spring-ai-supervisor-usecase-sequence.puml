@@ -3,25 +3,29 @@
 title 19. Spring AI Supervisor Usecase Sequence (A2A Controller Only)
 
 skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 20
 
 actor User
 participant "SupervisorA2AController" as Controller
 participant "SupervisorAgentService" as Service
 participant "SupervisorAgentOrchestrator" as Orchestrator
-participant "SupervisorPlanningService" as Planner
+participant "Swarm State Store" as SwarmStore
+participant "SupervisorPlanningService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Planner #FFE7A8
+participant "DefaultSupervisorLlmRuntime" as Runtime #FFF4CC
 participant "HITL Policy Service" as HitlPolicy
 participant "HITL Decision Service" as HitlDecision
 participant "A2AInvocationService" as Invoker
-participant "SupervisorResponseComposeService" as Composer
-participant "DefaultSupervisorLlmRuntime" as Runtime
-participant "Swarm State Store" as SwarmStore
+participant "Handoff Policy Service" as HandoffPolicy
+participant "SupervisorResponseComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Composer #FFE7A8
+participant "SupervisorProgressSupport" as Progress
 
 User -> Controller : JSON-RPC message/send|message/stream
 Controller -> Service : send(...) or stream(...)
 Service -> Orchestrator : execute(supervisorRequest)
 Orchestrator -> SwarmStore : load shared state
 Orchestrator -> Planner : plan(context)
-Planner -> Runtime : complete(planning prompt)
+Planner -> Runtime : complete(planning prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
 Runtime --> Planner : routing plans
 Orchestrator -> HitlPolicy : evaluate risk + data-mutation
 HitlPolicy --> Orchestrator : required?
@@ -33,16 +37,22 @@ end
 alt APPROVE
   Orchestrator -> Invoker : invoke(plans)
   Invoker --> Orchestrator : downstream results
+  Orchestrator -> HandoffPolicy : evaluate/apply handoff
+  HandoffPolicy --> Orchestrator : append plan or skip
+  Orchestrator -> Progress : line(stage=handoff, metadata)
   Orchestrator -> Composer : streamCompose(context + results)
 else CANCEL
   Orchestrator --> Controller : canceled response
 end
-Composer -> Runtime : stream(compose prompt)
+Composer -> Runtime : stream(compose prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
 Runtime --> Composer : token chunks
 Composer --> Controller : chunks
 Controller --> User : JSON-RPC/SSE response
 Orchestrator -> SwarmStore : save review/decision events
 
+' 2026-04-13 sync with doc 34
+' - add invoke-after handoff evaluation path (feature-flagged)
+' - use SupervisorProgressSupport for trace/progress output
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

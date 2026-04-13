@@ -9,6 +9,9 @@ public enum SupervisorRuntimeState {
     PLANNED("PLANNED"),
     ROUTING_SELECTED("ROUTING_SELECTED"),
     A2A_CALLING("A2A_CALLING"),
+    HANDOFF_EVALUATING("HANDOFF_EVALUATING"),
+    HANDOFF_APPLIED("HANDOFF_APPLIED"),
+    HANDOFF_SKIPPED("HANDOFF_SKIPPED"),
     A2A_RESULT_MERGED("A2A_RESULT_MERGED"),
     COMPOSING("COMPOSING"),
     COMPLETED("COMPLETED");
@@ -28,4 +31,3 @@ public enum SupervisorRuntimeState {
         return value;
     }
 }
-

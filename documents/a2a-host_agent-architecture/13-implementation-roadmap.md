@@ -33,6 +33,17 @@
 - 대체 전략(fallback/partial result) 추가
 - 회귀 테스트 + 계약 테스트 자동화
 
+## Phase 5: Handoff Rollout (Doc 34)
+
+- `invoke -> handoff_evaluate -> handoff_apply/skip -> merge` 그래프 분기 반영
+- `handoff.enabled=false` 기본 배포 후 canary 세션 점진 활성화
+- handoff 가드레일 적용
+  - method enum allowlist
+  - stream 지원 capability 검증
+  - maxHops/duplicate path/rate-limit
+- 진행상태를 `SupervisorProgressSupport` 공통 포맷으로 출력
+- Javadoc + 단위/통합/회귀 테스트 완료
+
 ---
 
 ## 2026-04-12 동기화 메모 (30/31 반영)
@@ -42,3 +53,10 @@
 - 상품/예약/주문 등 데이터 생성·변경(create/update/delete) 요청은 리스크 점수와 무관하게 HITL 강제 정책을 적용한다.
 - A2A 계약은 `legacy` + `v1.0`을 모두 충족하는 호환 모드로 유지한다(메서드 enum 기반 관리).
 - 사용자 추가정보 수집(이름/전화/이메일)은 향후 계획으로 분리하며, 입력 UX는 자연어/콤마 텍스트 수용 후 내부 구조화 원칙을 따른다.
+
+---
+
+## 2026-04-13 동기화 메모 (34 반영)
+
+- handoff 기능은 기능 플래그 기반 점진 배포를 기본 전략으로 채택한다.
+- SOLID/추상화/가독성/유지보수성 기준을 코드리뷰 게이트로 포함한다.

@@ -1,13 +1,17 @@
 package com.example.springai.model.agent;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class PlanningContext {
 
     private final String sessionId;
     private final String userMessage;
     private final String model;
+    private final String requestNonce = UUID.randomUUID().toString();
     private final List<String> history = new ArrayList<>();
 
     private String currentNode = "REQUEST_VALIDATED";
@@ -15,6 +19,7 @@ public class PlanningContext {
     private ToolPlan plan = ToolPlan.noTool("initial");
     private List<ToolPlan> plans = new ArrayList<>(List.of(plan));
     private final List<String> toolTrace = new ArrayList<>();
+    private final Map<String, Integer> toolCallCounts = new LinkedHashMap<>();
     private ToolExecutionResult executionResult = ToolExecutionResult.skipped();
     private AgentScope scope = AgentScope.unrestricted();
 
@@ -34,6 +39,10 @@ public class PlanningContext {
 
     public String getModel() {
         return model;
+    }
+
+    public String getRequestNonce() {
+        return requestNonce;
     }
 
     public List<String> getHistory() {
@@ -97,6 +106,17 @@ public class PlanningContext {
         }
     }
 
+    public int getToolCallCount(String serverName, String toolName) {
+        return toolCallCounts.getOrDefault(toolKey(serverName, toolName), 0);
+    }
+
+    public int incrementToolCallCount(String serverName, String toolName) {
+        String key = toolKey(serverName, toolName);
+        int updated = toolCallCounts.getOrDefault(key, 0) + 1;
+        toolCallCounts.put(key, updated);
+        return updated;
+    }
+
     public ToolExecutionResult getExecutionResult() {
         return executionResult;
     }
@@ -111,5 +131,11 @@ public class PlanningContext {
 
     public void setScope(AgentScope scope) {
         this.scope = scope == null ? AgentScope.unrestricted() : scope;
+    }
+
+    private String toolKey(String serverName, String toolName) {
+        String safeServer = serverName == null ? "" : serverName;
+        String safeTool = toolName == null ? "" : toolName;
+        return safeServer + "|" + safeTool;
     }
 }

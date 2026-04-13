@@ -203,7 +203,118 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
             plans.add(parsed);
             index++;
         }
-        return plans.stream().sorted(Comparator.comparingInt(RoutingPlan::priority)).toList();
+        List<RoutingPlan> sorted = plans.stream()
+                .sorted(Comparator.comparingInt(RoutingPlan::priority))
+                .toList();
+        return deduplicatePlans(sorted);
+    }
+
+    private List<RoutingPlan> deduplicatePlans(List<RoutingPlan> plans) {
+        if (plans == null || plans.isEmpty()) {
+            return List.of();
+        }
+        Map<String, RoutingPlan> unique = new LinkedHashMap<>();
+        for (RoutingPlan plan : plans) {
+            String key = dedupeKey(plan);
+            RoutingPlan existing = unique.get(key);
+            if (existing != null) {
+                RoutingPlan merged = mergePlan(existing, plan);
+                unique.put(key, merged);
+                logger.info("Supervisor planning merged duplicate plan agentKey={}, keptMethod={}, mergedPriority={}",
+                        merged.agentKey(), merged.method(), merged.priority());
+                continue;
+            }
+            unique.put(key, plan);
+        }
+        return List.copyOf(unique.values());
+    }
+
+    private String dedupeKey(RoutingPlan plan) {
+        return safe(plan.agentKey()).toLowerCase(Locale.ROOT);
+    }
+
+    private RoutingPlan mergePlan(RoutingPlan base, RoutingPlan incoming) {
+        String method = chooseMethod(base.agentKey(), base.method(), incoming.method());
+        String reason = mergeText(base.reason(), incoming.reason());
+        int priority = Math.min(base.priority(), incoming.priority());
+        Map<String, Object> mergedArguments = mergeArguments(
+                base.arguments(), incoming.arguments(), base.reason(), incoming.reason()
+        );
+        return new RoutingPlan(
+                base.agentKey(),
+                method,
+                reason,
+                priority,
+                mergedArguments,
+                base.sourceType(),
+                base.handoffDepth(),
+                base.parentAgentKey()
+        );
+    }
+
+    private String chooseMethod(String agentKey, String first, String second) {
+        SupervisorA2aMethod left = SupervisorA2aMethod.from(first).orElse(SupervisorA2aMethod.SEND_MESSAGE);
+        SupervisorA2aMethod right = SupervisorA2aMethod.from(second).orElse(SupervisorA2aMethod.SEND_MESSAGE);
+        boolean wantsStream = left.isStream() || right.isStream();
+        if (wantsStream && downstreamAgentCardCache.supportsStreaming(agentKey)) {
+            return SupervisorA2aMethod.SEND_STREAMING_MESSAGE.value();
+        }
+        return SupervisorA2aMethod.SEND_MESSAGE.value();
+    }
+
+    private Map<String, Object> mergeArguments(
+            Map<String, Object> base,
+            Map<String, Object> incoming,
+            String baseReason,
+            String incomingReason
+    ) {
+        LinkedHashMap<String, Object> merged = new LinkedHashMap<>();
+        if (base != null) {
+            merged.putAll(base);
+        }
+        if (incoming != null) {
+            incoming.forEach(merged::putIfAbsent);
+        }
+
+        String mergedMessage = mergeText(
+                extractInstruction(base, baseReason),
+                extractInstruction(incoming, incomingReason)
+        );
+        if (!mergedMessage.isBlank()) {
+            merged.put("message", mergedMessage);
+        }
+        return Map.copyOf(merged);
+    }
+
+    private String mergeText(String first, String second) {
+        String left = safe(first).trim();
+        String right = safe(second).trim();
+        if (left.isBlank()) {
+            return right;
+        }
+        if (right.isBlank() || left.equals(right)) {
+            return left;
+        }
+        return left + "\n" + right;
+    }
+
+    private String asText(Object value) {
+        if (value instanceof String text) {
+            return text.trim();
+        }
+        return "";
+    }
+
+    private String extractInstruction(Map<String, Object> args, String fallbackReason) {
+        String fromArgs = firstNonBlank(
+                asText(args == null ? null : args.get("message")),
+                asText(args == null ? null : args.get("content")),
+                asText(args == null ? null : args.get("prompt"))
+        );
+        if (!fromArgs.isBlank()) {
+            return fromArgs;
+        }
+        return safe(fallbackReason).trim();
     }
 
     private RoutingPlan parseSinglePlan(JsonNode node, int defaultPriority) {

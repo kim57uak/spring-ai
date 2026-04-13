@@ -1,6 +1,7 @@
 package com.example.springsupervisorai.service.agent.swarm;
 
 import com.example.springsupervisorai.model.DownstreamCallResult;
+import com.example.springsupervisorai.model.HandoffValidationResult;
 import com.example.springsupervisorai.model.RoutingPlan;
 import com.example.springsupervisorai.model.SwarmState;
 
@@ -36,5 +37,24 @@ public interface SupervisorSwarmCoordinator {
      * downstream 호출 결과를 상태 facts/eventLog에 반영한다.
      */
     void recordInvocationBatch(String taskId, String sessionId, List<DownstreamCallResult> results);
-}
 
+    /**
+     * handoff 검증 결과를 상태 facts/eventLog에 반영한다.
+     * <p>
+     * 반영 규칙:
+     * - directive 발견 시 `HANDOFF_REQUESTED` 기록
+     * - 검증 허용 시 `HANDOFF_ACCEPTED` 기록 + hop/path/window 갱신
+     * - 검증 거부 시 `HANDOFF_REJECTED` 또는 `HANDOFF_SKIPPED_BY_FLAG` 기록
+     *
+     * @param taskId supervisor task id
+     * @param sessionId 세션 id
+     * @param validations handoff 검증 결과 목록
+     * @param handoffEnabled 현재 handoff feature flag 상태
+     */
+    void recordHandoffEvaluations(
+            String taskId,
+            String sessionId,
+            List<HandoffValidationResult> validations,
+            boolean handoffEnabled
+    );
+}

@@ -15,6 +15,9 @@ rectangle "Routing & Invocation Guard" {
   [A2AClientRegistry] as Registry
   [Endpoint Allowlist] as Allowlist
   [A2AInvocationService] as Invoker
+  [Handoff Policy Service] as HandoffPolicy
+  [Handoff Method Enum Guard] as MethodGuard
+  [Streaming Capability Guard] as StreamGuard
   [Timeout/Retry Policy] as TimeoutRetry
   [Circuit Breaker] as CircuitBreaker
   [Payload Size Guard] as PayloadGuard
@@ -37,6 +40,8 @@ Registry --> Allowlist : validate agent key/endpoint
 Invoker --> TimeoutRetry : bounded call
 Invoker --> CircuitBreaker : fail-fast on repeated errors
 Invoker --> PayloadGuard : truncate/validate payload
+HandoffPolicy --> MethodGuard : validate method enum
+HandoffPolicy --> StreamGuard : validate stream support
 ErrorHandler --> Invoker : sanitize exception mapping
 HitlPolicy --> HitlDecision : mandatory review for data mutation
 HitlDecision --> SwarmIntegrity : decision/version validation
@@ -48,6 +53,14 @@ Supervisor agent can call only
 - search A2A endpoint
 end note
 
+note right of HandoffPolicy
+Handoff hardening
+- feature flag (`handoff.enabled`)
+- allowed method enum only
+- block stream handoff for non-stream-capable agent
+- max hops / duplicate path guard
+end note
+
 note bottom of ErrorHandler
 No sensitive leak
 - internal stack
@@ -55,6 +68,8 @@ No sensitive leak
 - credentials
 end note
 
+' 2026-04-13 sync with doc 34
+' - add handoff guardrails to security boundary
 ' 2026-04-12 sync with docs 30/31
 ' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
 ' - Data mutation requests (create/update/delete) require mandatory HITL

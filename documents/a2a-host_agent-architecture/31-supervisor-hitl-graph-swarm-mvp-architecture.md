@@ -6,6 +6,7 @@
 - Graph는 실행 제어, Swarm State는 공유 상태/감사 이력 관리
 - 기존 A2A 계약(`message/send`, `message/stream`, `tasks/*`)과 호환 유지
 - 이번 차례 의사결정 범위는 `승인(APPROVE)/취소(CANCEL)`만 지원
+- handoff는 feature flag(`handoff.enabled`) 기반으로 점진 적용(기본 OFF)
 
 ---
 
@@ -40,6 +41,12 @@ flowchart TD
 5. `APPLY_REVIEW`: approve/cancel 반영
 6. `SELECT -> INVOKE -> MERGE`
 7. `COMPOSE -> COMPLETED`
+
+handoff 확장 규칙(34 반영):
+
+- `INVOKE` 이후 `HANDOFF_EVALUATE` 분기 수행
+- `handoff.enabled=false`면 `HANDOFF_SKIPPED_BY_FLAG`로 기록 후 기존 경로 유지
+- `handoff.enabled=true`면 allowlist/method enum/stream capability/hop-limit 검증 후 `HANDOFF_APPLY`
 
 분기 규칙:
 
@@ -80,12 +87,15 @@ MVP는 하나의 루트 문서에 `graph`와 `swarm`을 분리 저장한다.
     "downstreamResults": [],
     "resumeFromNode": "APPLY_REVIEW"
   },
-  "swarm": {
-    "sharedFacts": {
-      "userIntent": "환불/변경 요청",
-      "riskScore": 0.86,
-      "sensitiveDomain": "billing"
-    },
+    "swarm": {
+      "sharedFacts": {
+        "userIntent": "환불/변경 요청",
+        "riskScore": 0.86,
+        "sensitiveDomain": "billing",
+        "handoffHopCount": 1,
+        "handoffPath": ["search", "product"],
+        "lastHandoffAgent": "product"
+      },
     "agentMemory": {
       "planner": {
         "confidence": 0.61
@@ -97,6 +107,16 @@ MVP는 하나의 루트 문서에 `graph`와 `swarm`을 분리 저장한다.
         "at": "2026-04-12T10:00:05Z",
         "payload": {
           "riskScore": 0.86
+        }
+      },
+      {
+        "type": "HANDOFF_APPLIED",
+        "at": "2026-04-13T10:00:07Z",
+        "payload": {
+          "fromAgent": "search",
+          "toAgent": "product",
+          "reason": "domain_delegate",
+          "handoffEnabled": true
         }
       }
     ]
@@ -173,6 +193,7 @@ MVP는 하나의 루트 문서에 `graph`와 `swarm`을 분리 저장한다.
 3. 승인 후 resume 시 중복 downstream 호출이 발생하지 않는다.
 4. 장애 후 재시작 시 Swarm State + Checkpoint로 동일 지점 복원된다.
 5. 기존 non-HITL 요청은 기존 지연/기능 수준을 유지한다.
+6. handoff OFF 상태에서는 기존 non-handoff 경로와 동등 동작을 유지한다.
 
 ---
 
@@ -183,6 +204,9 @@ MVP는 하나의 루트 문서에 `graph`와 `swarm`을 분리 저장한다.
   - 서버에서 파싱/검증 후 내부 JSON DTO로 구조화
 - `tasks/review/decide`의 `REVISE` 결정 타입 확장
   - 검토자가 파라미터를 수정해 재실행하는 고급 승인 플로우
+- handoff 고도화
+  - sourceType 기반 실행 경로 분석
+  - handoff 지표 기반 정책 자동 튜닝
 
 ---
 

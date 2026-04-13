@@ -21,6 +21,7 @@
 
 - [mcp-orchestrator-architecture](/Users/dolpaks/Downloads/project/spring-ai/documents/mcp-orchestrator-architecture)
 - [a2a-sub_agent-architecture](/Users/dolpaks/Downloads/project/spring-ai/documents/a2a-sub_agent-architecture)
+- [34-supervisor-agent-handoff-refactoring-plan.md](/Users/dolpaks/Downloads/project/spring-ai/documents/a2a-host_agent-architecture/34-supervisor-agent-handoff-refactoring-plan.md)
 - [30-supervisor-hitl-graph-swarm-refactoring-plan.md](/Users/dolpaks/Downloads/project/spring-ai/documents/a2a-host_agent-architecture/30-supervisor-hitl-graph-swarm-refactoring-plan.md)
 - [31-supervisor-hitl-graph-swarm-mvp-architecture.md](/Users/dolpaks/Downloads/project/spring-ai/documents/a2a-host_agent-architecture/31-supervisor-hitl-graph-swarm-mvp-architecture.md)
 
@@ -34,3 +35,9 @@
 - 상품/예약/주문 등 데이터 생성·변경(create/update/delete) 요청은 리스크 점수와 무관하게 HITL 강제 정책을 적용한다.
 - A2A 계약은 `legacy` + `v1.0`을 모두 충족하는 호환 모드로 유지한다(메서드 enum 기반 관리).
 - 사용자 추가정보 수집(이름/전화/이메일)은 향후 계획으로 분리하며, 입력 UX는 자연어/콤마 텍스트 수용 후 내부 구조화 원칙을 따른다.
+
+---
+
+## 2026-04-13 동기화 메모 (34 반영)
+
+- handoff 설계/가드레일/feature flag 기준은 `34` 문서를 우선 참조한다.
