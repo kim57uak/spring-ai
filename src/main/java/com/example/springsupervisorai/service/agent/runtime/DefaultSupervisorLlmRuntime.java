@@ -1,11 +1,6 @@
 package com.example.springsupervisorai.service.agent.runtime;
 
 import com.example.springsupervisorai.exception.SupervisorChatProcessingException;
-import com.example.springai.service.chat.ChatModelType;
-import com.example.springai.service.chat.ChatRequestContext;
-import com.example.springai.service.chat.ModelChatServiceFactory;
-import com.example.springai.service.chat.StreamChatService;
-import com.example.springai.service.chat.SyncChatService;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
@@ -20,15 +15,15 @@ import reactor.core.publisher.Flux;
 @Component
 public class DefaultSupervisorLlmRuntime implements SupervisorLlmRuntime {
 
-    private final ModelChatServiceFactory modelChatServiceFactory;
+    private final SupervisorChatGateway chatGateway;
 
     /**
-     * 하위 에이전트와 동일한 모델 라우팅 팩토리를 주입받는다.
+     * 공통 Chat 게이트웨이를 주입받는다.
      *
-     * @param modelChatServiceFactory 모델별 ChatService 팩토리
+     * @param chatGateway LLM 호출 게이트웨이
      */
-    public DefaultSupervisorLlmRuntime(ModelChatServiceFactory modelChatServiceFactory) {
-        this.modelChatServiceFactory = modelChatServiceFactory;
+    public DefaultSupervisorLlmRuntime(SupervisorChatGateway chatGateway) {
+        this.chatGateway = chatGateway;
     }
 
     /**
@@ -42,9 +37,7 @@ public class DefaultSupervisorLlmRuntime implements SupervisorLlmRuntime {
     @Override
     public String complete(String prompt, String model, String sessionId) {
         try {
-            ChatModelType modelType = ChatModelType.from(model);
-            SyncChatService chatService = modelChatServiceFactory.resolveSync(modelType);
-            String response = chatService.generate(prompt, ChatRequestContext.of(sessionId, false, model));
+            String response = chatGateway.complete(prompt, model, sessionId);
             if (response == null) {
                 throw new SupervisorChatProcessingException("Supervisor LLM returned empty response");
             }
@@ -65,9 +58,7 @@ public class DefaultSupervisorLlmRuntime implements SupervisorLlmRuntime {
     @Override
     public Flux<String> stream(String prompt, String model, String sessionId) {
         try {
-            ChatModelType modelType = ChatModelType.from(model);
-            StreamChatService chatService = modelChatServiceFactory.resolveStream(modelType);
-            return chatService.streamGenerate(prompt, ChatRequestContext.of(sessionId, false, model))
+            return chatGateway.stream(prompt, model, sessionId)
                     .onErrorMap(ex -> new SupervisorChatProcessingException(
                             "Supervisor LLM stream failed: " + ex.getMessage(),
                             ex

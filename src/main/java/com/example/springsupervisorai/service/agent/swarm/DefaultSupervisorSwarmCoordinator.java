@@ -59,10 +59,21 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
 
     private final SupervisorSwarmStateStore swarmStateStore;
 
+    /**
+     * Swarm 상태 저장소를 주입해 코디네이터를 생성한다.
+     *
+     * @param swarmStateStore Swarm 상태 저장소
+     */
     public DefaultSupervisorSwarmCoordinator(SupervisorSwarmStateStore swarmStateStore) {
         this.swarmStateStore = swarmStateStore;
     }
 
+    /**
+     * 세션 기준 최신 Swarm 상태를 조회한다.
+     *
+     * @param sessionId 조회할 세션 id
+     * @return 세션 id가 유효하면 최신 상태, 아니면 empty
+     */
     @Override
     public Optional<SwarmState> loadLatestBySession(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
@@ -149,6 +160,15 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         return filtered;
     }
 
+    /**
+     * 그래프 노드 실행 이벤트를 Swarm 이벤트 로그에 기록한다.
+     *
+     * @param taskId supervisor task id
+     * @param sessionId 세션 id
+     * @param nodeType 노드 타입
+     * @param message 노드 메시지
+     * @param metadata 추가 메타데이터
+     */
     @Override
     public void recordNodeEvent(
             String taskId,
@@ -164,6 +184,13 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         ), "GRAPH_NODE_EVENT", withNodeMetadata(nodeType, message, metadata));
     }
 
+    /**
+     * invoke 배치 결과를 바탕으로 성공/실패/요청 통계를 적재하고 cooldown을 갱신한다.
+     *
+     * @param taskId supervisor task id
+     * @param sessionId 세션 id
+     * @param results downstream 호출 결과 목록
+     */
     @Override
     public void recordInvocationBatch(String taskId, String sessionId, List<DownstreamCallResult> results) {
         if (results == null || results.isEmpty()) {
@@ -243,6 +270,13 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         upsertWithRetry(taskId, sessionId, base -> buildHandoffMutation(base, validations, handoffEnabled));
     }
 
+    /**
+     * 호출 결과를 실패로 간주할지 판정한다.
+     * completed 상태가 아니거나 errorCode가 있으면 실패로 처리한다.
+     *
+     * @param result downstream 호출 결과
+     * @return 실패로 간주하면 true
+     */
     private boolean isFailure(DownstreamCallResult result) {
         if (result == null) {
             return true;
@@ -252,6 +286,14 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         return !completed || hasErrorCode;
     }
 
+    /**
+     * 노드 이벤트 기본 필드와 추가 메타데이터를 병합한다.
+     *
+     * @param nodeType 노드 타입
+     * @param message 노드 메시지
+     * @param metadata 추가 메타데이터
+     * @return 이벤트 메타데이터 맵
+     */
     private Map<String, Object> withNodeMetadata(String nodeType, String message, Map<String, Object> metadata) {
         LinkedHashMap<String, Object> merged = new LinkedHashMap<>();
         merged.put("nodeType", safe(nodeType));
@@ -262,6 +304,15 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         return merged;
     }
 
+    /**
+     * 단일 fact/event 업데이트를 Swarm 상태에 반영한다.
+     *
+     * @param taskId supervisor task id
+     * @param sessionId 세션 id
+     * @param factUpdates 반영할 fact 변경값
+     * @param eventType 적재할 이벤트 타입
+     * @param eventMetadata 이벤트 메타데이터
+     */
     private void upsert(
             String taskId,
             String sessionId,
@@ -321,6 +372,15 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         }
     }
 
+    /**
+     * mutation 내용을 base 상태에 병합해 버전을 증가시켜 저장한다.
+     * 이벤트 로그는 최대 {@value #MAX_EVENT_LOG_SIZE}개로 유지한다.
+     *
+     * @param taskId supervisor task id
+     * @param sessionId 세션 id
+     * @param base 병합 기준 상태
+     * @param mutation 반영할 변경 집합
+     */
     private void persistMutation(
             String taskId,
             String sessionId,
@@ -355,6 +415,14 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         ));
     }
 
+    /**
+     * handoff 검증 결과를 fact/event 업데이트로 변환한다.
+     *
+     * @param base 병합 기준 상태
+     * @param validations handoff 검증 결과 목록
+     * @param handoffEnabled handoff 활성화 여부
+     * @return handoff 반영 mutation
+     */
     private SwarmMutation buildHandoffMutation(
             SwarmState base,
             List<HandoffValidationResult> validations,
@@ -453,6 +521,11 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         return new SwarmMutation(Map.copyOf(factUpdates), List.copyOf(eventEntries));
     }
 
+    /**
+     * 충돌 재시도 전 짧은 backoff를 수행한다.
+     *
+     * @param attempt 현재 재시도 횟수
+     */
     private void backoffBeforeRetry(int attempt) {
         long backoffMs = Math.min(100L, RETRY_BACKOFF_BASE_MS * Math.max(1, attempt));
         try {
@@ -474,6 +547,13 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
     ) {
     }
 
+    /**
+     * 이벤트 로그 저장용 엔트리를 생성한다.
+     *
+     * @param eventType 이벤트 타입
+     * @param metadata 이벤트 메타데이터
+     * @return 이벤트 엔트리
+     */
     private Map<String, Object> eventEntry(String eventType, Map<String, Object> metadata) {
         LinkedHashMap<String, Object> event = new LinkedHashMap<>();
         event.put("type", safe(eventType));
@@ -484,6 +564,13 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         return Map.copyOf(event);
     }
 
+    /**
+     * task 우선, 없으면 session 최신 상태를 기준으로 base 상태를 구성한다.
+     *
+     * @param taskId supervisor task id
+     * @param sessionId 세션 id
+     * @return mutation 병합 기준 상태
+     */
     private SwarmState baseState(String taskId, String sessionId) {
         Optional<SwarmState> currentTask = safe(taskId).isBlank() ? Optional.empty() : swarmStateStore.load(taskId);
         if (currentTask.isPresent()) {
@@ -566,10 +653,23 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         return converted;
     }
 
+    /**
+     * null 문자열을 빈 문자열로 정규화한다.
+     *
+     * @param value 입력 문자열
+     * @return null이 아닌 문자열
+     */
     private String safe(String value) {
         return value == null ? "" : value;
     }
 
+    /**
+     * facts에서 정수 fact를 읽고 비정상 값은 0으로 보정한다.
+     *
+     * @param facts swarm shared facts
+     * @param key 조회 키
+     * @return 0 이상 정수값
+     */
     private int intFact(Map<String, Object> facts, String key) {
         if (facts == null || facts.isEmpty()) {
             return 0;
@@ -585,6 +685,13 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         }
     }
 
+    /**
+     * facts에서 long fact를 읽고 비정상 값은 0으로 보정한다.
+     *
+     * @param facts swarm shared facts
+     * @param key 조회 키
+     * @return 0 이상 long값
+     */
     private long longFact(Map<String, Object> facts, String key) {
         if (facts == null || facts.isEmpty()) {
             return 0L;
@@ -600,6 +707,13 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         }
     }
 
+    /**
+     * facts에서 문자열 리스트 fact를 읽어 빈 항목을 제거한 새 리스트로 반환한다.
+     *
+     * @param facts swarm shared facts
+     * @param key 조회 키
+     * @return 정규화된 문자열 리스트
+     */
     @SuppressWarnings("unchecked")
     private List<String> listFact(Map<String, Object> facts, String key) {
         if (facts == null || facts.isEmpty()) {

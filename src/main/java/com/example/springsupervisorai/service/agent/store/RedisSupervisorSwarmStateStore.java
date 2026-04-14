@@ -1,7 +1,7 @@
 package com.example.springsupervisorai.service.agent.store;
 
-import com.example.common.redis.RedisKeyspace;
-import com.example.common.redis.RedisTtlPolicy;
+import com.example.springsupervisorai.common.redis.RedisKeyspace;
+import com.example.springsupervisorai.common.redis.RedisTtlPolicy;
 import com.example.springsupervisorai.model.SwarmState;
 import com.example.springsupervisorai.service.agent.swarm.SwarmStateVersionConflictException;
 import com.fasterxml.jackson.core.JsonProcessingException;
