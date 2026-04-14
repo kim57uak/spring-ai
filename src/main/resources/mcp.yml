@@ -1,26 +1,41 @@
 mcp:
+  # Supervisor가 연결할 MCP 서버 레지스트리
   servers:
+    # 상품 MCP 서버 식별자 (agent.scopes에서 참조)
     sale-product:
+      # 연결 방식: sse | stdio
       transport: sse
+      # SSE 서버 호스트
       host: http://10.225.18.50:8080
+      # SSE 엔드포인트 경로
       endpoint: /sse
+      # MCP 요청 timeout(ms)
       timeout-ms: 120000
+      # 호출/프로세스 환경변수
       env: {}
+      # 서버 메타 capability 태그
       capabilities:
         - action-execution
+      # 서버 레벨 허용 tool 목록 ([]면 전체 허용)
       allow-tools:
         - createAutoCopySaleProducts
         - getSaleProductDetails
+      # tool별 세부 실행 정책
       tool-policies:
         createAutoCopySaleProducts:
+          # 작업 유형(query/mutation)
           operation: mutation
+          # 자동 재시도 허용 여부
           retryable: false
+          # 요청 1건당 최대 호출 횟수
           max-calls-per-request: 1
+          # idempotencyKey 강제 주입 여부
           require-idempotency-key: true
         getSaleProductDetails:
           operation: query
           retryable: false
           max-calls-per-request: 1
+    # 예약 MCP 서버 식별자 (agent.scopes에서 참조)
     reservation:
       transport: sse
       host: http://10.225.18.50:8080
@@ -37,18 +52,26 @@ mcp:
           retryable: false
           max-calls-per-request: 1
           require-idempotency-key: true
+    # 검색 MCP 서버(로컬 stdio 프로세스) 식별자
     search-mcp-server:
+      # stdio는 command/args로 하위 프로세스를 실행
       transport: stdio
+      # 실행 바이너리 경로
       command: ${MCP_NODE_PATH:/opt/homebrew/bin/node}
       timeout-ms: 120000
+      # 실행 인자(서버 스크립트 경로 등)
       args:
         - ${MCP_SEARCH_SERVER_PATH:/Users/dolpaks/Downloads/project/search-mcp-server/src/server.js}
+      # stdio 프로세스 환경변수
       env:
         PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY}
       capabilities:
         - knowledge-retrieval
+      # []는 서버의 모든 tool 허용
       allow-tools: []
+      # {}는 tool별 추가 정책 미지정
       tool-policies: {}
+    # 경제지표 MCP 서버(로컬 stdio 프로세스) 식별자
     search-economy-index:
       transport: stdio
       command: ${MCP_ECONOMY_PYTHON_PATH:/Users/dolpaks/Downloads/project/search-economy-index/venv/bin/python}
@@ -63,10 +86,13 @@ mcp:
       tool-policies: {}
 
 agent:
+  # scope별 MCP 서버/도구 접근 제어 정책
   scopes:
     product:
+      # scope에서 접근 가능한 MCP 서버 목록
       allowed-servers:
         - sale-product
+      # 서버별 허용 도구 목록 ([]면 해당 서버 전체 허용)
       allowed-tools-by-server:
         sale-product:
           - createAutoCopySaleProducts
@@ -81,4 +107,5 @@ agent:
       allowed-servers:
         - search-mcp-server
       allowed-tools-by-server:
+        # []면 search-mcp-server의 모든 도구 허용
         search-mcp-server: []

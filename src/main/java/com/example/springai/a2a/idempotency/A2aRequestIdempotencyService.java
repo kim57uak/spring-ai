@@ -1,7 +1,7 @@
 package com.example.springai.a2a.idempotency;
 
-import com.example.common.redis.RedisKeyspace;
-import com.example.common.redis.RedisTtlPolicy;
+import com.example.springai.common.redis.RedisKeyspace;
+import com.example.springai.common.redis.RedisTtlPolicy;
 import com.example.springai.a2a.dto.JsonRpcResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -110,19 +110,7 @@ public class A2aRequestIdempotencyService {
             }
         }
 
-        try {
-            logger.info("A2A idempotency join in-flight key={}", key);
-            return existing.get();
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while waiting for duplicate A2A request", ex);
-        } catch (ExecutionException ex) {
-            Throwable cause = ex.getCause();
-            if (cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            throw new IllegalStateException("Failed while waiting for duplicate A2A request", cause);
-        }
+        return awaitInFlightResult(key, existing);
     }
 
     /**
@@ -196,6 +184,29 @@ public class A2aRequestIdempotencyService {
         JsonRpcResponse response = action.get();
         storeCached(key, response);
         return response;
+    }
+
+    /**
+     * 이미 선점된 in-flight 요청의 완료 결과를 기다린다.
+     *
+     * @param key 요청 dedupe 키
+     * @param existing 선행 요청 future
+     * @return 선행 요청 결과
+     */
+    private JsonRpcResponse awaitInFlightResult(String key, CompletableFuture<JsonRpcResponse> existing) {
+        try {
+            logger.info("A2A idempotency join in-flight key={}", key);
+            return existing.get();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for duplicate A2A request", ex);
+        } catch (ExecutionException ex) {
+            Throwable cause = ex.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Failed while waiting for duplicate A2A request", cause);
+        }
     }
 
     private JsonRpcResponse readCached(String key) {

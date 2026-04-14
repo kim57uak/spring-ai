@@ -2,10 +2,11 @@
 
 ## 1. 목적과 범위
 
-이 문서는 아래 3개 설정 파일의 운영 관점 설명서다.
+이 문서는 아래 4개 설정 파일의 운영 관점 설명서다.
 
 - `src/main/resources/application.yml`
 - `src/main/resources/a2a-supervisor.yml`
+- `src/main/resources/a2a-supervisor-hitl.yml`
 - `src/main/resources/mcp.yml`
 
 설명 범위는 다음과 같다.
@@ -23,6 +24,7 @@
 - `systemPrompt.yml`
 - `mcp.yml`
 - `a2a-supervisor.yml`
+- `a2a-supervisor-hitl.yml`
 - `supervisoSystemPrompt.yml`
 
 운영 포인트:
@@ -70,22 +72,24 @@
 
 | 키 | 현재 값 | 코드 기본값 | 운영 의미 |
 |---|---|---|---|
-| `host.a2a.routing.{agent}.endpoint` | agent별 URL | 없음(미설정 시 라우팅 실패) | Supervisor가 하위 A2A agent 호출할 대상 |
-| `host.a2a.routing.{agent}.method` | `message/send` | `message/send` | 기본 JSON-RPC 메서드 |
-| `host.a2a.routing.{agent}.timeout-ms` | `120000` | `10000` | agent별 timeout |
-| `host.a2a.retry.max-retries` | `0` | `1` | 재시도 횟수. 실제 최대 시도 수는 `max-retries + 1` |
-| `host.a2a.retry.initial-backoff-ms` | `500` | `500` | 재시도 초기 backoff |
-| `host.a2a.retry.max-backoff-ms` | `3000` | `3000` | 재시도 backoff 상한 |
-| `host.a2a.circuit-breaker.enabled` | `true` | `true` | 연속 실패 agent 차단 활성화 |
-| `host.a2a.circuit-breaker.failure-threshold` | `3` | `3` | 연속 실패 임계치 |
-| `host.a2a.circuit-breaker.open-duration-ms` | `30000` | `30000` | 회로 open 유지 시간 |
-| `host.a2a.execution.max-concurrency` | `2` | `1` | 그래프 invoke 배치 병렬 개수 |
-| `host.a2a.handoff.enabled` | `true` | `false` | handoff 기능 on/off |
-| `host.a2a.handoff.max-hops` | `3` | `3` | handoff 체인 깊이 제한 |
-| `host.a2a.handoff.block-same-agent-within-steps` | `2` | `2` | 최근 경로 내 동일 agent 재진입 차단 |
-| `host.a2a.handoff.max-per-minute` | `10` | `10` | 분당 handoff 허용량 |
-| `host.a2a.handoff.allow-methods` | 4개 메서드 | 모든 supervisor method | handoff 허용 메서드 화이트리스트 |
-| `host.a2a.stream.timeout-ms` | `120000` | `30000` | supervisor `message/stream` SSE timeout |
+| `host.a2a.routing.{agent}.endpoint` | agent별 URL | 없음(미설정 시 라우팅 실패) | 하위 agent 실제 호출 대상 URL. 비어 있으면 `A2ARoutingException`으로 즉시 실패한다. |
+| `host.a2a.routing.{agent}.method` | `message/send` | `message/send` | plan에 메서드가 없을 때 기본으로 사용한다. `allowedMethods` 미포함 메서드는 호출 전에 차단된다. |
+| `host.a2a.routing.{agent}.timeout-ms` | `120000` | `10000` | downstream HTTP/SSE 호출 타임아웃 기준값. 코드에서 최소 `100ms`로 보정된다. |
+| `host.a2a.retry.max-retries` | `0` | `1` | 재시도 횟수(추가 시도 수). 실제 총 시도는 `max-retries + 1`이고, `0`이면 1회만 시도한다. |
+| `host.a2a.retry.initial-backoff-ms` | `500` | `500` | 재시도 대기 시작값. `initial * 2^attempt` 지수 백오프 계산의 기준이 된다. |
+| `host.a2a.retry.max-backoff-ms` | `3000` | `3000` | 지수 백오프 상한. 계산된 대기시간이 커도 이 값을 넘지 않게 제한한다. |
+| `host.a2a.circuit-breaker.enabled` | `true` | `true` | 활성화 시 open 상태 agent는 호출을 보내지 않고 즉시 `CIRCUIT_OPEN` 실패로 반환한다. |
+| `host.a2a.circuit-breaker.failure-threshold` | `3` | `3` | 연속 실패 임계치. 최종 실패가 임계치 이상 누적되면 회로를 open으로 전환한다. |
+| `host.a2a.circuit-breaker.open-duration-ms` | `30000` | `30000` | open 유지 시간. `openUntil=now+duration`으로 계산되며 최소 `1000ms`로 보정된다. |
+| `host.a2a.execution.max-concurrency` | `2` | `1` | invoke 배치 동시 실행 개수. `1`은 순차, `2+`는 병렬 실행이며 최소 `1`로 보정된다. |
+| `host.a2a.history.max-turns` | `5` | `5` | planning/compose 프롬프트에 포함할 최근 대화 턴 수(user+assistant). 내부적으로 `turns*2` 메시지로 환산해 최근 히스토리만 주입한다. |
+| `host.a2a.hitl.reason-messages.*` | `a2a-supervisor-hitl.yml` 참조 | 코드 기본 reason 메시지 맵 | HITL reason code를 사용자 노출 문구로 변환한다. 동일 code 키가 있으면 설정값이 우선 적용된다. |
+| `host.a2a.handoff.enabled` | `true` | `false` | handoff 적용 스위치. 꺼져 있으면 directive는 `FLAG_DISABLED`로 거부되고 기존 plan이 유지된다. |
+| `host.a2a.handoff.max-hops` | `3` | `3` | handoff 체인 최대 깊이. `nextHop > maxHops`이면 `HOP_LIMIT`로 거부된다(최소 1 보정). |
+| `host.a2a.handoff.block-same-agent-within-steps` | `2` | `2` | 최근 N단계 경로 내 동일 agent 재진입 차단. `N<=0`이면 중복 경로 차단을 사실상 비활성화한다. |
+| `host.a2a.handoff.max-per-minute` | `10` | `10` | 1분 윈도우 handoff 허용량. 요청 수가 아니라 `accepted`된 handoff 누적치 기준으로 제한한다. |
+| `host.a2a.handoff.allow-methods` | 4개 메서드 | 모든 supervisor method | handoff에서 허용할 메서드 화이트리스트. 일치하지 않으면 `METHOD_NOT_ALLOWED`로 거부된다. |
+| `host.a2a.stream.timeout-ms` | `120000` | `30000` | supervisor SSE stream 전체 타임아웃. 초과 시 `-32008(Stream timeout)` 에러 후 `done(timeout)`으로 종료한다. |
 
 ### 4.2 운영 케이스
 
@@ -95,10 +99,18 @@
 | 다운스트림 재시도 허용 | `max-retries=1` | 최대 2회 시도. 메서드 fallback(`-32601`)은 별도 경로로 추가 시도 가능 |
 | 동시 호출 최적화 | `max-concurrency=2` | invoke 배치에서 최대 2개 plan 병렬 처리 |
 | 순차 안정 모드 | `max-concurrency=1` | 순차 호출, 외부 부하 낮지만 응답 지연 증가 |
+| 대화 컨텍스트 확장 | `history.max-turns=5` | planning/compose에서 최근 5턴(user+assistant)까지 프롬프트에 반영 |
+| HITL 사유 문구 커스터마이즈 | `a2a-supervisor-hitl.yml`의 `reason-messages` 변경 | 승인 요청 UI/로그 문구를 운영 정책에 맞게 일관되게 변경 가능 |
 | handoff 비활성 | `handoff.enabled=false` | handoff directive는 적용되지 않고 기존 plan 유지 |
 | handoff 루프 억제 | `max-hops=3` + `block-same-agent-within-steps=2` | hop 초과/최근 중복 agent handoff 거부 |
 | circuit open 상태 | `enabled=true` + 임계치 도달 | 해당 agent 호출 즉시 실패(`CIRCUIT_OPEN`)로 단락 |
 | stream 장기 처리 | `stream.timeout-ms` 확장 | streaming 응답 타임아웃 완화 |
+
+### 4.3 `a2a-supervisor-hitl.yml` 운영 포인트
+
+- `host.a2a.hitl.reason-messages`는 reason code별 사용자 안내 문구를 외부화한 설정이다.
+- `default` 키는 매핑되지 않은 신규 reason code에 대한 fallback 문구로 사용된다.
+- 코드 기본값이 있어도 운영에서는 `a2a-supervisor-hitl.yml`에서 명시적으로 관리하는 것을 권장한다(배포별 문구 변경 용이).
 
 ---
 

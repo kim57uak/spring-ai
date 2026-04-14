@@ -1,7 +1,7 @@
 package com.example.springai.a2a.task;
 
-import com.example.common.redis.RedisKeyspace;
-import com.example.common.redis.RedisTtlPolicy;
+import com.example.springai.common.redis.RedisKeyspace;
+import com.example.springai.common.redis.RedisTtlPolicy;
 import com.example.springai.model.agent.AgentScopeName;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,11 +40,23 @@ public class RedisA2ATaskStore implements A2ATaskStore {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
+    /**
+     * @param redisTemplate Redis 접근 템플릿
+     * @param objectMapper  스냅샷 직렬화 도구
+     */
     public RedisA2ATaskStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 새로운 A2A task를 생성하고 저장한다.
+     *
+     * @param scopeName 스코프명
+     * @param sessionId 세션 식별자
+     * @param requestMessage 요청 본문
+     * @return 생성된 task 스냅샷
+     */
     @Override
     public A2aTaskSnapshot create(AgentScopeName scopeName, String sessionId, String requestMessage) {
         Instant now = Instant.now();
@@ -65,11 +77,25 @@ public class RedisA2ATaskStore implements A2ATaskStore {
         return snapshot;
     }
 
+    /**
+     * taskId + scopeName 기준 단건 task를 조회한다.
+     *
+     * @param taskId task 식별자
+     * @param scopeName 스코프명
+     * @return task 스냅샷
+     */
     @Override
     public Optional<A2aTaskSnapshot> get(String taskId, AgentScopeName scopeName) {
         return load(taskId).filter(snapshot -> snapshot.scopeName() == scopeName);
     }
 
+    /**
+     * scope별 최신 task 목록을 조회한다.
+     *
+     * @param scopeName 스코프명
+     * @param limit 반환 개수 상한(1~200으로 보정)
+     * @return task 목록
+     */
     @Override
     public List<A2aTaskSnapshot> list(AgentScopeName scopeName, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 200));
@@ -94,70 +120,41 @@ public class RedisA2ATaskStore implements A2ATaskStore {
         return snapshots;
     }
 
+    /**
+     * task 상태를 RUNNING으로 전이한다.
+     */
     @Override
     public Optional<A2aTaskSnapshot> markRunning(String taskId, AgentScopeName scopeName) {
-        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
-                old.taskId(),
-                old.scopeName(),
-                old.sessionId(),
-                A2aTaskStatus.RUNNING,
-                old.createdAt(),
-                Instant.now(),
-                old.requestMessage(),
-                old.responsePayload(),
-                old.errorCode(),
-                old.errorMessage()
-        ));
+        return update(taskId, scopeName, old -> A2aTaskSnapshotTransitions.markRunning(old, Instant.now()));
     }
 
+    /**
+     * task 상태를 COMPLETED로 전이한다.
+     */
     @Override
     public Optional<A2aTaskSnapshot> markCompleted(String taskId, AgentScopeName scopeName, String responsePayload) {
-        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
-                old.taskId(),
-                old.scopeName(),
-                old.sessionId(),
-                old.status() == A2aTaskStatus.CANCELED ? A2aTaskStatus.CANCELED : A2aTaskStatus.COMPLETED,
-                old.createdAt(),
-                Instant.now(),
-                old.requestMessage(),
-                old.status() == A2aTaskStatus.CANCELED ? old.responsePayload() : (responsePayload == null ? "" : responsePayload),
-                old.status() == A2aTaskStatus.CANCELED ? old.errorCode() : "",
-                old.status() == A2aTaskStatus.CANCELED ? old.errorMessage() : ""
-        ));
+        return update(taskId, scopeName, old -> A2aTaskSnapshotTransitions.markCompleted(old, responsePayload, Instant.now()));
     }
 
+    /**
+     * task 상태를 FAILED로 전이한다.
+     */
     @Override
     public Optional<A2aTaskSnapshot> markFailed(String taskId, AgentScopeName scopeName, String errorCode, String errorMessage) {
-        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
-                old.taskId(),
-                old.scopeName(),
-                old.sessionId(),
-                old.status() == A2aTaskStatus.CANCELED ? A2aTaskStatus.CANCELED : A2aTaskStatus.FAILED,
-                old.createdAt(),
-                Instant.now(),
-                old.requestMessage(),
-                old.responsePayload(),
-                old.status() == A2aTaskStatus.CANCELED ? old.errorCode() : (errorCode == null ? "INTERNAL_ERROR" : errorCode),
-                old.status() == A2aTaskStatus.CANCELED ? old.errorMessage() : (errorMessage == null ? "A2A task failed" : errorMessage)
-        ));
+        return update(taskId, scopeName, old -> A2aTaskSnapshotTransitions.markFailed(old, errorCode, errorMessage, Instant.now()));
     }
 
+    /**
+     * task 상태를 CANCELED로 전이한다.
+     */
     @Override
     public Optional<A2aTaskSnapshot> cancel(String taskId, AgentScopeName scopeName, String reason) {
-        return update(taskId, scopeName, old -> new A2aTaskSnapshot(
-                old.taskId(),
-                old.scopeName(),
-                old.sessionId(),
-                A2aTaskStatus.CANCELED,
-                old.createdAt(),
-                Instant.now(),
-                old.requestMessage(),
-                old.responsePayload(),
-                "CANCELED",
-                reason == null || reason.isBlank() ? "Canceled by request" : reason
-        ));
+        return update(taskId, scopeName, old -> A2aTaskSnapshotTransitions.cancel(old, reason, Instant.now()));
     }
 
+    /**
+     * 현재 스냅샷을 조회한 뒤 updater를 적용하고 재저장한다.
+     */
     private Optional<A2aTaskSnapshot> update(
             String taskId,
             AgentScopeName scopeName,
@@ -172,6 +169,9 @@ public class RedisA2ATaskStore implements A2ATaskStore {
         return Optional.of(next);
     }
 
+    /**
+     * task 본문과 scope 인덱스를 함께 저장한다.
+     */
     private void save(A2aTaskSnapshot snapshot) {
         try {
             String key = taskKey(snapshot.taskId());
@@ -184,6 +184,9 @@ public class RedisA2ATaskStore implements A2ATaskStore {
         }
     }
 
+    /**
+     * taskId 기준 단건 스냅샷을 조회한다.
+     */
     private Optional<A2aTaskSnapshot> load(String taskId) {
         String raw = redisTemplate.opsForValue().get(taskKey(taskId));
         if (raw == null || raw.isBlank()) {
