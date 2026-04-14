@@ -1,42 +1,75 @@
 host:
   a2a:
+    # Supervisor -> downstream A2A agent 라우팅 설정
     routing:
+      # Planning 단계에서 agentKey=product로 선택될 때 호출 대상
       product:
+        # downstream A2A endpoint URL
         endpoint: ${SUPERVISOR_PRODUCT_A2A_ENDPOINT:http://localhost:8082/a2a/product}
+        # plan에 method가 없을 때 사용할 기본 JSON-RPC method
         method: message/send
+        # agent별 호출 timeout(ms)
         timeout-ms: 120000
+      # Planning 단계에서 agentKey=reservation로 선택될 때 호출 대상
       reservation:
         endpoint: ${SUPERVISOR_RESERVATION_A2A_ENDPOINT:http://localhost:8082/a2a/reservation}
         method: message/send
         timeout-ms: 120000
+      # Planning 단계에서 agentKey=search로 선택될 때 호출 대상
       search:
         endpoint: ${SUPERVISOR_SEARCH_A2A_ENDPOINT:http://localhost:8082/a2a/search}
         method: message/send
         timeout-ms: 120000
+      # 외부/추가 agent 라우팅 예시
       mygenie:
         endpoint: ${MYGENIE_A2A_ENDPOINT:http://localhost:8001/a2a}
         method: message/send
         timeout-ms: 1200000
+    # downstream 호출 재시도 정책
     retry:
+      # 추가 재시도 횟수 (총 시도 횟수 = max-retries + 1)
       max-retries: 0
+      # 재시도 첫 backoff(ms)
       initial-backoff-ms: 500
+      # 지수 backoff 최대 상한(ms)
       max-backoff-ms: 3000
+    # agent별 연속 실패 회로 차단 정책
     circuit-breaker:
+      # 회로 차단기 사용 여부
       enabled: true
-      failure-threshold: 3
+      # open 전까지 허용할 연속 실패 횟수
+      failure-threshold: 2
+      # 회로 open 유지 시간(ms)
       open-duration-ms: 30000
+    # invoke 배치 실행 동시성 정책
     execution:
-      # 1이면 순차, 2 이상이면 최대 동시 호출 수
+      # invoke 배치에서 동시에 실행할 최대 plan 개수 (1이면 순차)
       max-concurrency: 2
+    # LLM 프롬프트에 주입할 대화 히스토리 정책
+    history:
+      # planning/compose에 포함할 최근 대화 턴 수(user+assistant 기준)
+      max-turns: 5
+    # downstream handoff 지시 적용 정책
     handoff:
+      # handoff directive 반영 여부
       enabled: true
+      # 세션당 handoff 체인 최대 깊이
       max-hops: 3
+      # 최근 N단계 경로에서 동일 agent 재진입 차단
       block-same-agent-within-steps: 2
+      # 1분 윈도우당 handoff 허용량(accepted 기준)
       max-per-minute: 10
+      # handoff에서 허용할 JSON-RPC method allowlist
       allow-methods:
+        # legacy unary
         - message/send
+        # v1 unary
         - SendMessage
+        # legacy stream
         - message/stream
+        # v1 stream
         - SendStreamingMessage
+    # Supervisor SSE stream 응답 정책
     stream:
+      # stream endpoint 전체 timeout(ms)
       timeout-ms: 120000

@@ -12,6 +12,7 @@ spring:
       - "optional:classpath:systemPrompt.yml"
       - "optional:classpath:mcp.yml"
       - "optional:classpath:a2a-supervisor.yml"
+      - "optional:classpath:a2a-supervisor-hitl.yml"
       - "optional:classpath:supervisoSystemPrompt.yml"
   ai:
     model:

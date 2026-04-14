@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service.agent.hitl;
 
+import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.config.SupervisorPromptProperties;
 import com.example.springsupervisorai.model.HitlPolicyResult;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -29,6 +31,7 @@ public class LlmHitlPolicyService implements HitlPolicyService {
     private static final double REVIEW_RISK_THRESHOLD = 0.65d;
 
     private final SupervisorLlmRuntime llmRuntime;
+    private final A2aSupervisorRoutingProperties routingProperties;
     private final SupervisorPromptProperties promptProperties;
     private final SupervisorPromptRenderService promptRenderService;
     private final PromptInjectionGuard promptInjectionGuard;
@@ -36,12 +39,14 @@ public class LlmHitlPolicyService implements HitlPolicyService {
 
     public LlmHitlPolicyService(
             SupervisorLlmRuntime llmRuntime,
+            A2aSupervisorRoutingProperties routingProperties,
             SupervisorPromptProperties promptProperties,
             SupervisorPromptRenderService promptRenderService,
             PromptInjectionGuard promptInjectionGuard,
             ObjectMapper objectMapper
     ) {
         this.llmRuntime = llmRuntime;
+        this.routingProperties = routingProperties;
         this.promptProperties = promptProperties;
         this.promptRenderService = promptRenderService;
         this.promptInjectionGuard = promptInjectionGuard;
@@ -115,16 +120,61 @@ public class LlmHitlPolicyService implements HitlPolicyService {
         JsonNode root = objectMapper.readTree(candidate);
         String intentType = root.path("intentType").asText("unknown").trim();
         boolean reviewRequired = root.path("reviewRequired").asBoolean(false);
-        String reason = root.path("reviewReason").asText("").trim();
+        String rawReason = root.path("reviewReason").asText("").trim();
         double riskScore = normalizeRiskScore(root.path("riskScore").asDouble(0.0d));
 
         boolean forced = "data_mutation".equalsIgnoreCase(intentType);
         boolean readOnly = "read_only".equalsIgnoreCase(intentType);
         boolean required = forced || (!readOnly && reviewRequired && riskScore >= REVIEW_RISK_THRESHOLD);
-        String resolvedReason = reason.isBlank()
-                ? (forced ? "data_mutation_detected" : "llm_review_required")
-                : reason;
+        String resolvedReason = normalizeReason(rawReason, forced, readOnly, required);
         return new PolicyDecision(required, intentType, resolvedReason);
+    }
+
+    private String normalizeReason(String rawReason, boolean forced, boolean readOnly, boolean required) {
+        String trimmed = rawReason == null ? "" : rawReason.trim();
+        if (trimmed.isBlank()) {
+            if (readOnly || !required) {
+                return "조회성 요청으로 판단되어 승인이 필요하지 않습니다.";
+            }
+            if (forced) {
+                return "데이터 변경 요청으로 판단되어 사용자 승인이 필요합니다.";
+            }
+            return "요청 위험도를 고려해 사용자 승인이 필요하다고 판단했습니다.";
+        }
+        if (looksLikeReasonCode(trimmed)) {
+            return mapReasonCodeToKorean(trimmed);
+        }
+        return trimmed;
+    }
+
+    private boolean looksLikeReasonCode(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isBlank()) {
+            return false;
+        }
+        return normalized.equals(normalized.toLowerCase(Locale.ROOT))
+                && normalized.matches("[a-z0-9_\\-]+");
+    }
+
+    private String mapReasonCodeToKorean(String code) {
+        String normalized = code == null ? "" : code.trim().toLowerCase(Locale.ROOT);
+        A2aSupervisorRoutingProperties.Hitl hitl = routingProperties.getHitl();
+        Map<String, String> reasonMessages = hitl == null ? Map.of() : hitl.getReasonMessages();
+        if (reasonMessages != null && !reasonMessages.isEmpty()) {
+            String mapped = safeReason(reasonMessages.get(normalized));
+            if (!mapped.isBlank()) {
+                return mapped;
+            }
+            String fallback = safeReason(reasonMessages.get("default"));
+            if (!fallback.isBlank()) {
+                return fallback;
+            }
+        }
+        return "요청 처리 전 사용자가 검토해야 하는 상황으로 판단되었습니다.";
+    }
+
+    private String safeReason(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private double normalizeRiskScore(double riskScore) {

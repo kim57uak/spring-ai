@@ -45,3 +45,8 @@ logs/
 ### API Keys ###
 **/application-local.yml
 **/application-dev.yml
+
+# Override user-global ignore to keep test code versioned in this repository.
+!src/test/
+!src/test/**
+/src/test/java/com/example/architecture/

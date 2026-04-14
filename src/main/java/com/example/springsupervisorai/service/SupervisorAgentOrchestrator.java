@@ -124,106 +124,201 @@ public class SupervisorAgentOrchestrator {
 
         logger.info("Supervisor execute start taskId={}, sessionId={}, model={}", taskId, request.sessionId(), request.model());
 
-        // 단계별 진행 상황 emit
+        emitInitialProgress(progressSink, request);
+
+        Flux<String> sharedProgress = progressSink.asFlux().share();
+        Mono<SupervisorPlanningContext> planningMono = createPlanningContextMono(request, taskId, canceled, progressSink);
+        Flux<String> planningProgress = sharedProgress.takeUntilOther(planningMono);
+
+        return Flux.concat(
+                planningProgress,
+                planningMono
+                        .flatMapMany(context -> composeResponse(request, taskId, canceled, progressSink, context))
+                        .onErrorResume(error -> handleOrchestrationError(request, taskId, canceled, progressSink, error))
+        ).doOnCancel(() -> {
+            canceled.set(true);
+            progressSink.tryEmitComplete();
+        }).doFinally(signal -> progressSink.tryEmitComplete());
+    }
+
+    /**
+     * 실행 시작 즉시 초기 진행 메시지를 전송한다.
+     *
+     * @param progressSink 진행 이벤트 sink
+     * @param request supervisor 요청
+     */
+    private void emitInitialProgress(Sinks.Many<String> progressSink, SupervisorAgentRequest request) {
         emitProgress(progressSink, SupervisorProgressSupport.STAGE_INITIALIZING, 0, "요청을 접수했습니다.", Map.of(
                 "sessionId", shortSessionId(request.sessionId()),
                 "model", safe(request.model())
         ));
+    }
 
-        // progress flux를 공유 가능하게 만듦
-        Flux<String> sharedProgress = progressSink.asFlux().share();
-
-        Mono<SupervisorPlanningContext> planningMono = Mono.fromCallable(
-                        () -> invokeGraph(request, taskId, canceled, (stage, progress, message, metadata) ->
-                                emitProgress(progressSink, stage, progress, message, metadata))
+    /**
+     * 그래프 실행을 비동기로 수행하는 planning mono를 구성한다.
+     *
+     * @param request supervisor 요청
+     * @param taskId task 식별자
+     * @param canceled 취소 플래그
+     * @param progressSink 진행 이벤트 sink
+     * @return planning context mono
+     */
+    private Mono<SupervisorPlanningContext> createPlanningContextMono(
+            SupervisorAgentRequest request,
+            String taskId,
+            AtomicBoolean canceled,
+            Sinks.Many<String> progressSink
+    ) {
+        return Mono.fromCallable(
+                        () -> invokeGraph(
+                                request,
+                                taskId,
+                                canceled,
+                                (stage, progress, message, metadata) -> emitProgress(progressSink, stage, progress, message, metadata)
+                        )
                 )
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnError(error -> emitProgress(progressSink, SupervisorProgressSupport.STAGE_ERROR, 0, "실행 중 오류가 발생했습니다.", Map.of(
                         "error", sanitize(error.getMessage())
                 )))
                 .cache();
+    }
 
-        Flux<String> planningProgress = sharedProgress
-                .takeUntilOther(planningMono);
+    /**
+     * planning context를 바탕으로 compose 스트림을 생성하고 종료 후 상태를 반영한다.
+     *
+     * @param request supervisor 요청
+     * @param taskId task 식별자
+     * @param canceled 취소 플래그
+     * @param progressSink 진행 이벤트 sink
+     * @param context planning context
+     * @return 사용자 응답 스트림
+     */
+    private Flux<String> composeResponse(
+            SupervisorAgentRequest request,
+            String taskId,
+            AtomicBoolean canceled,
+            Sinks.Many<String> progressSink,
+            SupervisorPlanningContext context
+    ) {
+        if (isCanceled(taskId, canceled)) {
+            progressSink.tryEmitComplete();
+            return Flux.empty();
+        }
+
+        StringBuilder answer = new StringBuilder();
+        AtomicBoolean failed = new AtomicBoolean(false);
+        String composingProgress = SupervisorProgressSupport.line(
+                SupervisorProgressSupport.STAGE_COMPOSING,
+                80,
+                "하위 에이전트 실행 결과를 정리하고 답변을 생성합니다...",
+                Map.of("resultsCount", context.getResults().size())
+        );
+        String completedProgress = "\n" + SupervisorProgressSupport.line(
+                SupervisorProgressSupport.STAGE_COMPLETED,
+                100,
+                "응답 생성이 완료되었습니다.",
+                Map.of("answerLength", answer.length())
+        );
 
         return Flux.concat(
-                planningProgress,
-                planningMono
-                        .flatMapMany(context -> {
-                            if (isCanceled(taskId, canceled)) {
-                                progressSink.tryEmitComplete();
-                                return Flux.empty();
-                            }
+                Flux.just(composingProgress),
+                composeService.streamCompose(context)
+                        .onErrorResume(error -> handleComposeError(taskId, canceled, failed, error))
+                        .doOnNext(answer::append)
+                        .doOnComplete(() -> onComposeCompleted(request, taskId, context, answer, failed))
+                        .concatWith(Flux.just(completedProgress))
+        );
+    }
 
-                            StringBuilder answer = new StringBuilder();
-                            AtomicBoolean failed = new AtomicBoolean(false);
+    /**
+     * compose 단계 예외를 정규화하고 task 실패 상태를 반영한다.
+     *
+     * @param taskId task 식별자
+     * @param canceled 취소 플래그
+     * @param failed compose 실패 플래그
+     * @param error 발생 예외
+     * @return 대체 응답 스트림
+     */
+    private Flux<String> handleComposeError(
+            String taskId,
+            AtomicBoolean canceled,
+            AtomicBoolean failed,
+            Throwable error
+    ) {
+        if (error instanceof CancellationException || isCanceled(taskId, canceled)) {
+            return Flux.empty();
+        }
+        failed.set(true);
+        lifecycleService.markFailed(taskId, SupervisorErrorCode.COMPOSE_ERROR.value(), sanitize(error.getMessage()));
+        return Flux.concat(
+                Flux.just(SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_ERROR, 0, "응답 합성 중 오류가 발생했습니다.", Map.of(
+                        "error", sanitize(error.getMessage())
+                ))),
+                Flux.just("응답 합성 중 오류가 발생했습니다.")
+        );
+    }
 
-                            // composing 시작 진행 상황 (80%)
-                            String composingProgress = SupervisorProgressSupport.line(
-                                    SupervisorProgressSupport.STAGE_COMPOSING,
-                                    80,
-                                    "하위 에이전트 실행 결과를 정리하고 답변을 생성합니다...",
-                                    Map.of(
-                                    "resultsCount", context.getResults().size()
-                                    )
-                            );
+    /**
+     * compose 단계가 정상 종료되면 히스토리/이벤트/task 완료 상태를 기록한다.
+     *
+     * @param request supervisor 요청
+     * @param taskId task 식별자
+     * @param context planning context
+     * @param answer compose 결과 버퍼
+     * @param failed compose 실패 플래그
+     */
+    private void onComposeCompleted(
+            SupervisorAgentRequest request,
+            String taskId,
+            SupervisorPlanningContext context,
+            StringBuilder answer,
+            AtomicBoolean failed
+    ) {
+        persist(context, answer.toString());
+        swarmCoordinator.recordNodeEvent(taskId, request.sessionId(), "COMPOSE", "Compose completed", Map.of(
+                "answerLength", answer.length(),
+                "resultsCount", context.getResults().size()
+        ));
+        logger.info("Supervisor execute finished taskId={}, sessionId={}, results={}, responseLength={}",
+                taskId, request.sessionId(), context.getResults().size(), answer.length());
+        if (!failed.get()) {
+            lifecycleService.markCompleted(taskId, answer.toString());
+        }
+    }
 
-                            return Flux.concat(
-                                    Flux.just(composingProgress),  // composing 80% 먼저 전송
-                                    composeService.streamCompose(context)
-                                            .onErrorResume(error -> {
-                                                if (error instanceof CancellationException || isCanceled(taskId, canceled)) {
-                                                    return Flux.empty();
-                                                }
-                                                failed.set(true);
-                                                lifecycleService.markFailed(taskId, SupervisorErrorCode.COMPOSE_ERROR.value(), sanitize(error.getMessage()));
-                                                return Flux.concat(
-                                                        Flux.just(SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_ERROR, 0, "응답 합성 중 오류가 발생했습니다.", Map.of(
-                                                                "error", sanitize(error.getMessage())
-                                                        ))),
-                                                        Flux.just("응답 합성 중 오류가 발생했습니다.")
-                                                );
-                                            })
-                                            .doOnNext(answer::append)
-                                            .doOnComplete(() -> {
-                                                // 답변 스트림 완료 후 처리
-                                                persist(context, answer.toString());
-                                                swarmCoordinator.recordNodeEvent(taskId, request.sessionId(), "COMPOSE", "Compose completed", Map.of(
-                                                        "answerLength", answer.length(),
-                                                        "resultsCount", context.getResults().size()
-                                                ));
-                                                logger.info("Supervisor execute finished taskId={}, sessionId={}, results={}, responseLength={}",
-                                                        taskId, request.sessionId(), context.getResults().size(), answer.length());
-                                                if (!failed.get()) {
-                                                    lifecycleService.markCompleted(taskId, answer.toString());
-                                                }
-                                            })
-                                            .concatWith(Flux.just("\n" + SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_COMPLETED, 100, "응답 생성이 완료되었습니다.", Map.of(
-                                                    "answerLength", answer.length()
-                                            ))))
-                            );
-                        })
-                        .onErrorResume(error -> {
-                            if (error instanceof CancellationException || isCanceled(taskId, canceled)) {
-                                logger.info("Supervisor execute canceled during orchestration taskId={}, sessionId={}", taskId, request.sessionId());
-                                progressSink.tryEmitComplete();
-                                return Flux.empty();
-                            }
-                            logger.error("Supervisor execute failed taskId={}, sessionId={}, error={}",
-                                    taskId, request.sessionId(), sanitize(error.getMessage()));
-                            lifecycleService.markFailed(taskId, SupervisorErrorCode.ORCHESTRATION_ERROR.value(), sanitize(error.getMessage()));
-                            progressSink.tryEmitComplete();
-                            return Flux.concat(
-                                    Flux.just(SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_ERROR, 0, "Supervisor 처리 중 오류가 발생했습니다.", Map.of(
-                                            "error", sanitize(error.getMessage())
-                                    ))),
-                                    Flux.just("Supervisor 처리 중 오류가 발생했습니다.")
-                            );
-                        })
-        ).doOnCancel(() -> {
-            canceled.set(true);
+    /**
+     * 오케스트레이션 단계 예외를 취소/실패 케이스로 구분해 처리한다.
+     *
+     * @param request supervisor 요청
+     * @param taskId task 식별자
+     * @param canceled 취소 플래그
+     * @param progressSink 진행 이벤트 sink
+     * @param error 발생 예외
+     * @return 대체 응답 스트림
+     */
+    private Flux<String> handleOrchestrationError(
+            SupervisorAgentRequest request,
+            String taskId,
+            AtomicBoolean canceled,
+            Sinks.Many<String> progressSink,
+            Throwable error
+    ) {
+        if (error instanceof CancellationException || isCanceled(taskId, canceled)) {
+            logger.info("Supervisor execute canceled during orchestration taskId={}, sessionId={}", taskId, request.sessionId());
             progressSink.tryEmitComplete();
-        }).doFinally(signal -> progressSink.tryEmitComplete());
+            return Flux.empty();
+        }
+        logger.error("Supervisor execute failed taskId={}, sessionId={}, error={}",
+                taskId, request.sessionId(), sanitize(error.getMessage()));
+        lifecycleService.markFailed(taskId, SupervisorErrorCode.ORCHESTRATION_ERROR.value(), sanitize(error.getMessage()));
+        progressSink.tryEmitComplete();
+        return Flux.concat(
+                Flux.just(SupervisorProgressSupport.line(SupervisorProgressSupport.STAGE_ERROR, 0, "Supervisor 처리 중 오류가 발생했습니다.", Map.of(
+                        "error", sanitize(error.getMessage())
+                ))),
+                Flux.just("Supervisor 처리 중 오류가 발생했습니다.")
+        );
     }
 
     /**
@@ -432,7 +527,26 @@ public class SupervisorAgentOrchestrator {
                 "finalPlanCount", context.getRoutingPlans().size()
         ));
 
-        // 3.5단계: 라우팅 계획 완료 (40%)
+        emitRoutingPlanDetails(request, context, progressEmitter);
+        emitGraphInvocationSummary(request, context, progressEmitter);
+        invokeFallbackIfRequired(request, taskId, canceled, context, progressEmitter);
+        emitRoutingWarnings(request, context, progressEmitter);
+
+        return context;
+    }
+
+    /**
+     * 그래프가 계산한 라우팅 계획을 로그/진행 이벤트로 출력한다.
+     *
+     * @param request supervisor 요청
+     * @param context planning context
+     * @param progressEmitter 진행 이벤트 emitter
+     */
+    private void emitRoutingPlanDetails(
+            SupervisorAgentRequest request,
+            SupervisorPlanningContext context,
+            ProgressEmitter progressEmitter
+    ) {
         logger.info("Supervisor planning result sessionId={}, planCount={}, plans={}",
                 request.sessionId(), context.getRoutingPlans().size(),
                 context.getRoutingPlans().stream().map(plan -> plan.agentKey() + ":" + plan.method()).toList());
@@ -441,7 +555,6 @@ public class SupervisorAgentOrchestrator {
                 "planCount", context.getRoutingPlans().size()
         ));
 
-        // 4단계: 라우팅 계획 상세 출력 (50%)
         int planIndex = 0;
         for (RoutingPlan plan : context.getRoutingPlans()) {
             logger.info(
@@ -457,108 +570,151 @@ public class SupervisorAgentOrchestrator {
             progress(progressEmitter, SupervisorProgressSupport.STAGE_ROUTING, 50 + (planIndex * 2),
                     "📋 라우팅 계획 #" + (planIndex + 1) + ": " + plan.agentKey() + " → " + plan.method(),
                     Map.of(
-                        "planIndex", planIndex + 1,
-                        "agentKey", plan.agentKey(),
-                        "method", plan.method(),
-                        "priority", plan.priority(),
-                        "reason", sanitize(plan.reason()),
-                        "arguments", summarizeArguments(plan.arguments())
-            ));
+                            "planIndex", planIndex + 1,
+                            "agentKey", plan.agentKey(),
+                            "method", plan.method(),
+                            "priority", plan.priority(),
+                            "reason", sanitize(plan.reason()),
+                            "arguments", summarizeArguments(plan.arguments())
+                    ));
             planIndex++;
         }
+    }
 
-        // 5단계: 이미 실행된 결과가 있는 경우 출력 (60%)
-        if (!context.getResults().isEmpty()) {
-            logger.info("Supervisor graph downstream aggregation sessionId={}, resultsCount={}",
-                    request.sessionId(), context.getResults().size());
-            for (DownstreamCallResult result : context.getResults()) {
-                logger.info("Supervisor graph downstream result sessionId={}, {}",
-                        request.sessionId(), summarizeResult(result));
-            }
-            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60, "그래프 내에서 하위 에이전트가 이미 실행되었습니다. 결과를 확인합니다.", Map.of(
-                    "resultsCount", context.getResults().size(),
-                    "executedInGraph", true
-            ));
-
-            int resultIndex = 0;
-            for (DownstreamCallResult result : context.getResults()) {
-                progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60 + (resultIndex * 3), "✓ " + result.agentKey() + " 실행 완료", Map.of(
-                        "agentKey", result.agentKey(),
-                        "status", result.status(),
-                        "errorCode", safe(result.errorCode()),
-                        "payloadLength", result.payload() == null ? 0 : result.payload().length()
-                ));
-                resultIndex++;
-            }
-
-            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 75, "모든 하위 에이전트 실행 완료 (그래프 내에서 처리됨)", Map.of(
-                    "resultsCount", context.getResults().size()
-            ));
+    /**
+     * 그래프 내부에서 이미 실행된 downstream 결과를 로그/진행 이벤트로 출력한다.
+     *
+     * @param request supervisor 요청
+     * @param context planning context
+     * @param progressEmitter 진행 이벤트 emitter
+     */
+    private void emitGraphInvocationSummary(
+            SupervisorAgentRequest request,
+            SupervisorPlanningContext context,
+            ProgressEmitter progressEmitter
+    ) {
+        if (context.getResults().isEmpty()) {
+            return;
         }
 
-        // 6단계: 하위 에이전트 호출 (60-75%)
-        if (context.getResults().isEmpty() && !context.getRoutingPlans().isEmpty()) {
-            int maxIterations = Math.min(5, context.getRoutingPlans().size());
-            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60, "→ INVOKE 노드 수동 실행: 하위 에이전트 호출 시작", Map.of(
-                    "nodeType", "INVOKE",
-                    "executionMode", "manual(fallback)",
-                    "totalCalls", maxIterations
+        logger.info("Supervisor graph downstream aggregation sessionId={}, resultsCount={}",
+                request.sessionId(), context.getResults().size());
+        for (DownstreamCallResult result : context.getResults()) {
+            logger.info("Supervisor graph downstream result sessionId={}, {}",
+                    request.sessionId(), summarizeResult(result));
+        }
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60, "그래프 내에서 하위 에이전트가 이미 실행되었습니다. 결과를 확인합니다.", Map.of(
+                "resultsCount", context.getResults().size(),
+                "executedInGraph", true
+        ));
+
+        int resultIndex = 0;
+        for (DownstreamCallResult result : context.getResults()) {
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60 + (resultIndex * 3), "✓ " + result.agentKey() + " 실행 완료", Map.of(
+                    "agentKey", result.agentKey(),
+                    "status", result.status(),
+                    "errorCode", safe(result.errorCode()),
+                    "payloadLength", result.payload() == null ? 0 : result.payload().length()
             ));
-
-            for (int i = 0; i < maxIterations; i++) {
-                throwIfCanceled(taskId, canceled);
-                RoutingPlan plan = context.getRoutingPlans().get(i);
-
-                int currentProgress = 60 + (i * 15 / maxIterations);
-                progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, currentProgress,
-                        "🔄 하위 에이전트 호출 #" + (i + 1) + "/" + maxIterations + ": " + plan.agentKey(),
-                        Map.of(
-                        "callIndex", i + 1,
-                        "totalCalls", maxIterations,
-                        "agentKey", plan.agentKey(),
-                        "method", plan.method(),
-                        "endpoint", "/a2a/" + plan.agentKey() + "/" + plan.method(),
-                        "arguments", summarizeArguments(plan.arguments())
-                ));
-
-                DownstreamCallResult result = invocationService.invoke(plan, context);
-                context.addResult(result);
-                // 그래프 INVOKE 경로와 동일하게 fallback 수동 호출도 Swarm facts/eventLog에 반영한다.
-                swarmCoordinator.recordInvocationBatch(taskId, request.sessionId(), List.of(result));
-
-                logger.info("Supervisor downstream result sessionId={}, agentKey={}, status={}, errorCode={}",
-                        request.sessionId(), result.agentKey(), result.status(), result.errorCode());
-
-                progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, currentProgress + 3,
-                        "✓ 호출 완료 #" + (i + 1) + ": " + result.agentKey() + " → " + result.status(),
-                        Map.of(
-                        "callIndex", i + 1,
-                        "agentKey", result.agentKey(),
-                        "status", result.status(),
-                        "errorCode", safe(result.errorCode()),
-                        "payloadLength", result.payload() == null ? 0 : result.payload().length(),
-                        "hasError", result.errorCode() != null && !result.errorCode().isBlank()
-                ));
-            }
-
-            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 75, "✓ INVOKE 노드 완료 (수동 실행)", Map.of(
-                    "nodeType", "INVOKE",
-                    "executionMode", "manual(fallback)",
-                    "resultsCount", context.getResults().size()
-            ));
+            resultIndex++;
         }
 
-        // 7단계: 직접 응답 케이스 (75%)
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 75, "모든 하위 에이전트 실행 완료 (그래프 내에서 처리됨)", Map.of(
+                "resultsCount", context.getResults().size()
+        ));
+    }
+
+    /**
+     * 그래프 결과가 비어 있으면 기존 fallback 규칙으로 downstream 호출을 수행한다.
+     *
+     * @param request supervisor 요청
+     * @param taskId task 식별자
+     * @param canceled 취소 플래그
+     * @param context planning context
+     * @param progressEmitter 진행 이벤트 emitter
+     */
+    private void invokeFallbackIfRequired(
+            SupervisorAgentRequest request,
+            String taskId,
+            AtomicBoolean canceled,
+            SupervisorPlanningContext context,
+            ProgressEmitter progressEmitter
+    ) {
+        if (!context.getResults().isEmpty() || context.getRoutingPlans().isEmpty()) {
+            return;
+        }
+
+        int maxIterations = Math.min(5, context.getRoutingPlans().size());
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 60, "→ INVOKE 노드 수동 실행: 하위 에이전트 호출 시작", Map.of(
+                "nodeType", "INVOKE",
+                "executionMode", "manual(fallback)",
+                "totalCalls", maxIterations
+        ));
+
+        for (int i = 0; i < maxIterations; i++) {
+            throwIfCanceled(taskId, canceled);
+            RoutingPlan plan = context.getRoutingPlans().get(i);
+
+            int currentProgress = 60 + (i * 15 / maxIterations);
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, currentProgress,
+                    "🔄 하위 에이전트 호출 #" + (i + 1) + "/" + maxIterations + ": " + plan.agentKey(),
+                    Map.of(
+                            "callIndex", i + 1,
+                            "totalCalls", maxIterations,
+                            "agentKey", plan.agentKey(),
+                            "method", plan.method(),
+                            "endpoint", "/a2a/" + plan.agentKey() + "/" + plan.method(),
+                            "arguments", summarizeArguments(plan.arguments())
+                    ));
+
+            DownstreamCallResult result = invocationService.invoke(plan, context);
+            context.addResult(result);
+            swarmCoordinator.recordInvocationBatch(taskId, request.sessionId(), List.of(result));
+
+            logger.info("Supervisor downstream result sessionId={}, agentKey={}, status={}, errorCode={}",
+                    request.sessionId(), result.agentKey(), result.status(), result.errorCode());
+
+            progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, currentProgress + 3,
+                    "✓ 호출 완료 #" + (i + 1) + ": " + result.agentKey() + " → " + result.status(),
+                    Map.of(
+                            "callIndex", i + 1,
+                            "agentKey", result.agentKey(),
+                            "status", result.status(),
+                            "errorCode", safe(result.errorCode()),
+                            "payloadLength", result.payload() == null ? 0 : result.payload().length(),
+                            "hasError", result.errorCode() != null && !result.errorCode().isBlank()
+                    ));
+        }
+
+        progress(progressEmitter, SupervisorProgressSupport.STAGE_INVOKING, 75, "✓ INVOKE 노드 완료 (수동 실행)", Map.of(
+                "nodeType", "INVOKE",
+                "executionMode", "manual(fallback)",
+                "resultsCount", context.getResults().size()
+        ));
+    }
+
+    /**
+     * 라우팅/결과 유무에 따라 경고 로그 및 사용자 진행 메시지를 출력한다.
+     *
+     * @param request supervisor 요청
+     * @param context planning context
+     * @param progressEmitter 진행 이벤트 emitter
+     */
+    private void emitRoutingWarnings(
+            SupervisorAgentRequest request,
+            SupervisorPlanningContext context,
+            ProgressEmitter progressEmitter
+    ) {
         if (context.getRoutingPlans().isEmpty()) {
             logger.warn("Supervisor planned no downstream calls sessionId={}, message={}",
                     request.sessionId(), request.message());
             progress(progressEmitter, SupervisorProgressSupport.STAGE_ROUTING, 75, "라우팅 계획: 직접 응답(하위 에이전트 호출 없음)");
-        } else if (context.getResults().isEmpty()) {
+            return;
+        }
+        if (context.getResults().isEmpty()) {
             logger.warn("Supervisor routing exists but downstream results are empty sessionId={}, planCount={}",
                     request.sessionId(), context.getRoutingPlans().size());
         }
-
-        return context;
     }
 
     private Map<String, Object> handoffProgressMetadata(

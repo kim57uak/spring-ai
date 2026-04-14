@@ -37,6 +37,7 @@ Spring Boot 기반 멀티 에이전트 프로젝트입니다.
 - [application.yml](/Users/dolpaks/Downloads/project/spring-ai/src/main/resources/application.yml)
 - [mcp.yml](/Users/dolpaks/Downloads/project/spring-ai/src/main/resources/mcp.yml)
 - [a2a-supervisor.yml](/Users/dolpaks/Downloads/project/spring-ai/src/main/resources/a2a-supervisor.yml)
+- [a2a-supervisor-hitl.yml](/Users/dolpaks/Downloads/project/spring-ai/src/main/resources/a2a-supervisor-hitl.yml)
 - [systemPrompt.yml](/Users/dolpaks/Downloads/project/spring-ai/src/main/resources/systemPrompt.yml)
 - [supervisoSystemPrompt.yml](/Users/dolpaks/Downloads/project/spring-ai/src/main/resources/supervisoSystemPrompt.yml)
 
@@ -107,6 +108,10 @@ host:
       failure-threshold: 3
       open-duration-ms: 30000
 
+    # 프롬프트 히스토리(최근 대화 턴 수)
+    history:
+      max-turns: 5
+
     # 스트림 타임아웃
     stream:
       timeout-ms: 120000
@@ -140,6 +145,8 @@ export SUPERVISOR_SEARCH_A2A_ENDPOINT=https://search-agent.example.com/a2a
 - **호출 허용 메서드**: `message/send`, `message/stream`, `tasks/get`, `tasks/list`, `tasks/cancel`
 - **재시도**: `host.a2a.retry.*`
 - **회로 차단기**: `host.a2a.circuit-breaker.*`
+- **프롬프트 히스토리 턴 수**: `host.a2a.history.max-turns` (현재 `5`, 최근 user+assistant 5턴)
+- **HITL reason 문구 매핑**: `host.a2a.hitl.reason-messages` (`a2a-supervisor-hitl.yml`에서 관리)
 - **스트림 타임아웃**: `host.a2a.stream.timeout-ms`
 
 ## 5. Downstream 에이전트 관리
@@ -223,7 +230,7 @@ export SUPERVISOR_SEARCH_A2A_ENDPOINT=https://search-agent.example.com/a2a
 - 키 전략 주의:
   - idempotency dedupeKey는 `sessionId` 포함(세션 간 응답 오염 방지)
   - task/review는 API 계약(`tasks/get`, `tasks/review/get`)이 `taskId` 조회 기반이므로 저장 키는 `taskId` 기반
-- 유지보수 규칙: Redis 키/TTL 하드코딩 금지, 공통 상수(`com.example.common.redis.RedisKeyspace`, `RedisTtlPolicy`)를 참조하세요.
+- 유지보수 규칙: Redis 키/TTL 하드코딩 금지, 각 앱 전용 상수(`com.example.springai.common.redis.*`, `com.example.springsupervisorai.common.redis.*`)를 참조하세요.
 - `a2a-supervisor.yml` endpoint를 동일 서버(자기 자신)로 둘 경우, 의도하지 않은 루프/부하 구조가 생기지 않도록 라우팅 정책을 점검하세요.
 - 프로파일별로 활성 scope가 다르면 Agent Card 노출 개수도 달라집니다. 운영/테스트 환경의 `agent.cards.enabled-scopes`를 반드시 분리 관리하세요.
 - `application.yml`의 import 파일명은 실제 리소스명과 정확히 일치해야 합니다(현재 `supervisoSystemPrompt.yml` 사용).

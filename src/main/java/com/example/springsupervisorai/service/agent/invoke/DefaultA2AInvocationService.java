@@ -10,6 +10,7 @@ import com.example.springsupervisorai.model.SupervisorErrorCode;
 import com.example.springsupervisorai.model.SupervisorInvocationStatus;
 import com.example.springsupervisorai.model.SupervisorA2aMethod;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
+import com.example.springsupervisorai.service.agent.result.DownstreamResultInterpreter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -108,7 +109,7 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
                         markSuccess(plan.agentKey());
                         logger.info("Supervisor invoke success sessionId={}, agentKey={}, method={}",
                                 context.getSessionId(), plan.agentKey(), candidateMethod);
-                        return new DownstreamCallResult(
+                        DownstreamCallResult provisional = new DownstreamCallResult(
                                 plan.agentKey(),
                                 "",
                                 SupervisorInvocationStatus.COMPLETED.value(),
@@ -116,6 +117,7 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
                                 "",
                                 ""
                         );
+                        return normalizeOutcome(provisional);
                     }
                     JsonNode response = jsonRpcClient.call(candidateTarget, candidateRequest, context.getSessionId());
                     DownstreamCallResult result = normalize(plan.agentKey(), response);
@@ -274,21 +276,55 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
         JsonNode result = response.path("result");
         String taskId = readAny(result, "id", "");
         String status = readAny(result, "status", SupervisorInvocationStatus.COMPLETED.value());
+        String embeddedErrorCode = firstNonBlank(
+                readAny(result, "errorCode", ""),
+                readAny(result, "code", "")
+        );
+        String embeddedErrorMessage = firstNonBlank(
+                readAny(result, "errorMessage", ""),
+                readAny(result, "message", "")
+        );
         String payload = result.isMissingNode() ? response.toString() : result.toString();
         HandoffPayload handoff = extractHandoff(agentKey, result);
 
-        return new DownstreamCallResult(
+        DownstreamCallResult provisional = new DownstreamCallResult(
                 agentKey,
                 taskId,
                 status,
                 payload,
-                "",
-                "",
+                embeddedErrorCode,
+                embeddedErrorMessage,
                 handoff.requested(),
                 handoff.nextAgentKey(),
                 handoff.method(),
                 handoff.reason(),
                 handoff.arguments()
+        );
+        return normalizeOutcome(provisional);
+    }
+
+    /**
+     * 응답 본문/상태 기반 failure 신호를 표준 FAILED 결과로 정규화한다.
+     */
+    private DownstreamCallResult normalizeOutcome(DownstreamCallResult result) {
+        DownstreamResultInterpreter.Assessment assessment = DownstreamResultInterpreter.assess(result);
+        if (assessment.outcome() != DownstreamResultInterpreter.Outcome.FAILED) {
+            return result;
+        }
+        String errorCode = firstNonBlank(result.errorCode(), SupervisorErrorCode.DOWNSTREAM_ERROR.value());
+        String errorMessage = firstNonBlank(result.errorMessage(), assessment.reason(), "Downstream returned failure signal");
+        return new DownstreamCallResult(
+                result.agentKey(),
+                result.taskId(),
+                SupervisorInvocationStatus.FAILED.value(),
+                result.payload(),
+                errorCode,
+                errorMessage,
+                result.handoffRequested(),
+                result.nextAgentKey(),
+                result.handoffMethod(),
+                result.handoffReason(),
+                result.handoffArguments()
         );
     }
 

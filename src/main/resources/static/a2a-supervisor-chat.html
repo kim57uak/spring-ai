@@ -1742,14 +1742,14 @@
                   supervisorLogs.push(line.trim());
 
                   // 진행 상황 파싱 및 UI 업데이트
-                  const progress = parseSupervisorProgress(line.trim());
-                  if (progress) {
-                    lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
-                    if (progress.stage === 'hitl_waiting') {
-                      waitingReviewDetected = true;
-                      await showHitlReviewPanel(ai, progress.message);
-                    }
-                  }
+	                  const progress = parseSupervisorProgress(line.trim());
+	                  if (progress) {
+	                    lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
+	                    if (progress.stage === 'hitl_waiting') {
+	                      waitingReviewDetected = true;
+	                      await showHitlReviewPanel(ai, progress.metadata?.reason || progress.message);
+	                    }
+	                  }
                 } else if (line.length > 0) {
                   assistantDelta += rawLine + '\n';
                 }
@@ -1763,12 +1763,12 @@
                     ai.panel.style.display = 'block';
                     ai.stream.textContent = supervisorLogs.join('\n');
                     ai.stream.scrollTop = ai.stream.scrollHeight;
-                    lastProgress = applySupervisorProgress(ai, trailingProgress, { lastProgress });
-                    if (trailingProgress.stage === 'hitl_waiting') {
-                      waitingReviewDetected = true;
-                      await showHitlReviewPanel(ai, trailingProgress.message);
-                    }
-                  } else {
+	                    lastProgress = applySupervisorProgress(ai, trailingProgress, { lastProgress });
+	                    if (trailingProgress.stage === 'hitl_waiting') {
+	                      waitingReviewDetected = true;
+	                      await showHitlReviewPanel(ai, trailingProgress.metadata?.reason || trailingProgress.message);
+	                    }
+	                  } else {
                     lineBuffer = trailing;
                   }
                 } else {

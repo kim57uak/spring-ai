@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.net.IDN;
@@ -45,6 +46,7 @@ import java.util.regex.Pattern;
 public class McpToolExecutionService implements ToolExecutionService {
 
     private static final Logger logger = LoggerFactory.getLogger(McpToolExecutionService.class);
+    private static final String MDC_GUID_KEY = "guid";
     private static final Set<String> BLOCKED_HOSTS = Set.of(
             "localhost",
             "metadata.google.internal",
@@ -118,6 +120,7 @@ public class McpToolExecutionService implements ToolExecutionService {
             params = normalizeArgumentsForKnownTools(resolvedTool, params, context.getUserMessage());
             params = applyIdempotencyIfRequired(policy, params, context, serverName, resolvedTool);
             Map<String, Object> selectedToolSchema = findToolSchema(resolvedTool, availableTools);
+            params = applyGuidIfPresent(params, selectedToolSchema);
             List<String> missingRequiredParams = detectMissingRequiredParams(params, selectedToolSchema);
             if (!missingRequiredParams.isEmpty()) {
                 String missingPayload = buildMissingRequiredPayload(resolvedTool, missingRequiredParams, selectedToolSchema);
@@ -321,7 +324,7 @@ public class McpToolExecutionService implements ToolExecutionService {
             }
             String guid = stringValue(request.get("guid"));
             if (guid.isBlank()) {
-                request.put("guid", UUID.randomUUID().toString());
+                request.put("guid", resolveGuidWithMdc());
             }
             params.put("request", Map.copyOf(request));
             return params;
@@ -335,11 +338,182 @@ public class McpToolExecutionService implements ToolExecutionService {
             return params;
         }
         Map<String, Object> request = new LinkedHashMap<>();
-        request.put("guid", UUID.randomUUID().toString());
+        request.put("guid", resolveGuidWithMdc());
         request.put("saleProdCd", saleProdCd);
         params.put("request", Map.copyOf(request));
         params.remove("saleProdCd");
         return params;
+    }
+
+    /**
+     * 입력 스키마에 guid 필드가 정의되어 있고 값이 비어 있으면 MDC 기반 guid를 주입한다.
+     * <p>
+     * 동작 원칙:
+     * - root object의 guid는 직접 주입한다.
+     * - 중첩 object는 스키마에 guid 경로가 있으면 필요 시 생성해 주입한다.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> applyGuidIfPresent(Map<String, Object> originalParams, Map<String, Object> toolSchema) {
+        Map<String, Object> params = originalParams == null ? new LinkedHashMap<>() : new LinkedHashMap<>(originalParams);
+        if (toolSchema == null || toolSchema.isEmpty()) {
+            return params;
+        }
+        Object inputSchemaObj = toolSchema.get("inputSchema");
+        if (!(inputSchemaObj instanceof Map<?, ?> inputSchema)) {
+            return params;
+        }
+        applyGuidToObject(params, inputSchema);
+        return params;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyGuidToObject(Map<String, Object> target, Map<?, ?> schema) {
+        if (target == null || schema == null || schema.isEmpty()) {
+            return;
+        }
+        Object propertiesObj = schema.get("properties");
+        if (!(propertiesObj instanceof Map<?, ?> properties) || properties.isEmpty()) {
+            return;
+        }
+
+        String guidField = findGuidFieldName(properties);
+        if (!guidField.isBlank()) {
+            String guidKey = findExistingKeyIgnoreCase(target, guidField);
+            if (guidKey.isBlank()) {
+                guidKey = guidField;
+            }
+            String current = stringValue(target.get(guidKey));
+            if (current.isBlank()) {
+                target.put(guidKey, resolveGuidWithMdc());
+            }
+        }
+
+        for (Map.Entry<?, ?> entry : properties.entrySet()) {
+            String fieldName = stringValue(entry.getKey());
+            if (fieldName.isBlank()) {
+                continue;
+            }
+            Object childSchemaObj = entry.getValue();
+            if (!(childSchemaObj instanceof Map<?, ?> childSchema)) {
+                continue;
+            }
+            String targetFieldKey = findExistingKeyIgnoreCase(target, fieldName);
+            if (targetFieldKey.isBlank()) {
+                targetFieldKey = fieldName;
+            }
+            Object childValue = target.get(targetFieldKey);
+
+            if (childValue instanceof Map<?, ?> childMapRaw) {
+                Map<String, Object> childMap = new LinkedHashMap<>();
+                childMapRaw.forEach((k, v) -> childMap.put(String.valueOf(k), v));
+                applyGuidToObject(childMap, childSchema);
+                target.put(targetFieldKey, Map.copyOf(childMap));
+                continue;
+            }
+
+            // 중첩 object가 비어 있어도 스키마에 guid 경로가 있으면 객체를 생성해 guid를 채운다.
+            if (isObjectSchema(childSchema) && schemaContainsGuid(childSchema)) {
+                Map<String, Object> created = new LinkedHashMap<>();
+                applyGuidToObject(created, childSchema);
+                if (!created.isEmpty()) {
+                    target.put(targetFieldKey, Map.copyOf(created));
+                }
+            }
+
+            if (childValue instanceof Collection<?> childCollection && isArraySchema(childSchema)) {
+                List<Object> rewritten = new ArrayList<>(childCollection.size());
+                Map<?, ?> itemSchema = resolveArrayItemSchema(childSchema);
+                for (Object item : childCollection) {
+                    if (item instanceof Map<?, ?> itemMapRaw && itemSchema != null) {
+                        Map<String, Object> itemMap = new LinkedHashMap<>();
+                        itemMapRaw.forEach((k, v) -> itemMap.put(String.valueOf(k), v));
+                        applyGuidToObject(itemMap, itemSchema);
+                        rewritten.add(Map.copyOf(itemMap));
+                        continue;
+                    }
+                    rewritten.add(item);
+                }
+                target.put(targetFieldKey, List.copyOf(rewritten));
+            }
+        }
+    }
+
+    private boolean isObjectSchema(Map<?, ?> schema) {
+        Object propertiesObj = schema.get("properties");
+        return propertiesObj instanceof Map<?, ?>;
+    }
+
+    private boolean isArraySchema(Map<?, ?> schema) {
+        Object type = schema.get("type");
+        return "array".equalsIgnoreCase(stringValue(type));
+    }
+
+    private Map<?, ?> resolveArrayItemSchema(Map<?, ?> arraySchema) {
+        Object itemsObj = arraySchema.get("items");
+        if (itemsObj instanceof Map<?, ?> itemSchema) {
+            return itemSchema;
+        }
+        return null;
+    }
+
+    private boolean schemaContainsGuid(Map<?, ?> schema) {
+        if (schema == null || schema.isEmpty()) {
+            return false;
+        }
+        Object propertiesObj = schema.get("properties");
+        if (propertiesObj instanceof Map<?, ?> properties && !findGuidFieldName(properties).isBlank()) {
+            return true;
+        }
+        if (propertiesObj instanceof Map<?, ?> properties) {
+            for (Object value : properties.values()) {
+                if (value instanceof Map<?, ?> childSchema && schemaContainsGuid(childSchema)) {
+                    return true;
+                }
+            }
+        }
+        Object itemsObj = schema.get("items");
+        if (itemsObj instanceof Map<?, ?> itemSchema) {
+            return schemaContainsGuid(itemSchema);
+        }
+        return false;
+    }
+
+    private String findExistingKeyIgnoreCase(Map<String, Object> source, String key) {
+        if (source == null || source.isEmpty() || key == null || key.isBlank()) {
+            return "";
+        }
+        for (String existing : source.keySet()) {
+            if (existing != null && existing.equalsIgnoreCase(key)) {
+                return existing;
+            }
+        }
+        return "";
+    }
+
+    private String findGuidFieldName(Map<?, ?> properties) {
+        if (properties == null || properties.isEmpty()) {
+            return "";
+        }
+        for (Object key : properties.keySet()) {
+            String field = stringValue(key).trim();
+            if ("guid".equalsIgnoreCase(field)) {
+                return field;
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 요청 컨텍스트(MDC)에 guid가 있으면 재사용하고, 없으면 생성해 MDC에 저장한다.
+     */
+    private String resolveGuidWithMdc() {
+        String existing = stringValue(MDC.get(MDC_GUID_KEY)).trim();
+        if (!existing.isBlank()) {
+            return existing;
+        }
+        String generated = UUID.randomUUID().toString();
+        MDC.put(MDC_GUID_KEY, generated);
+        return generated;
     }
 
     private String resolveToolName(

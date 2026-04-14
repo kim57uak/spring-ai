@@ -14,6 +14,8 @@ public class A2aSupervisorRoutingProperties {
     private Retry retry = new Retry();
     private CircuitBreaker circuitBreaker = new CircuitBreaker();
     private Execution execution = new Execution();
+    private History history = new History();
+    private Hitl hitl = new Hitl();
     private Handoff handoff = new Handoff();
     private Set<String> allowedMethods = SupervisorA2aMethod.valuesSet();
 
@@ -55,6 +57,22 @@ public class A2aSupervisorRoutingProperties {
 
     public void setExecution(Execution execution) {
         this.execution = execution == null ? new Execution() : execution;
+    }
+
+    public History getHistory() {
+        return history;
+    }
+
+    public void setHistory(History history) {
+        this.history = history == null ? new History() : history;
+    }
+
+    public Hitl getHitl() {
+        return hitl;
+    }
+
+    public void setHitl(Hitl hitl) {
+        this.hitl = hitl == null ? new Hitl() : hitl;
     }
 
     public Handoff getHandoff() {
@@ -187,6 +205,57 @@ public class A2aSupervisorRoutingProperties {
 
         public void setMaxConcurrency(int maxConcurrency) {
             this.maxConcurrency = maxConcurrency;
+        }
+    }
+
+    /**
+     * 대화 히스토리 프롬프트 주입 정책 설정.
+     * <p>
+     * maxTurns:
+     * - LLM 프롬프트에 포함할 최근 대화 턴 수(user+assistant)를 제한한다.
+     * - 메시지 저장 구조가 user/assistant 단위이므로 내부적으로 2배 메시지로 환산해 사용한다.
+     */
+    public static class History {
+        private int maxTurns = 5;
+
+        public int getMaxTurns() {
+            return maxTurns;
+        }
+
+        public void setMaxTurns(int maxTurns) {
+            this.maxTurns = maxTurns;
+        }
+    }
+
+    /**
+     * HITL 정책 메시지 표시 설정.
+     * <p>
+     * reasonMessages:
+     * - HITL 정책 reason code를 사용자 노출용 메시지로 변환할 때 사용하는 맵.
+     * - key는 code(lowercase), value는 UI에 보여줄 한글 문장.
+     */
+    public static class Hitl {
+        private Map<String, String> reasonMessages = defaultReasonMessages();
+
+        public Map<String, String> getReasonMessages() {
+            return reasonMessages;
+        }
+
+        public void setReasonMessages(Map<String, String> reasonMessages) {
+            this.reasonMessages = reasonMessages == null || reasonMessages.isEmpty()
+                    ? defaultReasonMessages()
+                    : new LinkedHashMap<>(reasonMessages);
+        }
+
+        private static Map<String, String> defaultReasonMessages() {
+            LinkedHashMap<String, String> defaults = new LinkedHashMap<>();
+            defaults.put("reservation_creation_request", "예약 생성 요청으로 판단되어 사용자 승인이 필요합니다.");
+            defaults.put("data_mutation_detected", "데이터 변경 요청으로 판단되어 사용자 승인이 필요합니다.");
+            defaults.put("high_risk_unknown_intent", "요청 의도가 불명확하고 위험도가 높아 사용자 승인이 필요합니다.");
+            defaults.put("llm_review_required", "요청 위험도를 고려해 사용자 승인이 필요하다고 판단했습니다.");
+            defaults.put("not_required_read_only", "조회성 요청으로 판단되어 승인이 필요하지 않습니다.");
+            defaults.put("default", "요청 처리 전 사용자가 검토해야 하는 상황으로 판단되었습니다.");
+            return defaults;
         }
     }
 

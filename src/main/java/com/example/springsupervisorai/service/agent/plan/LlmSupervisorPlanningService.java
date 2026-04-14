@@ -67,6 +67,16 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * LLM planning 결과를 해석해 downstream 라우팅 계획을 반환한다.
+     * <p>
+     * 해석 원칙:
+     * - {@code complete=true}는 "호출 불필요"로 간주하고 즉시 빈 계획으로 종료한다.
+     * - {@code INVALID}인 경우에만 repair 프롬프트를 1회 시도한다.
+     *
+     * @param context planning 입력 컨텍스트
+     * @return downstream 라우팅 계획(없으면 빈 목록)
+     */
     @Override
     public List<RoutingPlan> plan(SupervisorPlanningContext context) {
         String planningPrompt = buildPlanningPrompt(context);
@@ -74,19 +84,19 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
                 context.getSessionId(), context.getModel(), safe(context.getUserMessage()).length());
 
         String raw = llmRuntime.complete(planningPrompt, context.getModel(), context.getSessionId());
-        List<RoutingPlan> parsed = parsePlans(raw, context.getSessionId(), "primary");
-        if (!parsed.isEmpty()) {
-            logger.info("Supervisor planning resolved by primary output sessionId={}, plans={}",
-                    context.getSessionId(), summarizePlans(parsed));
-            return parsed;
+        PlanParseResult parsed = parsePlans(raw, context.getSessionId(), "primary");
+        if (parsed.resolved()) {
+            logger.info("Supervisor planning resolved by primary output sessionId={}, status={}, plans={}",
+                    context.getSessionId(), parsed.status(), summarizePlans(parsed.plans()));
+            return parsed.plans();
         }
 
         String repaired = llmRuntime.complete(buildRepairPrompt(raw), context.getModel(), context.getSessionId());
         parsed = parsePlans(repaired, context.getSessionId(), "repair");
-        if (!parsed.isEmpty()) {
-            logger.info("Supervisor planning resolved by repair output sessionId={}, plans={}",
-                    context.getSessionId(), summarizePlans(parsed));
-            return parsed;
+        if (parsed.resolved()) {
+            logger.info("Supervisor planning resolved by repair output sessionId={}, status={}, plans={}",
+                    context.getSessionId(), parsed.status(), summarizePlans(parsed.plans()));
+            return parsed.plans();
         }
 
         logger.warn("Supervisor planning failed after primary+repair sessionId={}, primaryPreview={}, repairPreview={}",
@@ -99,9 +109,9 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
         String allowedAgents = String.join(", ", allowedAgentKeys);
         String agentCards = downstreamAgentCardCache.summarizeForPrompt(allowedAgentKeys);
 
-        // 히스토리를 최대 4개로 제한하여 적절한 컨텍스트 유지 및 과의존 방지
+        int maxHistoryMessages = Math.max(1, resolveMaxHistoryTurns()) * 2;
         String recentHistory = context.getHistory().stream()
-                .skip(Math.max(0, context.getHistory().size() - 4))
+                .skip(Math.max(0, context.getHistory().size() - maxHistoryMessages))
                 .reduce("", (acc, value) -> acc.isBlank() ? value : acc + "\n" + value);
 
         String protectedUserMessage = promptInjectionGuard.protectUserInput(context.getUserMessage());
@@ -134,61 +144,90 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
         return value == null ? "" : value;
     }
 
-    private List<RoutingPlan> parsePlans(String raw, String sessionId, String phase) {
+    private int resolveMaxHistoryTurns() {
+        A2aSupervisorRoutingProperties.History history = routingProperties.getHistory();
+        if (history == null) {
+            return 5;
+        }
+        return Math.max(1, history.getMaxTurns());
+    }
+
+    /**
+     * planning 응답(JSON)을 계약 기준으로 파싱한다.
+     * <p>
+     * 반환 상태:
+     * - INVALID: 계약 위반/파싱 실패 (repair 대상)
+     * - COMPLETE: 하위 호출 불필요 (빈 plans, 최종 확정)
+     * - PLANNED: 유효한 라우팅 계획
+     *
+     * @param raw LLM 원본 응답
+     * @param sessionId 세션 id
+     * @param phase 파싱 단계(primary/repair)
+     * @return 파싱 결과 상태와 계획
+     */
+    private PlanParseResult parsePlans(String raw, String sessionId, String phase) {
         if (raw == null || raw.isBlank()) {
             logger.warn("Supervisor planning {} output empty sessionId={}", phase, sessionId);
-            return List.of();
+            return PlanParseResult.invalid();
         }
         try {
             String candidate = extractJsonCandidate(stripCodeFence(raw));
             if (candidate.isBlank()) {
                 logger.warn("Supervisor planning {} output has no JSON candidate sessionId={}, preview={}",
                         phase, sessionId, preview(raw));
-                return List.of();
+                return PlanParseResult.invalid();
             }
 
             JsonNode root = objectMapper.readTree(candidate);
             if (root.isArray()) {
-                return parsePlanArray(root);
+                List<RoutingPlan> plans = parsePlanArray(root);
+                if (plans.isEmpty()) {
+                    logger.info("Supervisor planning {} output resolved to no downstream plans by array contract sessionId={}",
+                            phase, sessionId);
+                    return PlanParseResult.complete();
+                }
+                return PlanParseResult.planned(plans);
             }
             if (!root.isObject()) {
                 logger.warn("Supervisor planning {} output is not object/array sessionId={}, preview={}",
                         phase, sessionId, preview(candidate));
-                return List.of();
+                return PlanParseResult.invalid();
             }
 
             boolean complete = root.path("complete").asBoolean(false);
             JsonNode plansNode = root.path("plans");
+            // complete=true가 명시되면 plans 내용과 무관하게 "호출 없음"으로 확정한다.
+            if (complete) {
+                if (plansNode.isArray() && !plansNode.isEmpty()) {
+                    logger.warn("Supervisor planning {} output complete=true but plans are present, plans ignored sessionId={}, planCount={}",
+                            phase, sessionId, plansNode.size());
+                } else {
+                    logger.info("Supervisor planning {} output complete=true with no downstream plans sessionId={}", phase, sessionId);
+                }
+                return PlanParseResult.complete();
+            }
+
             if (plansNode.isArray()) {
                 List<RoutingPlan> plans = parsePlanArray(plansNode);
-                if (complete && plans.isEmpty()) {
-                    logger.info("Supervisor planning {} output complete=true with empty plans sessionId={}", phase, sessionId);
-                    return List.of();
+                if (plans.isEmpty()) {
+                    logger.warn("Supervisor planning {} output has empty plans with complete=false sessionId={}", phase, sessionId);
+                    return PlanParseResult.invalid();
                 }
-                if (complete && !plans.isEmpty()) {
-                    logger.warn("Supervisor planning {} output complete=true but plans are present sessionId={}, plans={}",
-                            phase, sessionId, summarizePlans(plans));
-                }
-                return plans;
+                return PlanParseResult.planned(plans);
             }
 
             RoutingPlan single = parseSinglePlan(root, 1);
             if (single != null) {
-                return List.of(single);
-            }
-
-            if (complete) {
-                logger.info("Supervisor planning {} output complete=true without plans sessionId={}", phase, sessionId);
-                return List.of();
+                return PlanParseResult.planned(List.of(single));
             }
 
             logger.warn("Supervisor planning {} output missing plans contract sessionId={}, preview={}",
                     phase, sessionId, preview(candidate));
-            return List.of();
+            return PlanParseResult.invalid();
         } catch (Exception ex) {
             logger.warn("Supervisor planning {} parse failed sessionId={}, error={}, preview={}",
                     phase, sessionId, ex.getMessage(), preview(raw));
-            return List.of();
+            return PlanParseResult.invalid();
         }
     }
 
@@ -457,5 +496,44 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
                 .map(plan -> plan.agentKey() + ":" + plan.method() + ":" + plan.priority())
                 .toList()
                 .toString();
+    }
+
+    /**
+     * planning 파싱 결과 상태.
+     */
+    private enum PlanParseStatus {
+        INVALID,
+        COMPLETE,
+        PLANNED
+    }
+
+    /**
+     * planning 파싱 결과 DTO.
+     *
+     * @param status 파싱 상태
+     * @param plans 유효 라우팅 계획(상태가 COMPLETE/INVALID면 빈 목록)
+     */
+    private record PlanParseResult(
+            PlanParseStatus status,
+            List<RoutingPlan> plans
+    ) {
+        private static PlanParseResult invalid() {
+            return new PlanParseResult(PlanParseStatus.INVALID, List.of());
+        }
+
+        private static PlanParseResult complete() {
+            return new PlanParseResult(PlanParseStatus.COMPLETE, List.of());
+        }
+
+        private static PlanParseResult planned(List<RoutingPlan> plans) {
+            return new PlanParseResult(PlanParseStatus.PLANNED, plans == null ? List.of() : List.copyOf(plans));
+        }
+
+        /**
+         * repair 재시도 없이 현재 결과를 최종 채택 가능한지 여부를 반환한다.
+         */
+        private boolean resolved() {
+            return status != PlanParseStatus.INVALID;
+        }
     }
 }
