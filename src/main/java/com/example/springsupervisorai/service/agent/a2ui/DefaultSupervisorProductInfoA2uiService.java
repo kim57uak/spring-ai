@@ -20,7 +20,7 @@ import java.util.Optional;
 public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiService {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultSupervisorProductInfoA2uiService.class);
-    private static final String CUSTOM_CATALOG_ID = "https://hanatour.com/a2ui/catalogs/package-product-v1";
+    private static final String STANDARD_CATALOG_ID = "https://a2ui.org/specification/v0_8/standard_catalog_definition.json";
     private final ObjectMapper objectMapper;
 
     public DefaultSupervisorProductInfoA2uiService(ObjectMapper objectMapper) {
@@ -46,23 +46,19 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
                         context.getSessionId(), result.taskId());
                 continue;
             }
-            Optional<Map<String, Object>> envelope = buildEnvelope(productNode.get(), context, result);
-            if (envelope.isEmpty()) {
-                logger.info("Supervisor product A2UI envelope build returned empty sessionId={}, taskId={}",
+            Optional<List<Map<String, Object>>> protocolMessages = buildProtocolMessages(productNode.get(), context, result);
+            if (protocolMessages.isEmpty()) {
+                logger.info("Supervisor product A2UI message build returned empty sessionId={}, taskId={}",
                         context.getSessionId(), result.taskId());
                 continue;
             }
             try {
-                String message = String.valueOf(envelope.get().getOrDefault("message", "상품 상세를 준비했습니다."));
-                Object a2uiValue = envelope.get().get("a2ui");
-                String view = "";
-                if (a2uiValue instanceof Map<?, ?> a2uiMap) {
-                    Object rawView = a2uiMap.get("view");
-                    view = rawView == null ? "" : String.valueOf(rawView);
-                }
-                logger.info("Supervisor product A2UI envelope built sessionId={}, taskId={}, view={}",
-                        context.getSessionId(), result.taskId(), view);
-                return Optional.of(new A2uiRenderResult(message, objectMapper.writeValueAsString(envelope.get())));
+                RequestedView requestedView = resolveRequestedView(context.getUserMessage());
+                String name = text(productNode.get().path("baseProductInfo"), "saleProdNm");
+                String message = buildMessage(name.isBlank() ? "상품" : name, requestedView);
+                logger.info("Supervisor product A2UI envelope built sessionId={}, taskId={}, requestedView={}",
+                        context.getSessionId(), result.taskId(), requestedView);
+                return Optional.of(new A2uiRenderResult(message, objectMapper.writeValueAsString(protocolMessages.get())));
             } catch (Exception ex) {
                 logger.warn("Supervisor product A2UI serialization failed sessionId={}, taskId={}, error={}",
                         context.getSessionId(), result.taskId(), ex.getMessage());
@@ -80,24 +76,21 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         return DownstreamResultInterpreter.assess(result).outcome() == DownstreamResultInterpreter.Outcome.SUCCESS;
     }
 
-    private Optional<Map<String, Object>> buildEnvelope(JsonNode productRoot, SupervisorPlanningContext context, DownstreamCallResult result) {
+    private Optional<List<Map<String, Object>>> buildProtocolMessages(JsonNode productRoot, SupervisorPlanningContext context, DownstreamCallResult result) {
         JsonNode base = productRoot.path("baseProductInfo");
         if (!base.isObject()) {
             return Optional.empty();
         }
         RequestedView requestedView = resolveRequestedView(context.getUserMessage());
-        return switch (requestedView) {
-            case PACKAGE_PRICING_DETAIL -> buildPricingEnvelope(productRoot, base, context, result);
-            case PACKAGE_ITINERARY_TIMELINE -> buildTimelineEnvelope(productRoot, base, context, result);
-            case PACKAGE_RESULT_CARD -> buildSummaryEnvelope(productRoot, base, context, result);
-        };
+        return buildStandardMessageSequence(productRoot, base, context, result, requestedView);
     }
 
-    private Optional<Map<String, Object>> buildSummaryEnvelope(
+    private Optional<List<Map<String, Object>>> buildStandardMessageSequence(
             JsonNode productRoot,
             JsonNode base,
             SupervisorPlanningContext context,
-            DownstreamCallResult result
+            DownstreamCallResult result,
+            RequestedView requestedView
     ) {
         String productCode = text(base, "saleProdCd");
         String name = text(base, "saleProdNm");
@@ -108,10 +101,12 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         List<String> missingFields = new ArrayList<>();
         require(productCode, "productCode", missingFields);
         require(name, "name", missingFields);
-        requireDate(departureDate, "departureDate", missingFields);
-        requireDate(arrivalDate, "arrivalDate", missingFields);
-        if (price == null || price < 0) {
-            missingFields.add("price");
+        if (requestedView == RequestedView.PACKAGE_RESULT_CARD) {
+            requireDate(departureDate, "departureDate", missingFields);
+            requireDate(arrivalDate, "arrivalDate", missingFields);
+            if (price == null || price < 0) {
+                missingFields.add("price");
+            }
         }
         if (!missingFields.isEmpty()) {
             logger.info("Supervisor product A2UI missing required fields sessionId={}, taskId={}, fields={}",
@@ -150,36 +145,9 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         putIfNotBlank(data, "meetingAirport", productRoot.path("itineraryInfo").path("meetInfoBcVo").path("aptCd").asText("").trim());
 
         String surfaceId = "package-product-" + result.taskId();
+        List<Map<String, Object>> components = buildStandardComponents(surfaceId, data, requestedView);
         List<Map<String, Object>> messages = new ArrayList<>();
-        messages.add(surfaceUpdate(surfaceId, List.of(
-                component("root", "Column", Map.of(
-                        "children", Map.of("explicitList", List.of("product_card", "reservation_form"))
-                )),
-                component("product_card", "ProductOverviewCard", Map.of(
-                        "data", data
-                )),
-                component("reservation_form", "ReservationForm", Map.of(
-                        "title", literal("예약 생성"),
-                        "productCode", literal(productCode),
-                        "fields", List.of(
-                                formField("bookerName", "예약자", "text", "홍길동", "/reservation/bookerName"),
-                                formField("contact", "연락처", "text", "010-1234-5678", "/reservation/contact"),
-                                formField("headCount", "인원수", "number", "1", "/reservation/headCount"),
-                                formField("birthDate", "생년월일", "text", "19900101", "/reservation/birthDate")
-                        ),
-                        "action", Map.of(
-                                "name", "submit_reservation",
-                                "context", List.of(
-                                        contextEntry("intent", literal("예약생성해줘")),
-                                        contextEntry("productCode", literal(productCode)),
-                                        contextEntry("bookerName", pathValue("/reservation/bookerName")),
-                                        contextEntry("contact", pathValue("/reservation/contact")),
-                                        contextEntry("headCount", pathValue("/reservation/headCount")),
-                                        contextEntry("birthDate", pathValue("/reservation/birthDate"))
-                                )
-                        )
-                ))
-        )));
+        messages.add(surfaceUpdate(surfaceId, components));
         messages.add(dataModelUpdate(surfaceId, "reservation", List.of(
                 stringEntry("bookerName", ""),
                 stringEntry("contact", ""),
@@ -188,127 +156,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         )));
         messages.add(beginRendering(surfaceId, "root"));
 
-        Map<String, Object> a2ui = new LinkedHashMap<>();
-        a2ui.put("protocolVersion", "0.8");
-        a2ui.put("catalogId", CUSTOM_CATALOG_ID);
-        a2ui.put("messages", messages);
-
-        Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("sessionId", context.getSessionId());
-        meta.put("taskId", result.taskId());
-        meta.put("sourceAgent", result.agentKey());
-        meta.put("schemaValidated", true);
-        meta.put("missingFields", List.of());
-
-        Map<String, Object> envelope = new LinkedHashMap<>();
-        envelope.put("version", "1.0");
-        envelope.put("message", name + " 상품 상세를 준비했습니다.");
-        envelope.put("a2ui", a2ui);
-        envelope.put("meta", meta);
-        return Optional.of(envelope);
-    }
-
-    private Optional<Map<String, Object>> buildPricingEnvelope(
-            JsonNode productRoot,
-            JsonNode base,
-            SupervisorPlanningContext context,
-            DownstreamCallResult result
-    ) {
-        String productCode = text(base, "saleProdCd");
-        String name = text(base, "saleProdNm");
-        if (productCode.isBlank() || name.isBlank()) {
-            return Optional.empty();
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("productCode", productCode);
-        data.put("name", name);
-        putIfPositiveLong(data, "adultPrice", firstLong(base, "adtTotlAmt", "adtAmt"));
-        putIfPositiveLong(data, "childPrice", firstLong(base, "chdTotlAmt", "chdAmt"));
-        putIfPositiveLong(data, "infantPrice", firstLong(base, "infTotlAmt", "infAmt"));
-        putIfPositiveLong(data, "depositPrice", firstLong(base, "dnpyTlAmt"));
-        putIfPositiveLong(data, "singleRoomPrice", firstLong(base, "snglAddAmt"));
-        putIfNotBlank(data, "singleRoomNote", text(base, "snglAddAmtDesc"));
-        putIfNotBlank(data, "adultNotice", base.path("prcGdncBcVo").path("amtFixRmkCont").asText("").trim());
-        data.put("includedItems", descriptionItems(base.path("trvlExpnInclList")));
-        data.put("optionalItems", descriptionItems(base.path("trvlChcExpnList")));
-
-        Map<String, Object> a2ui = new LinkedHashMap<>();
-        a2ui.put("schemaVersion", "0.8");
-        a2ui.put("view", "package_pricing_detail");
-        a2ui.put("data", data);
-        a2ui.put("actions", List.of(action("package.view_summary", "상품 요약", Map.of(
-                "productCode", productCode,
-                "view", "package_result_card"
-        ))));
-
-        return Optional.of(envelope(context, result, name + " 요금 상세를 준비했습니다.", a2ui));
-    }
-
-    private Optional<Map<String, Object>> buildTimelineEnvelope(
-            JsonNode productRoot,
-            JsonNode base,
-            SupervisorPlanningContext context,
-            DownstreamCallResult result
-    ) {
-        String productCode = text(base, "saleProdCd");
-        String name = text(base, "saleProdNm");
-        JsonNode scheduleList = productRoot.path("itineraryInfo").path("schdInfoList");
-        if (productCode.isBlank() || name.isBlank() || !scheduleList.isArray() || scheduleList.isEmpty()) {
-            return Optional.empty();
-        }
-
-        List<Map<String, Object>> timeline = new ArrayList<>();
-        for (JsonNode item : scheduleList) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("day", item.path("schdDay").asInt(0));
-            putIfNotBlank(row, "date", item.path("strtDt").asText("").trim());
-            putIfNotBlank(row, "dayOfWeek", item.path("strDow").asText("").trim());
-            putIfNotBlank(row, "hotelName", item.path("htlInfoList").path(0).path("htlKoNm").asText("").trim());
-            putIfNotBlank(row, "hotelLocation", item.path("htlInfoList").path(0).path("locaDesc").asText("").trim());
-            row.put("inFlightNight", item.path("infltNgtYn").asText("N").equalsIgnoreCase("Y"));
-            timeline.add(row);
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("productCode", productCode);
-        data.put("name", name);
-        data.put("timeline", timeline);
-        putIfNotBlank(data, "meetingDate", productRoot.path("itineraryInfo").path("meetInfoBcVo").path("sndgMeetDt").asText("").trim());
-        putIfNotBlank(data, "meetingTime", productRoot.path("itineraryInfo").path("meetInfoBcVo").path("sndgMeetTm").asText("").trim());
-        putIfNotBlank(data, "meetingAirport", productRoot.path("itineraryInfo").path("meetInfoBcVo").path("aptCd").asText("").trim());
-
-        Map<String, Object> a2ui = new LinkedHashMap<>();
-        a2ui.put("schemaVersion", "0.8");
-        a2ui.put("view", "package_itinerary_timeline");
-        a2ui.put("data", data);
-        a2ui.put("actions", List.of(action("package.view_summary", "상품 요약", Map.of(
-                "productCode", productCode,
-                "view", "package_result_card"
-        ))));
-
-        return Optional.of(envelope(context, result, name + " 일정 정보를 준비했습니다.", a2ui));
-    }
-
-    private Map<String, Object> envelope(
-            SupervisorPlanningContext context,
-            DownstreamCallResult result,
-            String message,
-            Map<String, Object> a2ui
-    ) {
-        Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("sessionId", context.getSessionId());
-        meta.put("taskId", result.taskId());
-        meta.put("sourceAgent", result.agentKey());
-        meta.put("schemaValidated", true);
-        meta.put("missingFields", List.of());
-
-        Map<String, Object> envelope = new LinkedHashMap<>();
-        envelope.put("version", "1.0");
-        envelope.put("message", message);
-        envelope.put("a2ui", a2ui);
-        envelope.put("meta", meta);
-        return envelope;
+        return Optional.of(List.copyOf(messages));
     }
 
     private Optional<JsonNode> extractProductNode(String payload) {
@@ -372,14 +220,6 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         return Optional.empty();
     }
 
-    private Map<String, Object> action(String id, String label, Map<String, Object> payloadTemplate) {
-        Map<String, Object> action = new LinkedHashMap<>();
-        action.put("id", id);
-        action.put("label", label);
-        action.put("payloadTemplate", payloadTemplate);
-        return action;
-    }
-
     private Map<String, Object> surfaceUpdate(String surfaceId, List<Map<String, Object>> components) {
         return Map.of("surfaceUpdate", Map.of(
                 "surfaceId", surfaceId,
@@ -395,10 +235,216 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         return Map.of("dataModelUpdate", payload);
     }
 
+    private List<Map<String, Object>> buildStandardComponents(
+            String surfaceId,
+            Map<String, Object> data,
+            RequestedView requestedView
+    ) {
+        List<Map<String, Object>> components = new ArrayList<>();
+        List<String> rootChildren = new ArrayList<>();
+
+        rootChildren.add("summary_card");
+        sectionOrder(requestedView).forEach(section -> rootChildren.add(section + "_card"));
+        rootChildren.add("reservation_card");
+
+        components.add(component("root", "Column", Map.of(
+                "children", explicit(rootChildren),
+                "alignment", "stretch"
+        )));
+
+        addSummaryCard(components, data);
+        addPricingCard(components, data);
+        addTimelineCard(components, data);
+        addNoticeCard(components, data);
+        addReservationCard(components, data);
+
+        return components;
+    }
+
+    private void addSummaryCard(List<Map<String, Object>> components, Map<String, Object> data) {
+        List<String> summaryChildren = new ArrayList<>();
+        if (hasText(data.get("thumbnailUrl"))) {
+            summaryChildren.add("summary_image");
+            components.add(component("summary_image", "Image", Map.of(
+                    "url", literal(String.valueOf(data.get("thumbnailUrl"))),
+                    "altText", literal(String.valueOf(data.getOrDefault("name", "상품 대표 이미지"))),
+                    "usageHint", "largeFeature",
+                    "fit", "cover"
+            )));
+        }
+        summaryChildren.add("summary_code");
+        summaryChildren.add("summary_title");
+        if (hasText(data.get("theme")) || hasText(data.get("brand")) || hasText(data.get("airline"))) {
+            summaryChildren.add("summary_tags");
+        }
+        summaryChildren.add("summary_trip");
+        summaryChildren.add("summary_route");
+        summaryChildren.add("summary_price");
+
+        components.add(textComponent("summary_code", String.valueOf(data.getOrDefault("productCode", "")), "caption"));
+        components.add(textComponent("summary_title", String.valueOf(data.getOrDefault("name", "상품 상세")), "h3"));
+        if (summaryChildren.contains("summary_tags")) {
+            components.add(textComponent(
+                    "summary_tags",
+                    joinNonBlank(" · ", data.get("theme"), data.get("brand"), data.get("airline")),
+                    "body"
+            ));
+        }
+        components.add(textComponent(
+                "summary_trip",
+                joinNonBlank(" | ",
+                        displayValue(data.get("departureDate"), "-"),
+                        displayValue(data.get("arrivalDate"), "-"),
+                        travelPeriod(data.get("nights"), data.get("days"))
+                ),
+                "body"
+        ));
+        components.add(textComponent(
+                "summary_route",
+                joinNonBlank(" → ", data.get("departureCity"), data.get("arrivalCity")),
+                "body"
+        ));
+        components.add(textComponent(
+                "summary_price",
+                "성인 기준가: " + formatMoney(data.get("price"), data.get("currency")),
+                "h4"
+        ));
+
+        components.add(component("summary_body", "Column", Map.of(
+                "children", explicit(summaryChildren),
+                "alignment", "stretch"
+        )));
+        components.add(component("summary_card", "Card", Map.of("child", "summary_body")));
+    }
+
+    private void addPricingCard(List<Map<String, Object>> components, Map<String, Object> data) {
+        List<String> pricingChildren = new ArrayList<>(List.of(
+                "pricing_title",
+                "pricing_adult",
+                "pricing_child",
+                "pricing_infant",
+                "pricing_deposit"
+        ));
+        components.add(textComponent("pricing_title", "가격 정보", "h4"));
+        components.add(textComponent("pricing_adult", "성인: " + formatMoney(data.get("adultPrice"), "KRW"), "body"));
+        components.add(textComponent("pricing_child", "아동: " + formatMoney(data.get("childPrice"), "KRW"), "body"));
+        components.add(textComponent("pricing_infant", "유아: " + formatMoney(data.get("infantPrice"), "KRW"), "body"));
+        components.add(textComponent("pricing_deposit", "계약금: " + formatMoney(data.get("depositPrice"), "KRW"), "body"));
+        if (hasText(data.get("singleRoomNote"))) {
+            pricingChildren.add("pricing_single_room");
+            components.add(textComponent("pricing_single_room", "1인 객실: " + data.get("singleRoomNote"), "body"));
+        }
+        pricingChildren.add("pricing_included_title");
+        pricingChildren.add("pricing_included_list");
+        pricingChildren.add("pricing_optional_title");
+        pricingChildren.add("pricing_optional_list");
+        components.add(textComponent("pricing_included_title", "포함 사항", "h5"));
+        addTextList(components, "pricing_included_list", mapItems(data.get("includedItems"), item ->
+                joinNonBlank(" ", item.get("category"), item.get("description"))));
+        components.add(textComponent("pricing_optional_title", "선택 경비", "h5"));
+        addTextList(components, "pricing_optional_list", mapItems(data.get("optionalItems"), item ->
+                joinNonBlank(" ", item.get("category"), item.get("description"))));
+
+        components.add(component("pricing_body", "Column", Map.of(
+                "children", explicit(pricingChildren),
+                "alignment", "stretch"
+        )));
+        components.add(component("pricing_card", "Card", Map.of("child", "pricing_body")));
+    }
+
+    private void addTimelineCard(List<Map<String, Object>> components, Map<String, Object> data) {
+        List<String> timelineChildren = new ArrayList<>(List.of("timeline_title"));
+        components.add(textComponent("timeline_title", "일정 정보", "h4"));
+        if (hasText(data.get("meetingDate")) || hasText(data.get("meetingTime")) || hasText(data.get("meetingAirport"))) {
+            timelineChildren.add("timeline_meeting");
+            components.add(textComponent(
+                    "timeline_meeting",
+                    "미팅: " + joinNonBlank(" / ", data.get("meetingDate"), data.get("meetingTime"), data.get("meetingAirport")),
+                    "body"
+            ));
+        }
+        timelineChildren.add("timeline_list");
+        addTextList(components, "timeline_list", mapItems(data.get("timeline"), item ->
+                joinNonBlank(" ",
+                        item.get("day") == null ? "" : item.get("day") + "일차",
+                        item.get("date"),
+                        item.get("dayOfWeek"),
+                        hotelLabel(item)
+                )));
+
+        components.add(component("timeline_body", "Column", Map.of(
+                "children", explicit(timelineChildren),
+                "alignment", "stretch"
+        )));
+        components.add(component("timeline_card", "Card", Map.of("child", "timeline_body")));
+    }
+
+    private void addNoticeCard(List<Map<String, Object>> components, Map<String, Object> data) {
+        components.add(textComponent("notice_title", "규정 및 안내", "h4"));
+        addTextList(components, "notice_list", mapItems(data.get("noticeItems"), item ->
+                joinNonBlank(" ", item.get("title"), item.get("content"))));
+        components.add(component("notice_body", "Column", Map.of(
+                "children", explicit(List.of("notice_title", "notice_list")),
+                "alignment", "stretch"
+        )));
+        components.add(component("notice_card", "Card", Map.of("child", "notice_body")));
+    }
+
+    private void addReservationCard(List<Map<String, Object>> components, Map<String, Object> data) {
+        components.add(textComponent("reservation_title", "예약 생성", "h4"));
+        components.add(component("reservation_booker", "TextField", Map.of(
+                "label", literal("예약자"),
+                "text", Map.of("path", "/reservation/bookerName", "literalString", ""),
+                "textFieldType", "shortText"
+        )));
+        components.add(component("reservation_contact", "TextField", Map.of(
+                "label", literal("연락처"),
+                "text", Map.of("path", "/reservation/contact", "literalString", ""),
+                "textFieldType", "shortText"
+        )));
+        components.add(component("reservation_head_count", "TextField", Map.of(
+                "label", literal("인원수"),
+                "text", Map.of("path", "/reservation/headCount", "literalString", "1"),
+                "textFieldType", "number"
+        )));
+        components.add(component("reservation_birth_date", "TextField", Map.of(
+                "label", literal("생년월일"),
+                "text", Map.of("path", "/reservation/birthDate", "literalString", ""),
+                "textFieldType", "shortText"
+        )));
+        components.add(textComponent("reservation_submit_text", "예약 생성", "body"));
+        components.add(component("reservation_submit", "Button", Map.of(
+                "child", "reservation_submit_text",
+                "primary", true,
+                "action", Map.of(
+                        "name", "submit_reservation",
+                        "context", List.of(
+                                contextEntry("productCode", literal(String.valueOf(data.getOrDefault("productCode", "")))),
+                                contextEntry("bookerName", pathValue("/reservation/bookerName")),
+                                contextEntry("contact", pathValue("/reservation/contact")),
+                                contextEntry("headCount", pathValue("/reservation/headCount")),
+                                contextEntry("birthDate", pathValue("/reservation/birthDate"))
+                        )
+                )
+        )));
+        components.add(component("reservation_body", "Column", Map.of(
+                "children", explicit(List.of(
+                        "reservation_title",
+                        "reservation_booker",
+                        "reservation_contact",
+                        "reservation_head_count",
+                        "reservation_birth_date",
+                        "reservation_submit"
+                )),
+                "alignment", "stretch"
+        )));
+        components.add(component("reservation_card", "Card", Map.of("child", "reservation_body")));
+    }
+
     private Map<String, Object> beginRendering(String surfaceId, String root) {
         return Map.of("beginRendering", Map.of(
                 "surfaceId", surfaceId,
-                "catalogId", CUSTOM_CATALOG_ID,
+                "catalogId", STANDARD_CATALOG_ID,
                 "root", root
         ));
     }
@@ -425,21 +471,40 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         );
     }
 
-    private Map<String, Object> formField(String name, String label, String inputType, String placeholder, String path) {
-        Map<String, Object> field = new LinkedHashMap<>();
-        field.put("name", name);
-        field.put("label", literal(label));
-        field.put("inputType", inputType);
-        field.put("placeholder", literal(placeholder));
-        field.put("value", Map.of("path", path, "literalString", ""));
-        return field;
-    }
-
     private Map<String, Object> stringEntry(String key, String value) {
         return Map.of(
                 "key", key,
                 "valueString", value == null ? "" : value
         );
+    }
+
+    private Map<String, Object> textComponent(String id, String text, String usageHint) {
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("text", literal(text));
+        if (usageHint != null && !usageHint.isBlank()) {
+            props.put("usageHint", usageHint);
+        }
+        return component(id, "Text", props);
+    }
+
+    private Map<String, Object> explicit(List<String> children) {
+        return Map.of("explicitList", children);
+    }
+
+    private List<String> sectionOrder(RequestedView requestedView) {
+        return switch (requestedView) {
+            case PACKAGE_PRICING_DETAIL -> List.of("pricing", "timeline", "notice");
+            case PACKAGE_ITINERARY_TIMELINE -> List.of("timeline", "pricing", "notice");
+            case PACKAGE_RESULT_CARD -> List.of("pricing", "timeline", "notice");
+        };
+    }
+
+    private String buildMessage(String name, RequestedView requestedView) {
+        return switch (requestedView) {
+            case PACKAGE_PRICING_DETAIL -> name + " 요금 상세를 준비했습니다.";
+            case PACKAGE_ITINERARY_TIMELINE -> name + " 일정 정보를 준비했습니다.";
+            case PACKAGE_RESULT_CARD -> name + " 상품 상세를 준비했습니다.";
+        };
     }
 
     private RequestedView resolveRequestedView(String userMessage) {
@@ -611,6 +676,84 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         if (value != null && value >= 0) {
             data.put(key, value);
         }
+    }
+
+    private boolean hasText(Object value) {
+        return value != null && !String.valueOf(value).isBlank();
+    }
+
+    private String displayValue(Object value, String fallback) {
+        return hasText(value) ? String.valueOf(value) : fallback;
+    }
+
+    private String travelPeriod(Object nights, Object days) {
+        if (nights == null && days == null) {
+            return "";
+        }
+        return String.valueOf(nights == null ? 0 : nights) + "박 " + String.valueOf(days == null ? 0 : days) + "일";
+    }
+
+    private String joinNonBlank(String separator, Object... values) {
+        List<String> parts = new ArrayList<>();
+        for (Object value : values) {
+            if (value == null) {
+                continue;
+            }
+            String text = String.valueOf(value).trim();
+            if (!text.isBlank()) {
+                parts.add(text);
+            }
+        }
+        return String.join(separator, parts);
+    }
+
+    private String formatMoney(Object amount, Object currency) {
+        if (!(amount instanceof Number number)) {
+            return "-";
+        }
+        String rendered = String.format("%,d", number.longValue());
+        if ("KRW".equals(String.valueOf(currency))) {
+            return rendered + "원";
+        }
+        return rendered + (currency == null ? "" : " " + currency);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> mapItems(Object raw, java.util.function.Function<Map<String, Object>, String> mapper) {
+        if (!(raw instanceof List<?> items) || items.isEmpty()) {
+            return List.of("정보가 없습니다.");
+        }
+        List<String> values = new ArrayList<>();
+        for (Object item : items) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            String rendered = mapper.apply((Map<String, Object>) map);
+            if (!rendered.isBlank()) {
+                values.add(rendered);
+            }
+        }
+        return values.isEmpty() ? List.of("정보가 없습니다.") : values;
+    }
+
+    private void addTextList(List<Map<String, Object>> components, String listId, List<String> items) {
+        List<String> childIds = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            String childId = listId + "_item_" + i;
+            childIds.add(childId);
+            components.add(textComponent(childId, "• " + items.get(i), "body"));
+        }
+        components.add(component(listId, "List", Map.of(
+                "children", explicit(childIds),
+                "direction", "vertical",
+                "alignment", "start"
+        )));
+    }
+
+    private String hotelLabel(Map<String, Object> item) {
+        String hotelName = hasText(item.get("hotelName")) ? String.valueOf(item.get("hotelName")) : "";
+        String hotelLocation = hasText(item.get("hotelLocation")) ? "(" + item.get("hotelLocation") + ")" : "";
+        return joinNonBlank(" ", hotelName, hotelLocation);
     }
 
     private void putIfPositive(Map<String, Object> data, String key, int value) {

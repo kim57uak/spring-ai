@@ -168,8 +168,10 @@ class LlmSupervisorResponseComposeServiceTest {
         assertThat(chunks.get(1)).startsWith("[[A2UI]]");
         assertThat(chunks.get(1)).contains("\"surfaceUpdate\"");
         assertThat(chunks.get(1)).contains("\"beginRendering\"");
-        assertThat(chunks.get(1)).contains("\"ProductOverviewCard\"");
-        assertThat(chunks.get(1)).contains("\"ReservationForm\"");
+        assertThat(chunks.get(1)).contains("\"catalogId\":\"https://a2ui.org/specification/v0_8/standard_catalog_definition.json\"");
+        assertThat(chunks.get(1)).contains("\"Card\"");
+        assertThat(chunks.get(1)).contains("\"TextField\"");
+        assertThat(chunks.get(1)).contains("\"Button\"");
         verifyNoInteractions(llmRuntime);
     }
 
@@ -203,7 +205,12 @@ class LlmSupervisorResponseComposeServiceTest {
         List<String> chunks = service.streamCompose(context).collectList().block();
 
         assertThat(chunks).isNotNull();
-        assertThat(chunks.get(1)).contains("\"view\":\"package_pricing_detail\"");
+        assertThat(chunks.get(0)).contains("요금 상세");
+        assertThat(chunks.get(1)).contains("\"surfaceUpdate\"");
+        assertThat(chunks.get(1)).contains("\"beginRendering\"");
+        assertThat(chunks.get(1)).doesNotContain("\"requestedView\"");
+        assertThat(chunks.get(1)).contains("\"pricing_card\"");
+        assertThat(chunks.get(1)).contains("\"TextField\"");
         verifyNoInteractions(llmRuntime);
     }
 
@@ -237,7 +244,12 @@ class LlmSupervisorResponseComposeServiceTest {
         List<String> chunks = service.streamCompose(context).collectList().block();
 
         assertThat(chunks).isNotNull();
-        assertThat(chunks.get(1)).contains("\"view\":\"package_itinerary_timeline\"");
+        assertThat(chunks.get(0)).contains("일정 정보");
+        assertThat(chunks.get(1)).contains("\"surfaceUpdate\"");
+        assertThat(chunks.get(1)).contains("\"beginRendering\"");
+        assertThat(chunks.get(1)).doesNotContain("\"requestedView\"");
+        assertThat(chunks.get(1)).contains("\"timeline_card\"");
+        assertThat(chunks.get(1)).contains("\"Button\"");
         verifyNoInteractions(llmRuntime);
     }
 

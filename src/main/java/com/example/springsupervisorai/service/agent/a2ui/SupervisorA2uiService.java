@@ -8,6 +8,6 @@ public interface SupervisorA2uiService {
 
     Optional<A2uiRenderResult> build(SupervisorPlanningContext context);
 
-    record A2uiRenderResult(String message, String envelopeJson) {
+    record A2uiRenderResult(String message, String protocolPayloadJson) {
     }
 }
