@@ -4,8 +4,15 @@ import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.config.SupervisorPromptProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
-import com.example.springsupervisorai.service.agent.a2ui.DefaultSupervisorProductInfoA2uiService;
-import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiService;
+import com.example.springsupervisorai.service.agent.a2ui.common.A2uiComposePromptProviderRegistry;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
+import com.example.springsupervisorai.service.agent.a2ui.product.BookingProductA2uiTemplate;
+import com.example.springsupervisorai.service.agent.a2ui.product.DefaultSupervisorProductInfoA2uiService;
+import com.example.springsupervisorai.service.agent.a2ui.product.PricingProductA2uiTemplate;
+import com.example.springsupervisorai.service.agent.a2ui.product.ProductA2uiComposePromptProvider;
+import com.example.springsupervisorai.service.agent.a2ui.product.ProductA2uiTemplateRegistry;
+import com.example.springsupervisorai.service.agent.a2ui.product.SummaryProductA2uiTemplate;
+import com.example.springsupervisorai.service.agent.a2ui.product.TimelineProductA2uiTemplate;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
 import com.example.springsupervisorai.service.prompt.SupervisorPromptRenderService;
@@ -35,7 +42,9 @@ class LlmSupervisorResponseComposeServiceTest {
                 composePromptProperties(),
                 new SupervisorPromptRenderService(),
                 new PromptInjectionGuard(),
-                emptyA2uiService()
+                emptyA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
         );
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "연차 신청", "openai");
         context.addResult(new DownstreamCallResult(
@@ -66,7 +75,9 @@ class LlmSupervisorResponseComposeServiceTest {
                 composePromptProperties(),
                 new SupervisorPromptRenderService(),
                 new PromptInjectionGuard(),
-                emptyA2uiService()
+                emptyA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
         );
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "상품 추천", "openai");
         context.addResult(new DownstreamCallResult(
@@ -101,7 +112,9 @@ class LlmSupervisorResponseComposeServiceTest {
                 composePromptProperties(),
                 new SupervisorPromptRenderService(),
                 new PromptInjectionGuard(),
-                emptyA2uiService()
+                emptyA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
         );
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "복합 요청", "openai");
         context.addResult(new DownstreamCallResult(
@@ -140,13 +153,17 @@ class LlmSupervisorResponseComposeServiceTest {
         A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
         a2ui.setEnabled(true);
         properties.setA2ui(a2ui);
+        when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
+                .thenReturn("{\"message\":\"테스트 상품 상품 상세를 준비했습니다.\",\"selectedView\":\"summary\"}");
         LlmSupervisorResponseComposeService service = new LlmSupervisorResponseComposeService(
                 llmRuntime,
                 properties,
                 composePromptProperties(),
                 new SupervisorPromptRenderService(),
                 new PromptInjectionGuard(),
-                new DefaultSupervisorProductInfoA2uiService(new ObjectMapper())
+                productA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
         );
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "상품 상세", "openai");
         context.addResult(new DownstreamCallResult(
@@ -172,7 +189,10 @@ class LlmSupervisorResponseComposeServiceTest {
         assertThat(chunks.get(1)).contains("\"Card\"");
         assertThat(chunks.get(1)).contains("\"TextField\"");
         assertThat(chunks.get(1)).contains("\"Button\"");
-        verifyNoInteractions(llmRuntime);
+        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
+        verify(llmRuntime).complete(promptCaptor.capture(), eq("openai"), eq("s1"));
+        assertThat(promptCaptor.getValue()).contains("catalog=templates:");
+        assertThat(promptCaptor.getValue()).contains("key: pricing");
     }
 
     @Test
@@ -182,13 +202,17 @@ class LlmSupervisorResponseComposeServiceTest {
         A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
         a2ui.setEnabled(true);
         properties.setA2ui(a2ui);
+        when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
+                .thenReturn("{\"message\":\"테스트 상품 요금 상세를 준비했습니다.\",\"selectedView\":\"pricing\"}");
         LlmSupervisorResponseComposeService service = new LlmSupervisorResponseComposeService(
                 llmRuntime,
                 properties,
                 composePromptProperties(),
                 new SupervisorPromptRenderService(),
                 new PromptInjectionGuard(),
-                new DefaultSupervisorProductInfoA2uiService(new ObjectMapper())
+                productA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
         );
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "AAP331260523TG1 상품 요금 상세 보여줘", "openai");
         context.addResult(new DownstreamCallResult(
@@ -211,7 +235,7 @@ class LlmSupervisorResponseComposeServiceTest {
         assertThat(chunks.get(1)).doesNotContain("\"requestedView\"");
         assertThat(chunks.get(1)).contains("\"pricing_card\"");
         assertThat(chunks.get(1)).contains("\"TextField\"");
-        verifyNoInteractions(llmRuntime);
+        verify(llmRuntime).complete(anyString(), eq("openai"), eq("s1"));
     }
 
     @Test
@@ -221,13 +245,17 @@ class LlmSupervisorResponseComposeServiceTest {
         A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
         a2ui.setEnabled(true);
         properties.setA2ui(a2ui);
+        when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
+                .thenReturn("{\"message\":\"테스트 상품 일정 정보를 준비했습니다.\",\"selectedView\":\"timeline\"}");
         LlmSupervisorResponseComposeService service = new LlmSupervisorResponseComposeService(
                 llmRuntime,
                 properties,
                 composePromptProperties(),
                 new SupervisorPromptRenderService(),
                 new PromptInjectionGuard(),
-                new DefaultSupervisorProductInfoA2uiService(new ObjectMapper())
+                productA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
         );
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "AAP331260523TG1 상품 일정 보기", "openai");
         context.addResult(new DownstreamCallResult(
@@ -250,7 +278,47 @@ class LlmSupervisorResponseComposeServiceTest {
         assertThat(chunks.get(1)).doesNotContain("\"requestedView\"");
         assertThat(chunks.get(1)).contains("\"timeline_card\"");
         assertThat(chunks.get(1)).contains("\"Button\"");
-        verifyNoInteractions(llmRuntime);
+        verify(llmRuntime).complete(anyString(), eq("openai"), eq("s1"));
+    }
+
+    @Test
+    void streamComposeReturnsBookingA2uiForBookingRequest() {
+        SupervisorLlmRuntime llmRuntime = mock(SupervisorLlmRuntime.class);
+        A2aSupervisorRoutingProperties properties = new A2aSupervisorRoutingProperties();
+        A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
+        a2ui.setEnabled(true);
+        properties.setA2ui(a2ui);
+        when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
+                .thenReturn("{\"message\":\"테스트 상품 예약 정보를 준비했습니다.\",\"selectedView\":\"booking\"}");
+        LlmSupervisorResponseComposeService service = new LlmSupervisorResponseComposeService(
+                llmRuntime,
+                properties,
+                composePromptProperties(),
+                new SupervisorPromptRenderService(),
+                new PromptInjectionGuard(),
+                productA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
+        );
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "이 상품으로 예약 진행해줘", "openai");
+        context.addResult(new DownstreamCallResult(
+                "product",
+                "t2",
+                "COMPLETED",
+                """
+                {"structuredData":{"productDetail":{"baseProductInfo":{"saleProdCd":"AAP331260523TG1","saleProdNm":"테스트 상품","depDay":"20260523","arrDay":"20260602","adtTotlAmt":355000}}}}
+                """.trim(),
+                "",
+                ""
+        ));
+
+        List<String> chunks = service.streamCompose(context).collectList().block();
+
+        assertThat(chunks).isNotNull();
+        assertThat(chunks.get(0)).contains("예약 정보");
+        assertThat(chunks.get(1)).contains("\"reservation_card\"");
+        assertThat(chunks.get(1)).contains("\"reservation_submit\"");
+        verify(llmRuntime).complete(anyString(), eq("openai"), eq("s1"));
     }
 
     @Test
@@ -264,7 +332,9 @@ class LlmSupervisorResponseComposeServiceTest {
                 composePromptProperties(),
                 new SupervisorPromptRenderService(),
                 new PromptInjectionGuard(),
-                new DefaultSupervisorProductInfoA2uiService(new ObjectMapper())
+                productA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
         );
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "상품 상세", "openai");
         context.addResult(new DownstreamCallResult(
@@ -284,8 +354,58 @@ class LlmSupervisorResponseComposeServiceTest {
         verify(llmRuntime).stream(anyString(), eq("openai"), eq("s1"));
     }
 
+    @Test
+    void streamComposeSkipsA2uiComposePromptWhenNoDomainPromptProviderMatches() {
+        SupervisorLlmRuntime llmRuntime = mock(SupervisorLlmRuntime.class);
+        A2aSupervisorRoutingProperties properties = new A2aSupervisorRoutingProperties();
+        A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
+        a2ui.setEnabled(true);
+        properties.setA2ui(a2ui);
+        when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("일반 compose"));
+
+        LlmSupervisorResponseComposeService service = new LlmSupervisorResponseComposeService(
+                llmRuntime,
+                properties,
+                composePromptProperties(),
+                new SupervisorPromptRenderService(),
+                new PromptInjectionGuard(),
+                productA2uiService(),
+                a2uiComposePromptProviderRegistry(),
+                new ObjectMapper()
+        );
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "예약 현황 알려줘", "openai");
+        context.addResult(new DownstreamCallResult(
+                "reservation",
+                "t2",
+                "COMPLETED",
+                "{\"status\":\"COMPLETED\",\"reservationId\":\"R-1\"}",
+                "",
+                ""
+        ));
+
+        List<String> chunks = service.streamCompose(context).collectList().block();
+
+        assertThat(chunks).containsExactly("일반 compose");
+        verify(llmRuntime).stream(anyString(), eq("openai"), eq("s1"));
+    }
+
     private static SupervisorA2uiService emptyA2uiService() {
-        return context -> java.util.Optional.empty();
+        return (context, selectedView, message) -> java.util.Optional.empty();
+    }
+
+    private static SupervisorA2uiService productA2uiService() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ProductA2uiTemplateRegistry registry = new ProductA2uiTemplateRegistry(List.of(
+                new SummaryProductA2uiTemplate(),
+                new PricingProductA2uiTemplate(),
+                new TimelineProductA2uiTemplate(),
+                new BookingProductA2uiTemplate()
+        ));
+        return new DefaultSupervisorProductInfoA2uiService(objectMapper, registry);
+    }
+
+    private static A2uiComposePromptProviderRegistry a2uiComposePromptProviderRegistry() {
+        return new A2uiComposePromptProviderRegistry(List.of(new ProductA2uiComposePromptProvider()));
     }
 
     private static SupervisorPromptProperties composePromptProperties() {
@@ -297,6 +417,21 @@ class LlmSupervisorResponseComposeServiceTest {
                 history={history}
                 results={downstreamResults}
                 summary={downstreamOutcomeSummary}
+                """);
+        promptProperties.setComposeA2uiSystem("compose-a2ui-system");
+        promptProperties.setComposeA2uiTemplate("""
+                {composeA2uiSystem}
+                keys={a2uiTemplateKeys}
+                catalog={a2uiTemplateCatalog}
+                user={userMessage}
+                history={history}
+                results={downstreamResults}
+                summary={downstreamOutcomeSummary}
+                """);
+        promptProperties.setComposeA2uiRepairTemplate("""
+                keys={a2uiTemplateKeys}
+                catalog={a2uiTemplateCatalog}
+                invalid={invalidOutput}
                 """);
         return promptProperties;
     }

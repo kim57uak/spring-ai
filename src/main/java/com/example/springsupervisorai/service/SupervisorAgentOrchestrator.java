@@ -10,7 +10,7 @@ import com.example.springsupervisorai.model.SupervisorGraphState;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.model.SupervisorRuntimeState;
 import com.example.springsupervisorai.model.SwarmState;
-import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiSupport;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 import com.example.springsupervisorai.service.agent.compose.SupervisorResponseComposeService;
 import com.example.springsupervisorai.service.agent.graph.SupervisorStateGraphFactory;
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;

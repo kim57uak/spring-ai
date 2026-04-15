@@ -12,7 +12,7 @@ import com.example.springsupervisorai.a2a.dto.TasksListResult;
 import com.example.springsupervisorai.config.SupervisorStreamProperties;
 import com.example.springsupervisorai.model.SupervisorA2aMethod;
 import com.example.springsupervisorai.service.SupervisorAgentService;
-import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiSupport;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;

@@ -1,4 +1,4 @@
-package com.example.springsupervisorai.service.agent.a2ui;
+package com.example.springsupervisorai.service.agent.a2ui.common;
 
 public final class SupervisorA2uiSupport {
 
