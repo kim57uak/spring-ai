@@ -7,8 +7,8 @@ public record TaskView(
         String createdAt,
         String updatedAt,
         String response,
+        Object structuredData,
         String errorCode,
         String errorMessage
 ) {
 }
-

@@ -14,6 +14,7 @@ import com.example.springai.a2a.mapper.A2AResponseMapper;
 import com.example.springai.a2a.task.A2aTaskSnapshot;
 import com.example.springai.a2a.idempotency.A2aRequestIdempotencyService;
 import com.example.springai.model.agent.AgentScopeName;
+import com.example.springai.model.agent.A2aStructuredResponse;
 import com.example.springai.service.AgentScopeActivationService;
 import com.example.springai.service.AgentScopeResolver;
 import com.example.springai.service.ScopedAgentChatService;
@@ -21,6 +22,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
@@ -33,6 +36,7 @@ import java.util.concurrent.TimeoutException;
  */
 public abstract class BaseA2AControllerSupport {
 
+    private static final Logger logger = LoggerFactory.getLogger(BaseA2AControllerSupport.class);
     private static final String A2A_SESSION_HEADER = "X-A2A-Session-Id";
     private static final Duration STREAM_COMPLETION_TIMEOUT = Duration.ofSeconds(110);
     private static final String DONE_TOKEN = "[DONE]";
@@ -244,15 +248,15 @@ public abstract class BaseA2AControllerSupport {
         A2aExecutionContext context = new A2aExecutionContext(task.taskId(), scopeName, request.method());
 
         try {
-            String answer = chatService.chat(
+            A2aStructuredResponse answer = chatService.chatForA2a(
                     effectiveSessionId,
                     params.messageText(),
                     params.model(),
                     scopeResolver.resolveScoped(scopeName),
                     context
             );
-            if (answer != null && answer.startsWith("[ERROR]")) {
-                lifecycleService.markFailed(task.taskId(), scopeName, "DOWNSTREAM_TIMEOUT", answer);
+            if (answer.response() != null && answer.response().startsWith("[ERROR]")) {
+                lifecycleService.markFailed(task.taskId(), scopeName, "DOWNSTREAM_TIMEOUT", answer.response());
                 A2aTaskSnapshot failed = lifecycleService.get(task.taskId(), scopeName).orElse(task);
                 return JsonRpcResponse.success(request.id(), responseMapper.toTaskView(failed));
             }
@@ -260,10 +264,18 @@ public abstract class BaseA2AControllerSupport {
             Optional<A2aTaskSnapshot> latest = lifecycleService.get(task.taskId(), scopeName);
             A2aTaskSnapshot effective = latest.orElse(task);
             if (effective.responsePayload() == null || effective.responsePayload().isBlank()) {
-                lifecycleService.markCompleted(task.taskId(), scopeName, answer == null ? "" : answer);
+                lifecycleService.markCompleted(task.taskId(), scopeName, answer.response());
                 effective = lifecycleService.get(task.taskId(), scopeName).orElse(effective);
             }
-            return JsonRpcResponse.success(request.id(), responseMapper.toTaskView(effective));
+            logger.info("A2A send completed taskId={}, scopeName={}, structuredDataIncluded={}, structuredDataType={}",
+                    task.taskId(),
+                    scopeName,
+                    !answer.structuredData().isEmpty(),
+                    answer.structuredData().getOrDefault("type", ""));
+            return JsonRpcResponse.success(request.id(), responseMapper.toTaskView(
+                    effective,
+                    answer.structuredData().isEmpty() ? null : answer.structuredData()
+            ));
         } finally {
             if (autoCloseSession) {
                 chatService.clearSession(effectiveSessionId);

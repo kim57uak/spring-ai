@@ -1,6 +1,7 @@
 package com.example.springai.service;
 
 import com.example.springai.a2a.context.A2aExecutionContext;
+import com.example.springai.model.agent.A2aStructuredResponse;
 import com.example.springai.model.agent.AgentChatRequest;
 import com.example.springai.model.agent.AgentScope;
 import com.example.springai.service.agent.orchestrator.AgentOrchestrator;
@@ -51,6 +52,16 @@ public class ScopedAgentChatService {
 
     public String chat(String sessionId, String message, String modelType, AgentScope scope) {
         return chat(sessionId, message, modelType, scope, null);
+    }
+
+    public A2aStructuredResponse chatForA2a(
+            String sessionId,
+            String message,
+            String modelType,
+            AgentScope scope,
+            A2aExecutionContext a2aContext
+    ) {
+        return agentOrchestrator.executeSyncForA2a(new AgentChatRequest(sessionId, message, modelType, scope, a2aContext));
     }
 
     /**

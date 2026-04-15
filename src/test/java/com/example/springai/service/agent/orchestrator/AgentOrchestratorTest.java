@@ -8,6 +8,7 @@ import com.example.springai.model.agent.AgentChatRequest;
 import com.example.springai.model.agent.AgentScope;
 import com.example.springai.model.agent.AgentScopeName;
 import com.example.springai.model.agent.ToolPlan;
+import com.example.springai.service.agent.a2ui.AgentStructuredDataExtractor;
 import com.example.springai.service.agent.compose.ResponseComposeService;
 import com.example.springai.service.agent.execute.ToolExecutionService;
 import com.example.springai.service.agent.graph.AgentStateGraphFactory;
@@ -45,7 +46,8 @@ class AgentOrchestratorTest {
                 graphFactoryNoTool(),
                 composeServiceWith("trace-summary", "답변1", "답변2"),
                 new HumanMessageService(),
-                lifecycleService
+                lifecycleService,
+                mock(AgentStructuredDataExtractor.class)
         );
 
         AgentChatRequest request = new AgentChatRequest(
@@ -77,7 +79,8 @@ class AgentOrchestratorTest {
                 graphFactoryNoTool(),
                 composeServiceWith("trace-summary", "응답"),
                 new HumanMessageService(),
-                lifecycleService
+                lifecycleService,
+                mock(AgentStructuredDataExtractor.class)
         );
 
         AgentChatRequest request = new AgentChatRequest(

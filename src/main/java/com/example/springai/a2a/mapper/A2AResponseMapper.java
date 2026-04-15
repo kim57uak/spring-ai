@@ -11,6 +11,10 @@ import org.springframework.stereotype.Component;
 public class A2AResponseMapper {
 
     public TaskView toTaskView(A2aTaskSnapshot task) {
+        return toTaskView(task, null);
+    }
+
+    public TaskView toTaskView(A2aTaskSnapshot task, Object structuredData) {
         if (task == null) {
             return null;
         }
@@ -21,6 +25,7 @@ public class A2AResponseMapper {
                 task.createdAt().toString(),
                 task.updatedAt().toString(),
                 task.responsePayload(),
+                structuredData,
                 task.errorCode(),
                 task.errorMessage()
         );

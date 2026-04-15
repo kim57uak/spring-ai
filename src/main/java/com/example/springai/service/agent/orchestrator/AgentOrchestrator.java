@@ -5,8 +5,11 @@ import com.example.springai.a2a.lifecycle.A2aLifecycleService;
 import com.example.springai.model.agent.AgentChatRequest;
 import com.example.springai.model.agent.AgentGraphState;
 import com.example.springai.model.agent.AgentScope;
+import com.example.springai.model.agent.AgentScopeName;
+import com.example.springai.model.agent.A2aStructuredResponse;
 import com.example.springai.model.agent.PlanningContext;
 import com.example.springai.a2a.task.A2aTaskStatus;
+import com.example.springai.service.agent.a2ui.AgentStructuredDataExtractor;
 import com.example.springai.service.agent.compose.ResponseComposeService;
 import com.example.springai.service.agent.graph.AgentStateGraphFactory;
 import com.example.springai.service.agent.security.HumanMessageService;
@@ -40,6 +43,7 @@ public class AgentOrchestrator {
     private final ResponseComposeService responseComposeService;
     private final HumanMessageService humanMessageService;
     private final A2aLifecycleService a2aLifecycleService;
+    private final AgentStructuredDataExtractor structuredDataExtractor;
 
     public AgentOrchestrator(
             ConversationStore conversationStore,
@@ -47,7 +51,8 @@ public class AgentOrchestrator {
             AgentStateGraphFactory graphFactory,
             ResponseComposeService responseComposeService,
             HumanMessageService humanMessageService,
-            A2aLifecycleService a2aLifecycleService
+            A2aLifecycleService a2aLifecycleService,
+            AgentStructuredDataExtractor structuredDataExtractor
     ) {
         this.conversationStore = conversationStore;
         this.checkpointStore = checkpointStore;
@@ -55,6 +60,7 @@ public class AgentOrchestrator {
         this.responseComposeService = responseComposeService;
         this.humanMessageService = humanMessageService;
         this.a2aLifecycleService = a2aLifecycleService;
+        this.structuredDataExtractor = structuredDataExtractor;
     }
 
     /**
@@ -112,6 +118,21 @@ public class AgentOrchestrator {
                             return Flux.just(humanMessageService.fromException(error));
                         })
         );
+    }
+
+    public A2aStructuredResponse executeSyncForA2a(AgentChatRequest request) {
+        PlanningContext context = invokeGraph(request);
+        String answer = Flux.concat(
+                        Flux.just("[생각의 과정 요약]\n- 요청을 분석하고 도구 사용 여부를 판단 중입니다.\n\n"),
+                        responseComposeService.streamCompose(context)
+                )
+                .collectList()
+                .map(chunks -> String.join("", chunks))
+                .blockOptional()
+                .orElse("");
+        persist(context, answer);
+        AgentScopeName scopeName = request.a2aContext() == null ? null : request.a2aContext().scopeName();
+        return A2aStructuredResponse.of(answer, structuredDataExtractor.extract(context, scopeName));
     }
 
     public void clearSession(String sessionId) {

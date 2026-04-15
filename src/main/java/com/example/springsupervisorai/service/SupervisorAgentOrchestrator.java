@@ -10,6 +10,7 @@ import com.example.springsupervisorai.model.SupervisorGraphState;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.model.SupervisorRuntimeState;
 import com.example.springsupervisorai.model.SwarmState;
+import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiSupport;
 import com.example.springsupervisorai.service.agent.compose.SupervisorResponseComposeService;
 import com.example.springsupervisorai.service.agent.graph.SupervisorStateGraphFactory;
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
@@ -225,7 +226,11 @@ public class SupervisorAgentOrchestrator {
                 Flux.just(composingProgress),
                 composeService.streamCompose(context)
                         .onErrorResume(error -> handleComposeError(taskId, canceled, failed, error))
-                        .doOnNext(answer::append)
+                        .doOnNext(chunk -> {
+                            if (!SupervisorA2uiSupport.isWrapped(chunk)) {
+                                answer.append(chunk);
+                            }
+                        })
                         .doOnComplete(() -> onComposeCompleted(request, taskId, context, answer, failed))
                         .concatWith(Flux.just(completedProgress))
         );
