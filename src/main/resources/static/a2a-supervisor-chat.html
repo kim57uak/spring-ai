@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
   <link rel="stylesheet" href="/libs/katex.min.css">
+  <link rel="stylesheet" href="/a2ui/a2ui-core.css">
   <script src="/libs/katex.min.js"></script>
   <script src="/libs/auto-render.min.js"></script>
   <style>
@@ -952,6 +953,7 @@
         min-width: 0;
         grid-column: 1 / -1;
       }
+
     }
 
     @media (max-width: 480px) {
@@ -1058,6 +1060,7 @@
     </section>
   </main>
 
+  <script src="/a2ui/a2ui-renderer.js"></script>
   <script>
     marked.setOptions({
       gfm: true,
@@ -1215,6 +1218,7 @@
             <button class="btn cancel" type="button">취소(CANCEL)</button>
           </div>
         </div>
+        <div class="assistant-a2ui"></div>
         <div class="assistant-answer"></div>
       `;
 
@@ -1222,6 +1226,7 @@
       const stream = bubble.querySelector('.supervisor-stream');
       const toggle = bubble.querySelector('.supervisor-toggle');
       const answer = bubble.querySelector('.assistant-answer');
+      const a2ui = bubble.querySelector('.assistant-a2ui');
       const progressFill = bubble.querySelector('.supervisor-progress-fill');
       const currentStage = bubble.querySelector('.supervisor-current-stage');
       const reviewPanel = bubble.querySelector('.review-panel');
@@ -1238,7 +1243,7 @@
       });
 
       return {
-        bubble, panel, stream, toggle, answer, progressFill, currentStage,
+        bubble, panel, stream, toggle, answer, a2ui, progressFill, currentStage,
         reviewPanel, reviewDesc, reviewProgress, reviewProgressText, reviewProgressFill,
         approveBtn, cancelBtn
       };
@@ -1547,6 +1552,10 @@
             renderAssistantMarkdown(ai.answer, parsed.answer.trim());
             await enhanceBubble(ai.answer);
           }
+          const parsedA2ui = tryParseA2ui(parsed.a2ui);
+          if (parsedA2ui) {
+            renderA2ui(ai, parsedA2ui);
+          }
         } else if (decision === 'CANCEL') {
           renderAssistantMarkdown(ai.answer, '요청이 검토 단계에서 취소되었습니다.');
         }
@@ -1575,18 +1584,36 @@
       const lines = String(payload || '').split('\n');
       const logs = [];
       const answerLines = [];
+      const a2uiPayloads = [];
       for (const raw of lines) {
         const line = raw.trimEnd();
         if (line.trim().startsWith('[supervisor]')) {
           logs.push(line.trim());
+        } else if (line.trim().startsWith('[[A2UI]]')) {
+          a2uiPayloads.push(line.trim().slice('[[A2UI]]'.length));
         } else {
           answerLines.push(raw);
         }
       }
       return {
         logs,
-        answer: answerLines.join('\n')
+        answer: answerLines.join('\n'),
+        a2ui: a2uiPayloads.length > 0 ? a2uiPayloads[a2uiPayloads.length - 1] : null
       };
+    }
+
+    function tryParseA2ui(raw) {
+      return window.A2uiRenderer?.tryParseEnvelope(raw) || null;
+    }
+
+    function renderA2ui(ai, envelope) {
+      return window.A2uiRenderer?.render(ai, envelope, {
+        onReservationSubmit(prompt) {
+          if (prompt) {
+            void send(prompt);
+          }
+        }
+      });
     }
 
     function sleep(ms) {
@@ -1629,13 +1656,15 @@
       ai.cancelBtn.onclick = () => handleReviewDecision(ai, taskId, 'CANCEL');
     }
 
-    async function send() {
+    async function send(overrideText) {
       if (streaming) return;
-      const text = promptEl.value.trim();
+      const text = String(overrideText ?? promptEl.value).trim();
       if (!text) return;
 
       addMessage('user', text.replace(/\n/g, '<br>'));
-      promptEl.value = '';
+      if (overrideText == null) {
+        promptEl.value = '';
+      }
       autoResizePrompt();
       streaming = true;
       abortController = new AbortController();
@@ -1795,6 +1824,14 @@
               }
 
               chatEl.scrollTop = chatEl.scrollHeight;
+              continue;
+            }
+
+            if (event === 'a2ui') {
+              const parsedA2ui = tryParseA2ui(data);
+              if (parsedA2ui) {
+                renderA2ui(ai, parsedA2ui);
+              }
               continue;
             }
 

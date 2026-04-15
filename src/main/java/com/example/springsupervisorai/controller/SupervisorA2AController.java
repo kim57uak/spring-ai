@@ -12,6 +12,7 @@ import com.example.springsupervisorai.a2a.dto.TasksListResult;
 import com.example.springsupervisorai.config.SupervisorStreamProperties;
 import com.example.springsupervisorai.model.SupervisorA2aMethod;
 import com.example.springsupervisorai.service.SupervisorAgentService;
+import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiSupport;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;
@@ -144,7 +145,9 @@ public class SupervisorA2AController {
         String sanitized = promptInjectionGuard.sanitize(params.messageText());
         return supervisorAgentService.stream(session.getId(), sanitized, params.model())
                 .timeout(Duration.ofMillis(Math.max(1_000L, streamProperties.getTimeoutMs())))
-                .map(chunk -> toSseEvent("chunk", chunk))
+                .map(chunk -> SupervisorA2uiSupport.isWrapped(chunk)
+                        ? toSseEvent("a2ui", SupervisorA2uiSupport.unwrap(chunk))
+                        : toSseEvent("chunk", chunk))
                 .concatWithValues(toSseEvent("done", Map.of("reason", "completed")))
                 .onErrorResume(TimeoutException.class, ex -> Flux.just(
                         toSseEvent("error", JsonRpcResponse.error(request.id(), STREAM_TIMEOUT, "Stream timeout")),

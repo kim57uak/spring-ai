@@ -16,6 +16,7 @@ public class A2aSupervisorRoutingProperties {
     private Execution execution = new Execution();
     private History history = new History();
     private Hitl hitl = new Hitl();
+    private A2ui a2ui = new A2ui();
     private Handoff handoff = new Handoff();
     private Set<String> allowedMethods = SupervisorA2aMethod.valuesSet();
 
@@ -73,6 +74,14 @@ public class A2aSupervisorRoutingProperties {
 
     public void setHitl(Hitl hitl) {
         this.hitl = hitl == null ? new Hitl() : hitl;
+    }
+
+    public A2ui getA2ui() {
+        return a2ui;
+    }
+
+    public void setA2ui(A2ui a2ui) {
+        this.a2ui = a2ui == null ? new A2ui() : a2ui;
     }
 
     public Handoff getHandoff() {
@@ -256,6 +265,18 @@ public class A2aSupervisorRoutingProperties {
             defaults.put("not_required_read_only", "조회성 요청으로 판단되어 승인이 필요하지 않습니다.");
             defaults.put("default", "요청 처리 전 사용자가 검토해야 하는 상황으로 판단되었습니다.");
             return defaults;
+        }
+    }
+
+    public static class A2ui {
+        private boolean enabled = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 

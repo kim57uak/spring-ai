@@ -4,6 +4,8 @@ import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.config.SupervisorPromptProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
+import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiService;
+import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiSupport;
 import com.example.springsupervisorai.service.agent.result.DownstreamResultInterpreter;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
@@ -30,6 +32,7 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
     private final SupervisorPromptProperties promptProperties;
     private final SupervisorPromptRenderService promptRenderService;
     private final PromptInjectionGuard promptInjectionGuard;
+    private final SupervisorA2uiService a2uiService;
 
     /**
      * compose 의존성을 생성자 주입으로 초기화한다.
@@ -44,13 +47,15 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             A2aSupervisorRoutingProperties routingProperties,
             SupervisorPromptProperties promptProperties,
             SupervisorPromptRenderService promptRenderService,
-            PromptInjectionGuard promptInjectionGuard
+            PromptInjectionGuard promptInjectionGuard,
+            SupervisorA2uiService a2uiService
     ) {
         this.llmRuntime = llmRuntime;
         this.routingProperties = routingProperties;
         this.promptProperties = promptProperties;
         this.promptRenderService = promptRenderService;
         this.promptInjectionGuard = promptInjectionGuard;
+        this.a2uiService = a2uiService;
     }
 
     /**
@@ -66,6 +71,21 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             logger.warn("Supervisor compose bypassed LLM due to downstream failures sessionId={}, failedCount={}, successCount={}, unknownCount={}",
                     context.getSessionId(), outcomeSummary.failedCount(), outcomeSummary.successCount(), outcomeSummary.unknownCount());
             return Flux.just(buildFailureSummary(outcomeSummary));
+        }
+
+        if (isA2uiEnabled()) {
+            try {
+                java.util.Optional<SupervisorA2uiService.A2uiRenderResult> a2uiResult = a2uiService.build(context);
+                if (a2uiResult.isPresent()) {
+                    logger.info("Supervisor compose resolved to A2UI envelope sessionId={}", context.getSessionId());
+                    return Flux.just(
+                            a2uiResult.get().message(),
+                            SupervisorA2uiSupport.wrap(a2uiResult.get().envelopeJson())
+                    );
+                }
+            } catch (Exception ex) {
+                logger.warn("Supervisor A2UI build failed sessionId={}, error={}", context.getSessionId(), safe(ex.getMessage()));
+            }
         }
 
         String prompt = buildComposePrompt(context, outcomeSummary);
@@ -111,6 +131,11 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             return 5;
         }
         return Math.max(1, history.getMaxTurns());
+    }
+
+    private boolean isA2uiEnabled() {
+        A2aSupervisorRoutingProperties.A2ui a2ui = routingProperties.getA2ui();
+        return a2ui != null && a2ui.isEnabled();
     }
 
     /**
