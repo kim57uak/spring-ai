@@ -12,6 +12,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
+import java.util.Iterator;
+import java.util.Map;
+
 /**
  * Supervisor A2A JSON-RPC 요청의 method별 params 스키마 검증기.
  */
@@ -76,10 +79,13 @@ public class SupervisorA2ARequestValidator {
         JsonNode messageNode = paramsNode.path("message");
         String extractedText = extractTextFromMessage(messageNode);
         if (extractedText.isBlank()) {
+            extractedText = extractTextFromA2uiAction(messageNode);
+        }
+        if (extractedText.isBlank()) {
             return ValidationResult.error(JsonRpcResponse.error(
                     request.id(),
                     INVALID_PARAMS,
-                    "messageText is required (or message.parts[].text for v1.0)"
+                    "messageText is required (or message.parts[].text / A2UI userAction for v1.0)"
             ));
         }
         String model = paramsNode.path("model").asText("");
@@ -106,7 +112,9 @@ public class SupervisorA2ARequestValidator {
         StringBuilder merged = new StringBuilder();
         for (JsonNode part : partsNode) {
             String type = part.path("type").asText("");
-            if (!type.isBlank() && !"text".equalsIgnoreCase(type)) {
+            String kind = part.path("kind").asText("");
+            if ((!type.isBlank() && !"text".equalsIgnoreCase(type))
+                    || (!kind.isBlank() && !"text".equalsIgnoreCase(kind))) {
                 continue;
             }
             String text = part.path("text").asText("");
@@ -119,6 +127,93 @@ public class SupervisorA2ARequestValidator {
             merged.append(text.trim());
         }
         return merged.toString().trim();
+    }
+
+    private String extractTextFromA2uiAction(JsonNode messageNode) {
+        if (messageNode == null || messageNode.isMissingNode() || messageNode.isNull()) {
+            return "";
+        }
+        JsonNode partsNode = messageNode.path("parts");
+        if (!partsNode.isArray()) {
+            return "";
+        }
+        for (JsonNode part : partsNode) {
+            if (!isA2uiDataPart(part)) {
+                continue;
+            }
+            JsonNode dataNode = part.path("data");
+            JsonNode actionNode = dataNode.path("userAction");
+            if (actionNode.isMissingNode() || actionNode.isNull()) {
+                actionNode = dataNode.path("action");
+            }
+            if (actionNode.isMissingNode() || actionNode.isNull()) {
+                continue;
+            }
+            String actionName = actionNode.path("name").asText("").trim();
+            JsonNode contextNode = actionNode.path("context");
+            if ("submit_reservation".equals(actionName)) {
+                return reservationPromptFromContext(contextNode).trim();
+            }
+            StringBuilder builder = new StringBuilder("A2UI user action");
+            if (!actionName.isBlank()) {
+                builder.append(": ").append(actionName);
+            }
+            String surfaceId = actionNode.path("surfaceId").asText("").trim();
+            if (!surfaceId.isBlank()) {
+                builder.append("\nsurfaceId: ").append(surfaceId);
+            }
+            if (contextNode.isObject()) {
+                Iterator<Map.Entry<String, JsonNode>> fields = contextNode.properties().iterator();
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> entry = fields.next();
+                    builder.append("\n").append(entry.getKey()).append(": ").append(asFlatText(entry.getValue()));
+                }
+            }
+            return builder.toString().trim();
+        }
+        return "";
+    }
+
+    private boolean isA2uiDataPart(JsonNode part) {
+        if (part == null || part.isNull()) {
+            return false;
+        }
+        String kind = part.path("kind").asText(part.path("type").asText("")).trim();
+        if (!kind.isBlank() && !"data".equalsIgnoreCase(kind)) {
+            return false;
+        }
+        String mediaType = part.path("mediaType").asText("").trim();
+        String mimeType = part.path("metadata").path("mimeType").asText("").trim();
+        return "application/json+a2ui".equalsIgnoreCase(mediaType)
+                || "application/json+a2ui".equalsIgnoreCase(mimeType);
+    }
+
+    private String reservationPromptFromContext(JsonNode contextNode) {
+        if (contextNode == null || contextNode.isNull() || !contextNode.isObject()) {
+            return "";
+        }
+        String productCode = contextNode.path("productCode").asText("").trim();
+        if (productCode.isBlank()) {
+            return "";
+        }
+        return String.join("\n",
+                "예약생성해줘",
+                "상품코드: " + productCode,
+                "예약자: " + contextNode.path("bookerName").asText("").trim(),
+                "연락처: " + contextNode.path("contact").asText("").trim(),
+                "인원수: " + contextNode.path("headCount").asText("").trim(),
+                "생년월일: " + contextNode.path("birthDate").asText("").trim()
+        );
+    }
+
+    private String asFlatText(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return "";
+        }
+        if (value.isValueNode()) {
+            return value.asText("");
+        }
+        return value.toString();
     }
 
     /**

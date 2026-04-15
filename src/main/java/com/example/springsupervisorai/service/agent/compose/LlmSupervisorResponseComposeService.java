@@ -80,7 +80,7 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
                     logger.info("Supervisor compose resolved to A2UI envelope sessionId={}", context.getSessionId());
                     return Flux.just(
                             a2uiResult.get().message(),
-                            SupervisorA2uiSupport.wrap(a2uiResult.get().envelopeJson())
+                            SupervisorA2uiSupport.wrap(a2uiResult.get().protocolPayloadJson())
                     );
                 }
             } catch (Exception ex) {

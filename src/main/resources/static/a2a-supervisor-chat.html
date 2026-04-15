@@ -1603,17 +1603,50 @@
     }
 
     function tryParseA2ui(raw) {
-      return window.A2uiRenderer?.tryParseEnvelope(raw) || null;
+      return window.A2uiRenderer?.tryParseProtocolPayload(raw) || null;
     }
 
     function renderA2ui(ai, envelope) {
       return window.A2uiRenderer?.render(ai, envelope, {
-        onReservationSubmit(prompt) {
-          if (prompt) {
-            void send(prompt);
+        onUserAction(payload) {
+          if (payload) {
+            void send(null, payload);
           }
         }
       });
+    }
+
+    function buildA2uiClientCapabilities() {
+      return {
+        supportedCatalogIds: [
+          window.A2uiRenderer?.STANDARD_CATALOG_ID || 'https://a2ui.org/specification/v0_8/standard_catalog_definition.json'
+        ]
+      };
+    }
+
+    function buildTextMessagePayload(text) {
+      return {
+        parts: [
+          { text, mediaType: 'text/plain' }
+        ],
+        metadata: {
+          a2uiClientCapabilities: buildA2uiClientCapabilities()
+        }
+      };
+    }
+
+    function buildActionMessagePayload(actionPayload) {
+      return {
+        parts: [
+          {
+            data: actionPayload,
+            mediaType: 'application/json+a2ui'
+          }
+        ],
+        metadata: {
+          a2uiClientCapabilities: buildA2uiClientCapabilities()
+        }
+      };
     }
 
     function sleep(ms) {
@@ -1656,13 +1689,16 @@
       ai.cancelBtn.onclick = () => handleReviewDecision(ai, taskId, 'CANCEL');
     }
 
-    async function send(overrideText) {
+    async function send(overrideText, actionPayload) {
       if (streaming) return;
+      const isAction = !!actionPayload;
       const text = String(overrideText ?? promptEl.value).trim();
-      if (!text) return;
+      if (!isAction && !text) return;
 
-      addMessage('user', text.replace(/\n/g, '<br>'));
-      if (overrideText == null) {
+      if (!isAction) {
+        addMessage('user', text.replace(/\n/g, '<br>'));
+      }
+      if (!isAction && overrideText == null) {
         promptEl.value = '';
       }
       autoResizePrompt();
@@ -1713,8 +1749,8 @@
           id: requestId,
           method: 'message/stream',
           params: {
-            messageText: text,
-            model: modelEl.value || 'openai'
+            model: modelEl.value || 'openai',
+            message: isAction ? buildActionMessagePayload(actionPayload) : buildTextMessagePayload(text)
           }
         };
 
