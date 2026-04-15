@@ -1,7 +1,8 @@
-package com.example.springsupervisorai.service.agent.a2ui;
+package com.example.springsupervisorai.service.agent.a2ui.product;
 
 import com.example.springsupervisorai.model.DownstreamCallResult;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
 import com.example.springsupervisorai.service.agent.result.DownstreamResultInterpreter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,17 +23,23 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
     private static final Logger logger = LoggerFactory.getLogger(DefaultSupervisorProductInfoA2uiService.class);
     private static final String STANDARD_CATALOG_ID = "https://a2ui.org/specification/v0_8/standard_catalog_definition.json";
     private final ObjectMapper objectMapper;
+    private final ProductA2uiTemplateRegistry templateRegistry;
 
-    public DefaultSupervisorProductInfoA2uiService(ObjectMapper objectMapper) {
+    public DefaultSupervisorProductInfoA2uiService(
+            ObjectMapper objectMapper,
+            ProductA2uiTemplateRegistry templateRegistry
+    ) {
         this.objectMapper = objectMapper;
+        this.templateRegistry = templateRegistry;
     }
 
     @Override
-    public Optional<A2uiRenderResult> build(SupervisorPlanningContext context) {
+    public Optional<A2uiRenderResult> build(SupervisorPlanningContext context, A2uiTemplateView selectedView, String message) {
         if (context == null || context.getResults() == null || context.getResults().isEmpty()) {
             logger.info("Supervisor product A2UI skipped: no downstream results");
             return Optional.empty();
         }
+        ProductA2uiTemplate template = templateRegistry.resolve(selectedView == null ? A2uiTemplateView.SUMMARY : selectedView);
         for (DownstreamCallResult result : context.getResults()) {
             if (!isSuccessfulProductResult(result)) {
                 continue;
@@ -46,19 +53,20 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
                         context.getSessionId(), result.taskId());
                 continue;
             }
-            Optional<List<Map<String, Object>>> protocolMessages = buildProtocolMessages(productNode.get(), context, result);
+            Optional<List<Map<String, Object>>> protocolMessages = buildProtocolMessages(productNode.get(), context, result, template);
             if (protocolMessages.isEmpty()) {
                 logger.info("Supervisor product A2UI message build returned empty sessionId={}, taskId={}",
                         context.getSessionId(), result.taskId());
                 continue;
             }
             try {
-                RequestedView requestedView = resolveRequestedView(context.getUserMessage());
                 String name = text(productNode.get().path("baseProductInfo"), "saleProdNm");
-                String message = buildMessage(name.isBlank() ? "상품" : name, requestedView);
-                logger.info("Supervisor product A2UI envelope built sessionId={}, taskId={}, requestedView={}",
-                        context.getSessionId(), result.taskId(), requestedView);
-                return Optional.of(new A2uiRenderResult(message, objectMapper.writeValueAsString(protocolMessages.get())));
+                String resolvedMessage = message == null || message.isBlank()
+                        ? template.defaultMessage(name.isBlank() ? "상품" : name)
+                        : message;
+                logger.info("Supervisor product A2UI message built sessionId={}, taskId={}, requestedView={}",
+                        context.getSessionId(), result.taskId(), template.view());
+                return Optional.of(new A2uiRenderResult(resolvedMessage, objectMapper.writeValueAsString(protocolMessages.get())));
             } catch (Exception ex) {
                 logger.warn("Supervisor product A2UI serialization failed sessionId={}, taskId={}, error={}",
                         context.getSessionId(), result.taskId(), ex.getMessage());
@@ -76,13 +84,17 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         return DownstreamResultInterpreter.assess(result).outcome() == DownstreamResultInterpreter.Outcome.SUCCESS;
     }
 
-    private Optional<List<Map<String, Object>>> buildProtocolMessages(JsonNode productRoot, SupervisorPlanningContext context, DownstreamCallResult result) {
+    private Optional<List<Map<String, Object>>> buildProtocolMessages(
+            JsonNode productRoot,
+            SupervisorPlanningContext context,
+            DownstreamCallResult result,
+            ProductA2uiTemplate template
+    ) {
         JsonNode base = productRoot.path("baseProductInfo");
         if (!base.isObject()) {
             return Optional.empty();
         }
-        RequestedView requestedView = resolveRequestedView(context.getUserMessage());
-        return buildStandardMessageSequence(productRoot, base, context, result, requestedView);
+        return buildStandardMessageSequence(productRoot, base, context, result, template);
     }
 
     private Optional<List<Map<String, Object>>> buildStandardMessageSequence(
@@ -90,7 +102,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
             JsonNode base,
             SupervisorPlanningContext context,
             DownstreamCallResult result,
-            RequestedView requestedView
+            ProductA2uiTemplate template
     ) {
         String productCode = text(base, "saleProdCd");
         String name = text(base, "saleProdNm");
@@ -101,7 +113,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         List<String> missingFields = new ArrayList<>();
         require(productCode, "productCode", missingFields);
         require(name, "name", missingFields);
-        if (requestedView == RequestedView.PACKAGE_RESULT_CARD) {
+        if (template.requiresSummaryCoreFields()) {
             requireDate(departureDate, "departureDate", missingFields);
             requireDate(arrivalDate, "arrivalDate", missingFields);
             if (price == null || price < 0) {
@@ -145,7 +157,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         putIfNotBlank(data, "meetingAirport", productRoot.path("itineraryInfo").path("meetInfoBcVo").path("aptCd").asText("").trim());
 
         String surfaceId = "package-product-" + result.taskId();
-        List<Map<String, Object>> components = buildStandardComponents(surfaceId, data, requestedView);
+        List<Map<String, Object>> components = buildStandardComponents(surfaceId, data, template);
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(surfaceUpdate(surfaceId, components));
         messages.add(dataModelUpdate(surfaceId, "reservation", List.of(
@@ -238,17 +250,12 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
     private List<Map<String, Object>> buildStandardComponents(
             String surfaceId,
             Map<String, Object> data,
-            RequestedView requestedView
+            ProductA2uiTemplate template
     ) {
         List<Map<String, Object>> components = new ArrayList<>();
-        List<String> rootChildren = new ArrayList<>();
-
-        rootChildren.add("summary_card");
-        sectionOrder(requestedView).forEach(section -> rootChildren.add(section + "_card"));
-        rootChildren.add("reservation_card");
 
         components.add(component("root", "Column", Map.of(
-                "children", explicit(rootChildren),
+                "children", explicit(template.rootChildren()),
                 "alignment", "stretch"
         )));
 
@@ -489,33 +496,6 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
 
     private Map<String, Object> explicit(List<String> children) {
         return Map.of("explicitList", children);
-    }
-
-    private List<String> sectionOrder(RequestedView requestedView) {
-        return switch (requestedView) {
-            case PACKAGE_PRICING_DETAIL -> List.of("pricing", "timeline", "notice");
-            case PACKAGE_ITINERARY_TIMELINE -> List.of("timeline", "pricing", "notice");
-            case PACKAGE_RESULT_CARD -> List.of("pricing", "timeline", "notice");
-        };
-    }
-
-    private String buildMessage(String name, RequestedView requestedView) {
-        return switch (requestedView) {
-            case PACKAGE_PRICING_DETAIL -> name + " 요금 상세를 준비했습니다.";
-            case PACKAGE_ITINERARY_TIMELINE -> name + " 일정 정보를 준비했습니다.";
-            case PACKAGE_RESULT_CARD -> name + " 상품 상세를 준비했습니다.";
-        };
-    }
-
-    private RequestedView resolveRequestedView(String userMessage) {
-        String normalized = userMessage == null ? "" : userMessage.toLowerCase();
-        if (normalized.contains("package_pricing_detail") || normalized.contains("요금 상세")) {
-            return RequestedView.PACKAGE_PRICING_DETAIL;
-        }
-        if (normalized.contains("package_itinerary_timeline") || normalized.contains("일정 보기") || normalized.contains("일정 상세")) {
-            return RequestedView.PACKAGE_ITINERARY_TIMELINE;
-        }
-        return RequestedView.PACKAGE_RESULT_CARD;
     }
 
     private List<Map<String, Object>> descriptionItems(JsonNode list) {
@@ -762,9 +742,4 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiSe
         }
     }
 
-    private enum RequestedView {
-        PACKAGE_RESULT_CARD,
-        PACKAGE_PRICING_DETAIL,
-        PACKAGE_ITINERARY_TIMELINE
-    }
 }
