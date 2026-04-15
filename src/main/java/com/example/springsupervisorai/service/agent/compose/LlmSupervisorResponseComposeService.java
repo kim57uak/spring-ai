@@ -4,12 +4,17 @@ import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.config.SupervisorPromptProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
-import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiService;
-import com.example.springsupervisorai.service.agent.a2ui.SupervisorA2uiSupport;
+import com.example.springsupervisorai.service.agent.a2ui.common.A2uiComposePromptProvider;
+import com.example.springsupervisorai.service.agent.a2ui.common.A2uiComposePromptProviderRegistry;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
+import com.example.springsupervisorai.service.agent.a2ui.product.A2uiTemplateView;
 import com.example.springsupervisorai.service.agent.result.DownstreamResultInterpreter;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
 import com.example.springsupervisorai.service.prompt.SupervisorPromptRenderService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -33,6 +38,8 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
     private final SupervisorPromptRenderService promptRenderService;
     private final PromptInjectionGuard promptInjectionGuard;
     private final SupervisorA2uiService a2uiService;
+    private final A2uiComposePromptProviderRegistry a2uiComposePromptProviderRegistry;
+    private final ObjectMapper objectMapper;
 
     /**
      * compose 의존성을 생성자 주입으로 초기화한다.
@@ -48,7 +55,9 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             SupervisorPromptProperties promptProperties,
             SupervisorPromptRenderService promptRenderService,
             PromptInjectionGuard promptInjectionGuard,
-            SupervisorA2uiService a2uiService
+            SupervisorA2uiService a2uiService,
+            A2uiComposePromptProviderRegistry a2uiComposePromptProviderRegistry,
+            ObjectMapper objectMapper
     ) {
         this.llmRuntime = llmRuntime;
         this.routingProperties = routingProperties;
@@ -56,6 +65,8 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
         this.promptRenderService = promptRenderService;
         this.promptInjectionGuard = promptInjectionGuard;
         this.a2uiService = a2uiService;
+        this.a2uiComposePromptProviderRegistry = a2uiComposePromptProviderRegistry;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -73,24 +84,55 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             return Flux.just(buildFailureSummary(outcomeSummary));
         }
 
-        if (isA2uiEnabled()) {
+        java.util.Optional<A2uiComposePromptProvider> a2uiPromptProvider = resolveA2uiPromptProvider(context);
+        if (isA2uiEnabled() && a2uiPromptProvider.isPresent()) {
             try {
-                java.util.Optional<SupervisorA2uiService.A2uiRenderResult> a2uiResult = a2uiService.build(context);
+                ComposeA2uiDecision decision = composeA2uiDecision(context, outcomeSummary, a2uiPromptProvider.get());
+                java.util.Optional<SupervisorA2uiService.A2uiRenderResult> a2uiResult =
+                        a2uiService.build(context, decision.selectedView(), decision.message());
                 if (a2uiResult.isPresent()) {
-                    logger.info("Supervisor compose resolved to A2UI envelope sessionId={}", context.getSessionId());
+                    logger.info("Supervisor compose resolved to A2UI payload sessionId={}, selectedView={}",
+                            context.getSessionId(), decision.selectedView());
                     return Flux.just(
                             a2uiResult.get().message(),
-                            SupervisorA2uiSupport.wrap(a2uiResult.get().envelopeJson())
+                            SupervisorA2uiSupport.wrap(a2uiResult.get().protocolPayloadJson())
                     );
                 }
             } catch (Exception ex) {
                 logger.warn("Supervisor A2UI build failed sessionId={}, error={}", context.getSessionId(), safe(ex.getMessage()));
             }
+        } else if (isA2uiEnabled()) {
+            logger.info("Supervisor A2UI skipped before compose sessionId={}, reason=no_matching_prompt_provider", context.getSessionId());
         }
 
         String prompt = buildComposePrompt(context, outcomeSummary);
         return llmRuntime.stream(prompt, context.getModel(), context.getSessionId())
                 .onErrorResume(ex -> Flux.just(buildFallbackSummary(outcomeSummary)));
+    }
+
+    private ComposeA2uiDecision composeA2uiDecision(
+            SupervisorPlanningContext context,
+            ComposeOutcomeSummary outcomeSummary,
+            A2uiComposePromptProvider promptProvider
+    ) throws Exception {
+        String raw = llmRuntime.complete(buildComposeA2uiPrompt(context, outcomeSummary, promptProvider), context.getModel(), context.getSessionId());
+        try {
+            return parseComposeA2uiDecision(raw);
+        } catch (Exception primaryFailure) {
+            String repaired = llmRuntime.complete(
+                    promptRenderService.render(
+                            required(promptProperties.getComposeA2uiRepairTemplate(), "compose-a2ui-repair-template"),
+                            Map.of(
+                                    "invalidOutput", raw == null ? "" : raw,
+                                    "a2uiTemplateCatalog", promptProvider.templateCatalogPrompt(),
+                                    "a2uiTemplateKeys", promptProvider.supportedTemplateKeys()
+                            )
+                    ),
+                    context.getModel(),
+                    context.getSessionId()
+            );
+            return parseComposeA2uiDecision(repaired);
+        }
     }
 
     /**
@@ -100,6 +142,26 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
      * @return compose prompt 문자열
      */
     private String buildComposePrompt(SupervisorPlanningContext context, ComposeOutcomeSummary outcomeSummary) {
+        return promptRenderService.render(required(promptProperties.getComposeTemplate(), "compose-template"), composePromptVariables(context, outcomeSummary));
+    }
+
+    private String buildComposeA2uiPrompt(
+            SupervisorPlanningContext context,
+            ComposeOutcomeSummary outcomeSummary,
+            A2uiComposePromptProvider promptProvider
+    ) {
+        Map<String, Object> variables = new java.util.LinkedHashMap<>(composePromptVariables(context, outcomeSummary));
+        variables.put("composeA2uiSystem", required(promptProperties.getComposeA2uiSystem(), "compose-a2ui-system"));
+        variables.put("a2uiTemplateKeys", promptProvider.supportedTemplateKeys());
+        variables.put("a2uiTemplateCatalog", promptProvider.templateCatalogPrompt());
+        return promptRenderService.render(required(promptProperties.getComposeA2uiTemplate(), "compose-a2ui-template"), variables);
+    }
+
+    private java.util.Optional<A2uiComposePromptProvider> resolveA2uiPromptProvider(SupervisorPlanningContext context) {
+        return a2uiComposePromptProviderRegistry.resolve(context);
+    }
+
+    private Map<String, Object> composePromptVariables(SupervisorPlanningContext context, ComposeOutcomeSummary outcomeSummary) {
         logDownstreamResultsForCompose(context);
         String recentHistoryRaw = recentHistory(context).stream()
                 .reduce("", (acc, value) -> acc.isBlank() ? value : acc + "\n" + value);
@@ -107,13 +169,13 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
         String protectedHistory = promptInjectionGuard.protectHistory(recentHistoryRaw);
         String protectedDownstreamResults = promptInjectionGuard.protectToolResult(formatResults(context, outcomeSummary));
         String protectedOutcomeSummary = promptInjectionGuard.protectToolResult(formatOutcomeSummary(outcomeSummary));
-        return promptRenderService.render(required(promptProperties.getComposeTemplate(), "compose-template"), Map.of(
+        return Map.of(
                 "composeSystem", required(promptProperties.getComposeSystem(), "compose-system"),
                 "userMessage", protectedUserMessage,
                 "downstreamResults", protectedDownstreamResults,
                 "downstreamOutcomeSummary", protectedOutcomeSummary,
                 "history", protectedHistory
-        ));
+        );
     }
 
     private java.util.List<String> recentHistory(SupervisorPlanningContext context) {
@@ -289,6 +351,50 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
         return builder.toString().trim();
     }
 
+    private ComposeA2uiDecision parseComposeA2uiDecision(String raw) throws Exception {
+        String candidate = extractJsonCandidate(stripCodeFence(raw));
+        if (candidate.isBlank()) {
+            throw new IllegalArgumentException("empty compose a2ui json");
+        }
+        JsonNode root = objectMapper.readTree(candidate);
+        String message = safe(root.path("message").asText(""));
+        String selectedView = safe(root.path("selectedView").asText("summary")).trim().toUpperCase();
+        A2uiTemplateView view = switch (selectedView) {
+            case "SUMMARY" -> A2uiTemplateView.SUMMARY;
+            case "PRICING" -> A2uiTemplateView.PRICING;
+            case "TIMELINE" -> A2uiTemplateView.TIMELINE;
+            case "BOOKING" -> A2uiTemplateView.BOOKING;
+            default -> throw new IllegalArgumentException("unsupported selectedView: " + selectedView);
+        };
+        return new ComposeA2uiDecision(message, view);
+    }
+
+    private String stripCodeFence(String text) {
+        String value = text == null ? "" : text.trim();
+        if (value.startsWith("```")) {
+            int firstNewLine = value.indexOf('\n');
+            if (firstNewLine > -1) {
+                value = value.substring(firstNewLine + 1);
+            }
+            if (value.endsWith("```")) {
+                value = value.substring(0, value.length() - 3);
+            }
+        }
+        return value.trim();
+    }
+
+    private String extractJsonCandidate(String text) {
+        String trimmed = text == null ? "" : text.trim();
+        if (trimmed.startsWith("{")) {
+            return trimmed;
+        }
+        int objectStart = trimmed.indexOf('{');
+        if (objectStart < 0) {
+            return "";
+        }
+        return trimmed.substring(objectStart).trim();
+    }
+
     private record ResultOutcome(
             DownstreamCallResult result,
             DownstreamResultInterpreter.Assessment assessment
@@ -317,5 +423,11 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             }
             return "UNKNOWN";
         }
+    }
+
+    private record ComposeA2uiDecision(
+            String message,
+            A2uiTemplateView selectedView
+    ) {
     }
 }

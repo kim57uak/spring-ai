@@ -52,7 +52,7 @@ host:
     # Supervisor A2UI 렌더링 활성화 정책
     a2ui:
       # true일 때만 supervisor가 A2UI envelope/event 생성을 시도
-      enabled: false
+      enabled: true
     # downstream handoff 지시 적용 정책
     handoff:
       # handoff directive 반영 여부

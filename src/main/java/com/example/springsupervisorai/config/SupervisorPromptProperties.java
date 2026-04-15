@@ -13,6 +13,9 @@ public class SupervisorPromptProperties {
     private String hitlPolicyRepairTemplate = "";
     private String composeSystem = "";
     private String composeTemplate = "";
+    private String composeA2uiSystem = "";
+    private String composeA2uiTemplate = "";
+    private String composeA2uiRepairTemplate = "";
 
     public String getPlanningSystem() {
         return planningSystem;
@@ -76,5 +79,29 @@ public class SupervisorPromptProperties {
 
     public void setComposeTemplate(String composeTemplate) {
         this.composeTemplate = composeTemplate;
+    }
+
+    public String getComposeA2uiSystem() {
+        return composeA2uiSystem;
+    }
+
+    public void setComposeA2uiSystem(String composeA2uiSystem) {
+        this.composeA2uiSystem = composeA2uiSystem;
+    }
+
+    public String getComposeA2uiTemplate() {
+        return composeA2uiTemplate;
+    }
+
+    public void setComposeA2uiTemplate(String composeA2uiTemplate) {
+        this.composeA2uiTemplate = composeA2uiTemplate;
+    }
+
+    public String getComposeA2uiRepairTemplate() {
+        return composeA2uiRepairTemplate;
+    }
+
+    public void setComposeA2uiRepairTemplate(String composeA2uiRepairTemplate) {
+        this.composeA2uiRepairTemplate = composeA2uiRepairTemplate;
     }
 }
