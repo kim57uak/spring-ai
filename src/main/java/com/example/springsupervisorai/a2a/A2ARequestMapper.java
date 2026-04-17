@@ -85,11 +85,33 @@ public class A2ARequestMapper {
     }
 
     private String resolveDownstreamMessage(RoutingPlan plan, SupervisorPlanningContext context) {
+        String original = context == null || context.getUserMessage() == null
+                ? ""
+                : context.getUserMessage().trim();
         String extracted = extractAgentPrompt(plan.arguments());
-        if (!extracted.isBlank()) {
+        if (original.isBlank()) {
             return extracted;
         }
-        return context.getUserMessage() == null ? "" : context.getUserMessage();
+        if (shouldPreserveOriginal(plan, original)) {
+            return original;
+        }
+        return extracted.isBlank() ? original : extracted;
+    }
+
+    private boolean shouldPreserveOriginal(RoutingPlan plan, String original) {
+        String agentKey = plan == null || plan.agentKey() == null ? "" : plan.agentKey().trim().toLowerCase();
+        if ("reservation".equals(agentKey) || "product".equals(agentKey)) {
+            return true;
+        }
+        String normalized = original == null ? "" : original.toLowerCase();
+        return normalized.contains("예약")
+                || normalized.contains("생성")
+                || normalized.contains("등록")
+                || normalized.contains("수정")
+                || normalized.contains("삭제")
+                || normalized.contains("취소")
+                || normalized.contains("주문")
+                || normalized.contains("결제");
     }
 
     private String extractAgentPrompt(Map<String, Object> args) {

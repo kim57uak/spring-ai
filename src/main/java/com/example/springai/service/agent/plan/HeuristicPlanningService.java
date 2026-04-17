@@ -9,6 +9,7 @@ import com.example.springai.service.agent.prompt.PromptRenderService;
 import com.example.springai.service.agent.runtime.AgentLlmRuntime;
 import com.example.springai.service.agent.security.PromptInjectionGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,8 +73,11 @@ public class HeuristicPlanningService implements PlanningService {
         PlannerDecision structured = readStructuredDecision(planningPrompt, context.getModel(), context.getSessionId());
         if (structured != null) {
             List<ToolPlan> decisions = parseStructuredDecision(structured, context);
-            if (!decisions.isEmpty()) {
+            if (hasRequiredTool(decisions)) {
                 return logResult(deduplicate(decisions));
+            }
+            if (!decisions.isEmpty()) {
+                logger.info("Structured planner returned COMPLETE. falling back to raw planner verification");
             }
         }
 
@@ -163,26 +167,17 @@ public class HeuristicPlanningService implements PlanningService {
         }
         String normalized = stripCodeFence(plannerOutput.trim());
         if (OUTPUT_COMPLETE.equalsIgnoreCase(normalized)) {
-            return List.of();
+            return noToolSelection("LLM planner returned COMPLETE");
         }
         try {
-            List<PlannerToolSelection> selections = readSelections(normalized);
-            List<ToolPlan> plans = new ArrayList<>();
-            for (PlannerToolSelection item : selections) {
-                String server = safe(item.server());
-                if (server.isBlank() || !mcpProperties.getServers().containsKey(server) || !isServerAllowed(server, context)) {
-                    continue;
-                }
-                String tool = safe(item.tool());
-                if (!isToolAllowed(server, tool, context)) {
-                    continue;
-                }
-                String reason = safe(item.reason()).isBlank() ? "LLM selected tool" : safe(item.reason());
-                String capability = resolveCapability(server);
-                Map<String, Object> arguments = item.arguments() == null ? Map.of() : item.arguments();
-                plans.add(new ToolPlan(capability, server, tool, reason, arguments, true));
+            JsonNode root = objectMapper.readTree(extractJsonCandidate(normalized));
+            if (root.isObject() && (root.has("complete") || root.has("plans"))) {
+                PlannerDecision decision = objectMapper.treeToValue(root, PlannerDecision.class);
+                return parseStructuredDecision(decision, context);
             }
-            return plans;
+
+            List<PlannerToolSelection> selections = readSelections(normalized);
+            return toToolPlans(selections, context);
         } catch (Exception e) {
             logger.warn("Failed to parse LLM tool plan to JSON structure");
             return List.of();
@@ -306,9 +301,12 @@ public class HeuristicPlanningService implements PlanningService {
         PlannerDecision repairedStructured = readStructuredDecision(repairPrompt, context.getModel(), context.getSessionId());
         if (repairedStructured != null) {
             List<ToolPlan> repairedPlans = parseStructuredDecision(repairedStructured, context);
-            if (!repairedPlans.isEmpty()) {
+            if (hasRequiredTool(repairedPlans)) {
                 logger.info("Tool selection repaired via structured output");
                 return repairedPlans;
+            }
+            if (!repairedPlans.isEmpty()) {
+                logger.info("Structured repair returned COMPLETE. falling back to raw repair verification");
             }
         }
 
@@ -365,6 +363,13 @@ public class HeuristicPlanningService implements PlanningService {
             return List.of();
         }
 
+        return toToolPlans(selections, context);
+    }
+
+    private List<ToolPlan> toToolPlans(List<PlannerToolSelection> selections, PlanningContext context) {
+        if (selections == null || selections.isEmpty()) {
+            return List.of();
+        }
         List<ToolPlan> plans = new ArrayList<>();
         for (PlannerToolSelection item : selections) {
             if (item == null) {
@@ -384,6 +389,10 @@ public class HeuristicPlanningService implements PlanningService {
             plans.add(new ToolPlan(capability, server, tool, reason, arguments, true));
         }
         return plans;
+    }
+
+    private boolean hasRequiredTool(List<ToolPlan> plans) {
+        return plans != null && plans.stream().anyMatch(ToolPlan::toolRequired);
     }
 
     private List<ToolPlan> logResult(List<ToolPlan> plans) {
