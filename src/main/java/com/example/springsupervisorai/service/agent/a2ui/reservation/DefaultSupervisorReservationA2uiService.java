@@ -55,7 +55,7 @@ public class DefaultSupervisorReservationA2uiService implements SupervisorA2uiDo
         }
         try {
             String resolvedMessage = message == null || message.isBlank()
-                    ? "예약 생성 입력 화면을 준비했습니다."
+                    ? "요청에 맞는 입력 화면을 준비했습니다."
                     : message;
             String surfaceId = "reservation-form-" + context.getSessionId();
             return Optional.of(new SupervisorA2uiService.A2uiRenderResult(

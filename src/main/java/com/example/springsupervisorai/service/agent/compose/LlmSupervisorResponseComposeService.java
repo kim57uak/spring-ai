@@ -6,6 +6,7 @@ import com.example.springsupervisorai.model.SupervisorOutputEvent;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.service.agent.a2ui.common.A2uiComposePromptProvider;
 import com.example.springsupervisorai.service.agent.a2ui.common.A2uiComposePromptProviderRegistry;
+import com.example.springsupervisorai.service.agent.a2ui.common.A2uiTemplateView;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
 import com.example.springsupervisorai.service.agent.compose.A2uiDecisionParser.ComposeA2uiDecision;
 import com.example.springsupervisorai.service.agent.compose.ComposeOutcomeAnalyzer.ComposeOutcomeSummary;
@@ -77,6 +78,10 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
         if (isA2uiEnabled() && a2uiPromptProvider.isPresent()) {
             try {
                 ComposeA2uiDecision decision = composeA2uiDecision(context, outcomeSummary, a2uiPromptProvider.get());
+                if (isPreHitlOnlyView(decision.selectedView())) {
+                    logger.info("Supervisor compose skipped pre-hitl-only A2UI view sessionId={}, selectedView={}",
+                            context.getSessionId(), decision.selectedView());
+                } else {
                 java.util.Optional<SupervisorA2uiService.A2uiRenderResult> a2uiResult =
                         a2uiService.build(context, decision.selectedView(), decision.message());
                 if (a2uiResult.isPresent()) {
@@ -86,6 +91,7 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
                             SupervisorOutputEvent.text(a2uiResult.get().message()),
                             SupervisorOutputEvent.a2ui(a2uiResult.get().protocolPayloadJson())
                     );
+                }
                 }
             } catch (Exception ex) {
                 logger.warn("Supervisor A2UI build failed sessionId={}, error={}", context.getSessionId(), safe(ex.getMessage()));
@@ -98,6 +104,11 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
         return llmRuntime.stream(prompt, context.getModel(), context.getSessionId())
                 .map(SupervisorOutputEvent::text)
                 .onErrorResume(ex -> Flux.just(SupervisorOutputEvent.error(buildFallbackSummary(outcomeSummary))));
+    }
+
+    private boolean isPreHitlOnlyView(A2uiTemplateView selectedView) {
+        return selectedView == A2uiTemplateView.CREATION_FORM
+                || selectedView == A2uiTemplateView.RESERVATION_FORM;
     }
 
     private ComposeA2uiDecision composeA2uiDecision(

@@ -9,6 +9,8 @@ import com.example.springsupervisorai.model.HitlPolicyResult;
 import com.example.springsupervisorai.model.HitlReviewTicket;
 import com.example.springsupervisorai.model.SupervisorExecutionRequest;
 import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -34,6 +36,7 @@ public class SupervisorAgentService {
     private final SupervisorExecutionService executionService;
     private final SupervisorReviewApplicationService reviewApplicationService;
     private final SupervisorStreamProgressService streamProgressService;
+    private final SupervisorPreHitlA2uiService preHitlA2uiService;
 
     /**
      * 서비스 의존성을 생성자 주입으로 초기화한다.
@@ -50,7 +53,8 @@ public class SupervisorAgentService {
             HitlGateService hitlGateService,
             SupervisorExecutionService executionService,
             SupervisorReviewApplicationService reviewApplicationService,
-            SupervisorStreamProgressService streamProgressService
+            SupervisorStreamProgressService streamProgressService,
+            SupervisorPreHitlA2uiService preHitlA2uiService
     ) {
         this.orchestrator = orchestrator;
         this.taskFacade = taskFacade;
@@ -60,6 +64,7 @@ public class SupervisorAgentService {
         this.executionService = executionService;
         this.reviewApplicationService = reviewApplicationService;
         this.streamProgressService = streamProgressService;
+        this.preHitlA2uiService = preHitlA2uiService;
     }
 
     /**
@@ -101,6 +106,17 @@ public class SupervisorAgentService {
     }
 
     private JsonRpcResponse executeSend(Object requestId, String sessionId, String message, String model) {
+        Optional<SupervisorA2uiService.A2uiRenderResult> preHitlA2ui = preHitlA2uiService.build(sessionId, message, model);
+        if (preHitlA2ui.isPresent()) {
+            A2aTaskSnapshot task = taskFacade.createRunningTask(sessionId, message);
+            String payload = preHitlA2ui.get().message() + "\n" + SupervisorA2uiSupport.wrap(preHitlA2ui.get().protocolPayloadJson());
+            taskFacade.markCompleted(task.taskId(), payload);
+            return JsonRpcResponse.success(
+                    requestId,
+                    responseMapper.toTaskView(taskFacade.getTask(task.taskId()).orElse(task))
+            );
+        }
+
         HitlPolicyResult policyResult = hitlGateService.evaluate(sessionId, message, model);
         if (policyResult.required()) {
             return buildWaitingReviewResponse(requestId, sessionId, message, model, policyResult);
@@ -131,6 +147,16 @@ public class SupervisorAgentService {
      * @return 구조화된 supervisor output event flux
      */
     public Flux<SupervisorOutputEvent> streamEvents(String sessionId, String message, String model) {
+        Optional<SupervisorA2uiService.A2uiRenderResult> preHitlA2ui = preHitlA2uiService.build(sessionId, message, model);
+        if (preHitlA2ui.isPresent()) {
+            return Flux.concat(
+                    streamProgressService.preHitlA2uiEvents(),
+                    Flux.just(
+                            SupervisorOutputEvent.text(preHitlA2ui.get().message()),
+                            SupervisorOutputEvent.a2ui(preHitlA2ui.get().protocolPayloadJson())
+                    )
+            );
+        }
         return Flux.concat(
                 streamProgressService.initialHitlEvaluationEvents(sessionId),
                 evaluateHitlPolicyAsync(sessionId, message, model)

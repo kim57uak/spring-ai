@@ -11,6 +11,8 @@ import com.example.springsupervisorai.model.HitlDecisionType;
 import com.example.springsupervisorai.model.HitlPolicyResult;
 import com.example.springsupervisorai.model.HitlReviewTicket;
 import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.model.SupervisorOutputEventType;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
 import org.junit.jupiter.api.Test;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -43,6 +45,7 @@ class SupervisorAgentServiceTest {
         SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -51,9 +54,11 @@ class SupervisorAgentServiceTest {
                 hitlGateService,
                 executionService,
                 reviewApplicationService,
-                streamProgressService
+                streamProgressService,
+                preHitlA2uiService
         );
 
+        when(preHitlA2uiService.build("session-1", "hello", "openai")).thenReturn(Optional.empty());
         CountDownLatch streamStarted = new CountDownLatch(1);
         CountDownLatch canceled = new CountDownLatch(1);
         when(hitlGateService.evaluate("session-1", "hello", "openai")).thenReturn(HitlPolicyResult.notRequired());
@@ -94,6 +99,7 @@ class SupervisorAgentServiceTest {
         SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -102,9 +108,11 @@ class SupervisorAgentServiceTest {
                 hitlGateService,
                 executionService,
                 reviewApplicationService,
-                streamProgressService
+                streamProgressService,
+                preHitlA2uiService
         );
 
+        when(preHitlA2uiService.build("session-1", "예약 생성해줘", "openai")).thenReturn(Optional.empty());
         when(requestIdempotencyService.executeOnce(anyString(), anyString(), any(), any()))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
@@ -159,6 +167,7 @@ class SupervisorAgentServiceTest {
         SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -167,7 +176,8 @@ class SupervisorAgentServiceTest {
                 hitlGateService,
                 executionService,
                 reviewApplicationService,
-                streamProgressService
+                streamProgressService,
+                preHitlA2uiService
         );
 
         HitlReviewTicket canceledTicket = new HitlReviewTicket(
@@ -238,6 +248,7 @@ class SupervisorAgentServiceTest {
         SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -246,7 +257,8 @@ class SupervisorAgentServiceTest {
                 hitlGateService,
                 executionService,
                 reviewApplicationService,
-                streamProgressService
+                streamProgressService,
+                preHitlA2uiService
         );
 
         HitlReviewTicket approvedTicket = new HitlReviewTicket(
@@ -317,6 +329,7 @@ class SupervisorAgentServiceTest {
         SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -325,7 +338,8 @@ class SupervisorAgentServiceTest {
                 hitlGateService,
                 executionService,
                 reviewApplicationService,
-                streamProgressService
+                streamProgressService,
+                preHitlA2uiService
         );
 
         when(reviewApplicationService.decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2"))
@@ -345,5 +359,48 @@ class SupervisorAgentServiceTest {
         assertThat(events).isNotNull();
         assertThat(events).hasSize(2);
         verify(reviewApplicationService).decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2");
+    }
+
+    @Test
+    void streamEventsShouldReturnPreHitlA2uiBeforePolicyEvaluation() {
+        SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
+        A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
+        SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        SupervisorAgentService service = new SupervisorAgentService(
+                orchestrator,
+                taskFacade,
+                responseMapper,
+                requestIdempotencyService,
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService,
+                preHitlA2uiService
+        );
+
+        when(preHitlA2uiService.build("session-1", "상품 생성 화면 보여줘", "openai"))
+                .thenReturn(Optional.of(new SupervisorA2uiService.A2uiRenderResult(
+                        "요청에 맞는 입력 화면을 준비했습니다.",
+                        "{\"messages\":[{\"metadata\":{\"component\":\"creation_form_card\"}}]}"
+                )));
+        when(streamProgressService.preHitlA2uiEvents()).thenReturn(Flux.just(
+                SupervisorOutputEvent.progress(SupervisorProgressSupport.event("planning", 42, "입력 화면을 준비했습니다.", java.util.Map.of()))
+        ));
+
+        java.util.List<SupervisorOutputEvent> events = service.streamEvents("session-1", "상품 생성 화면 보여줘", "openai")
+                .collectList()
+                .block();
+
+        assertThat(events).isNotNull();
+        assertThat(events).hasSize(3);
+        assertThat(events.get(1).content()).contains("요청에 맞는 입력 화면");
+        assertThat(events.get(2).type()).isEqualTo(SupervisorOutputEventType.A2UI);
+        verify(preHitlA2uiService).build("session-1", "상품 생성 화면 보여줘", "openai");
     }
 }

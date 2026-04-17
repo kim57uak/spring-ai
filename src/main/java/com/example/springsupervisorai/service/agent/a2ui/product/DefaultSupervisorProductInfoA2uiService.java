@@ -161,7 +161,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
                     dataMapper.standaloneCreationArguments(context == null ? null : context.getRoutingPlans())
             );
             String resolvedMessage = message == null || message.isBlank()
-                    ? "상품 생성 입력 화면을 준비했습니다."
+                    ? "요청에 맞는 입력 화면을 준비했습니다."
                     : message;
             String surfaceId = "package-product-create-" + (context == null ? "standalone" : context.getSessionId());
             return Optional.of(new com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService.A2uiRenderResult(

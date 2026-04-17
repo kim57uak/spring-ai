@@ -23,6 +23,7 @@ public class SupervisorA2ARequestValidator {
 
     public static final int INVALID_REQUEST = -32600;
     public static final int INVALID_PARAMS = -32602;
+    public static final String A2UI_SUBMIT_ACTION_MARKER = "A2UI_SUBMIT_ACTION:";
 
     private static final int DEFAULT_LIST_LIMIT = 20;
     private static final int MAX_LIST_LIMIT = 200;
@@ -200,6 +201,7 @@ public class SupervisorA2ARequestValidator {
             return "";
         }
         return String.join("\n",
+                A2UI_SUBMIT_ACTION_MARKER + " submit_reservation",
                 "예약생성해줘",
                 "상품코드: " + productCode,
                 "예약자: " + contextNode.path("bookerName").asText("").trim(),
@@ -219,6 +221,7 @@ public class SupervisorA2ARequestValidator {
         }
         String departureDays = flattenDepartureDays(contextNode.path("departureDays"));
         return String.join("\n",
+                A2UI_SUBMIT_ACTION_MARKER + " submit_product_creation",
                 "상품생성해줘",
                 "상품코드: " + saleProductCode,
                 "출발시작일: " + contextNode.path("departureStartDay").asText("").trim(),
