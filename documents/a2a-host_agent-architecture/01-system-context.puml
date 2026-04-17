@@ -12,25 +12,32 @@ rectangle "Client Channel" {
 }
 
 rectangle "Supervisor Agent (spring-ai + springsupervisorai)" {
-  [SupervisorA2AController] as SupervisorA2AController
-  [SupervisorAgentService] as SupervisorService
-  [SupervisorAgentOrchestrator] as SupervisorOrchestrator
-  [LangGraph4J CompiledGraph] as StateGraph
-  [HITL Policy/Decision Service] as HitlService
+  [SupervisorA2AController] as Controller
+  [SupervisorA2ARequestValidator] as Validator
+  [SupervisorAgentService] as Service
+  [SupervisorRequestIdempotencyService] as Idempotency
+  [HitlPolicyService] as HitlPolicy
+  [HitlDecisionService] as HitlDecision
+  [SupervisorA2aLifecycleService] as Lifecycle
+  [SupervisorAgentOrchestrator] as Orchestrator
+  [LangGraph4J CompiledGraph] as Graph
   [SupervisorPlanningService] as Planner
-  [A2AInvocationService] as A2AInvocationService
-  [HandoffPolicyService] as HandoffPolicyService
+  [A2AInvocationService] as Invocation
+  [HandoffPolicyService] as Handoff
+  [SupervisorSwarmCoordinator] as SwarmCoordinator
   [SupervisorResponseComposeService] as Composer
-  [SupervisorProgressSupport] as ProgressSupport
+  [SupervisorA2uiService] as A2uiService
   [DefaultSupervisorLlmRuntime] as LlmRuntime
-  [A2AClientRegistry] as A2ARegistry
+  [A2AClientRegistry] as Registry
   [GlobalExceptionHandler] as Advice
 }
 
-database "Redis" as Redis {
+database "Stores / Redis or InMemory" as Stores {
   [Conversation Store] as ConversationStore
   [Graph Checkpoint Store] as CheckpointStore
   [Swarm State Store] as SwarmStateStore
+  [Review Store] as ReviewStore
+  [Task Store] as TaskStore
 }
 
 cloud "Downstream A2A Agents" {
@@ -39,48 +46,55 @@ cloud "Downstream A2A Agents" {
   [Search Agent A2A] as SearchAgent
 }
 
-artifact "a2a-supervisor.yml" as HostYml
+artifact "application.yml / a2a-supervisor-hitl.yml" as Config
 
 User --> Client
-Client --> SupervisorA2AController : /a2a/supervisor
-SupervisorA2AController --> SupervisorService
-SupervisorA2AController --> Advice
-SupervisorService --> SupervisorOrchestrator
-SupervisorOrchestrator --> StateGraph
-SupervisorOrchestrator --> HitlService
-SupervisorOrchestrator --> Planner
-SupervisorOrchestrator --> A2AInvocationService
-SupervisorOrchestrator --> HandoffPolicyService
-SupervisorOrchestrator --> Composer
-SupervisorOrchestrator --> ProgressSupport
+Client --> Controller : /a2a/supervisor\nJSON-RPC + SSE
+Controller --> Validator
+Controller --> Service
+Controller --> Advice
+Service --> Idempotency
+Service --> HitlPolicy
+Service --> HitlDecision
+Service --> Lifecycle
+Service --> Orchestrator
+Orchestrator --> Graph
+Graph --> Planner
+Graph --> Invocation
+Graph --> Handoff
+Graph --> SwarmCoordinator
+Orchestrator --> Composer
+Composer --> A2uiService
 Planner --> LlmRuntime
+HitlPolicy --> LlmRuntime
 Composer --> LlmRuntime
-A2AInvocationService --> A2ARegistry
-A2ARegistry --> HostYml
-A2AInvocationService --> ProductAgent
-A2AInvocationService --> ReservationAgent
-A2AInvocationService --> SearchAgent
-SupervisorOrchestrator --> ConversationStore
-SupervisorOrchestrator --> CheckpointStore
-SupervisorOrchestrator --> SwarmStateStore
+Invocation --> Registry
+Registry --> Config
+Invocation --> ProductAgent
+Invocation --> ReservationAgent
+Invocation --> SearchAgent
+Orchestrator --> ConversationStore
+Orchestrator --> CheckpointStore
+Orchestrator --> SwarmStateStore
+HitlDecision --> ReviewStore
+Lifecycle --> TaskStore
 
-note right of SupervisorOrchestrator
-Supervisor flow
-- intent planning
-- downstream agent selection
-- A2A call (sync/stream)
-- handoff evaluate/apply (feature flag)
-- result compose
-- history/checkpoint persist
+note right of Service
+Current request entry flow
+- validate + sanitize input
+- HITL pre-gate evaluation
+- create task state
+- execute orchestrator only when review is not required
+- review APPROVE/CANCEL handled via tasks/review/*
 end note
 
-' 2026-04-13 sync with doc 34
-' - add handoff policy boundary and feature-flag flow
-' - progress/trace should be emitted via SupervisorProgressSupport
-' - handoff method enum allowlist + stream capability guard
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
+note right of Orchestrator
+Current execution flow
+- load history/checkpoint/swarm
+- run LangGraph
+- invoke downstream A2A agents
+- evaluate/apply handoff
+- compose text or A2UI response
+- persist history/checkpoint/task state
+end note
 @enduml

@@ -12,6 +12,7 @@ class SupervisorAgentRequest {
 }
 
 class SupervisorPlanningContext {
+  +taskId: String
   +sessionId: String
   +userMessage: String
   +model: String
@@ -19,22 +20,40 @@ class SupervisorPlanningContext {
   +routingPlans: List<RoutingPlan>
   +results: List<DownstreamCallResult>
   +checkpointId: String
-  +hitlRequired: boolean
-  +hitlStatus: String
+  +currentNode: String
+  +routingIndex: int
   +swarmStateVersion: long
+  +swarmSharedFacts: Map<String, Object>
 }
 
-class SwarmSharedState {
+class SwarmState {
+  +taskId: String
+  +sessionId: String
   +stateVersion: long
+  +updatedAt: Instant
   +sharedFacts: Map<String, Object>
   +eventLog: List<Map<String, Object>>
 }
 
-class HitlReviewContext {
+class HitlPolicyResult {
   +required: boolean
-  +decision: String
+  +policyId: String
+  +reason: String
+}
+
+class HitlReviewTicket {
+  +taskId: String
+  +sessionId: String
+  +message: String
+  +model: String
+  +policyId: String
+  +policyReason: String
+  +status: HitlReviewStatus
   +decisionReason: String
+  +requestedAt: Instant
   +expiresAt: Instant
+  +decidedAt: Instant
+  +decisionId: String
 }
 
 class RoutingPlan {
@@ -43,7 +62,7 @@ class RoutingPlan {
   +reason: String
   +priority: int
   +arguments: Map<String, Object>
-  +sourceType: String  ' PLANNER | HANDOFF
+  +sourceType: String
   +handoffDepth: int
   +parentAgentKey: String
 }
@@ -63,6 +82,7 @@ class DownstreamCallResult {
 }
 
 class HandoffDirective {
+  +fromAgentKey: String
   +nextAgentKey: String
   +method: String
   +reason: String
@@ -71,18 +91,38 @@ class HandoffDirective {
 
 class HandoffValidationResult {
   +accepted: boolean
-  +rejectReason: String
+  +reasonCode: String
+  +directive: HandoffDirective
+  +plan: RoutingPlan
   +hopCount: int
 }
 
 class SupervisorGraphState {
   +SESSION_ID
+  +TASK_ID
   +USER_MESSAGE
   +MODEL
   +HISTORY
-  +ROUTING_PLANS
-  +DOWNSTREAM_RESULTS
+  +CHECKPOINT_ID
   +CURRENT_NODE
+  +ROUTING_PLANS
+  +ROUTING_INDEX
+  +CURRENT_PLAN
+  +DOWNSTREAM_RESULTS
+  +LAST_INVOKE_BATCH_RESULTS
+  +HANDOFF_VALIDATIONS
+  +HANDOFF_ENABLED
+  +SWARM_SHARED_FACTS
+  +SWARM_STATE_VERSION
+}
+
+interface HitlPolicyService {
+  +evaluate(sessionId, message, model): HitlPolicyResult
+}
+
+interface HitlDecisionService {
+  +openReview(taskId, sessionId, message, model, policy): HitlReviewTicket
+  +decide(taskId, sessionId, decision, reason, decisionId): Optional<HitlReviewTicket>
 }
 
 interface SupervisorPlanningService {
@@ -94,7 +134,7 @@ interface A2AInvocationService {
 }
 
 interface HandoffPolicyService {
-  +evaluate(result, context): HandoffValidationResult
+  +evaluate(context, batchResults): List<HandoffValidationResult>
 }
 
 interface SupervisorResponseComposeService {
@@ -104,18 +144,11 @@ interface SupervisorResponseComposeService {
 SupervisorAgentRequest --> SupervisorPlanningContext
 SupervisorPlanningContext --> RoutingPlan
 SupervisorPlanningContext --> DownstreamCallResult
+SupervisorPlanningContext --> SwarmState
 DownstreamCallResult --> HandoffDirective
-SupervisorPlanningContext --> HandoffValidationResult
-SupervisorPlanningContext --> SwarmSharedState
-SupervisorPlanningContext --> HitlReviewContext
+HandoffValidationResult --> HandoffDirective
+HandoffValidationResult --> RoutingPlan
 SupervisorGraphState --> SupervisorPlanningContext
-
-' 2026-04-13 sync with doc 34
-' - add handoff domain objects and routing/result extensions
-' - handoff is feature-flagged and validated by policy service
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
+HitlPolicyService --> HitlPolicyResult
+HitlDecisionService --> HitlReviewTicket
 @enduml

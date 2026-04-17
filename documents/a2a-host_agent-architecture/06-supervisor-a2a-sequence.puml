@@ -8,95 +8,90 @@ skinparam ParticipantPadding 20
 
 actor User
 participant "SupervisorA2AController" as Controller
+participant "SupervisorA2ARequestValidator" as Validator
 participant "SupervisorAgentService" as Service
+participant "HitlPolicyService" as HitlPolicy
+participant "HitlDecisionService" as HitlDecision
+participant "SupervisorA2aLifecycleService" as Lifecycle
 participant "SupervisorAgentOrchestrator" as Orchestrator
-participant "LangGraph CompiledGraph" as StateGraph
-participant "Swarm State Store" as SwarmStore
+participant "LangGraph CompiledGraph" as Graph
 participant "SupervisorPlanningService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Planner #FFE7A8
 participant "DefaultSupervisorLlmRuntime" as Runtime #FFF4CC
-participant "HITL Policy Service" as HitlPolicy
-participant "HITL Decision Service" as HitlDecision
 participant "A2AInvocationService" as Invoker
-participant "Handoff Policy Service" as HandoffPolicy
+participant "HandoffPolicyService" as HandoffPolicy
+participant "SupervisorSwarmCoordinator" as Swarm
 participant "A2AClientRegistry" as Registry
 participant "A2AJsonRpcClient" as A2AClient
-participant "SupervisorProgressSupport" as Progress
 participant "SupervisorResponseComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Composer #FFE7A8
 participant "Product Agent A2A" as ProductAgent
 participant "Reservation Agent A2A" as ReservationAgent
 participant "Search Agent A2A" as SearchAgent
 
-User -> Controller : POST /a2a/supervisor (Accept: text/event-stream)
-Controller -> Service : stream(sessionId, message, model)
-Service -> Orchestrator : execute(request)
-Orchestrator -> StateGraph : invoke(state)
-Orchestrator -> SwarmStore : load shared state
-
-StateGraph -> Planner : plan(context)
-Planner -> Runtime : complete(planning prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-Runtime --> Planner : routing plans
-Planner --> StateGraph : routing plans
-StateGraph -> HitlPolicy : evaluate(context, plans)
-HitlPolicy --> StateGraph : required? + reason
+User -> Controller : POST /a2a/supervisor\nmessage/send or message/stream
+Controller -> Validator : precheck + validate params
+Validator --> Controller : validated params
+Controller -> Service : send(...) or stream(...)
+Service -> HitlPolicy : evaluate(sessionId, message, model)
+HitlPolicy -> Runtime : complete(hitl policy prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
+Runtime --> HitlPolicy : HitlPolicyResult
 
 alt HITL required
-  StateGraph -> HitlDecision : wait/resolve decision
-  HitlDecision --> StateGraph : APPROVE or CANCEL
-else HITL bypass
-end
+  Service -> Lifecycle : createAndMarkWaitingReview(...)
+  Service -> HitlDecision : openReview(...)
+  HitlDecision -> Swarm : review facts/event update
+  Service --> Controller : WAITING_REVIEW task or hitl_waiting progress
+else HITL passed
+  Service -> Lifecycle : createAndMarkRunning(...)
+  Service -> Orchestrator : execute(request, taskId)
+  Orchestrator -> Swarm : load latest session state
+  Orchestrator -> Graph : invoke(state)
 
-alt decision=APPROVE
-  StateGraph -> Invoker : invoke(plan, context)
-  Invoker -> Registry : resolve(agentKey)
-  Registry --> Invoker : endpoint/method/timeout
-  Invoker -> A2AClient : call JSON-RPC
+  Graph -> Planner : plan(context)
+  Planner -> Runtime : complete(planning prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
+  Runtime --> Planner : routing plans
 
-  alt agentKey=product
-    A2AClient -> ProductAgent : message/send or message/stream
-    ProductAgent --> A2AClient : task/result
-  else agentKey=reservation
-    A2AClient -> ReservationAgent : message/send or message/stream
-    ReservationAgent --> A2AClient : task/result
-  else agentKey=search
-    A2AClient -> SearchAgent : message/send or message/stream
-    SearchAgent --> A2AClient : task/result
+  loop for selected routing batches
+    Graph -> Invoker : invoke(plan, context)
+    Invoker -> Registry : resolve(agentKey, method)
+    Registry --> Invoker : endpoint/method/timeout
+    Invoker -> A2AClient : call JSON-RPC / stream
+
+    alt product route
+      A2AClient -> ProductAgent : downstream A2A call
+      ProductAgent --> A2AClient : result
+    else reservation route
+      A2AClient -> ReservationAgent : downstream A2A call
+      ReservationAgent --> A2AClient : result
+    else search route
+      A2AClient -> SearchAgent : downstream A2A call
+      SearchAgent --> A2AClient : result
+    end
+
+    Invoker --> Graph : DownstreamCallResult
+    Graph -> Swarm : recordInvocationBatch(...)
+    Graph -> HandoffPolicy : evaluate(context, batchResults)
+    HandoffPolicy --> Graph : validations
+    Graph -> Swarm : recordHandoffEvaluations(...)
+    Graph -> Swarm : recordNodeEvent(...)
   end
 
-  Invoker --> StateGraph : DownstreamCallResult
-  StateGraph -> HandoffPolicy : evaluate(result, context)
-  alt handoff.enabled=false
-    HandoffPolicy --> StateGraph : skip (HANDOFF_SKIPPED_BY_FLAG)
-  else handoff applicable
-    HandoffPolicy --> StateGraph : append next RoutingPlan (source=HANDOFF)
-  else policy reject
-    HandoffPolicy --> StateGraph : skip (reason=allowlist/method/hop-limit)
-  end
-  StateGraph -> Progress : line(stage=handoff, metadata)
-  StateGraph -> Composer : compose(context + all results)
-  Composer -> Runtime : stream(compose prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-  Runtime --> Composer : token chunks
-  Composer --> Orchestrator : response chunks
-else decision=CANCEL
-  StateGraph --> Orchestrator : canceled
+  Orchestrator -> Composer : streamCompose(context)
+  Composer -> Runtime : stream/complete(compose prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
+  Runtime --> Composer : chunks or A2UI decision
+  Composer --> Orchestrator : response chunks / A2UI payload
+  Orchestrator --> Service : result stream
+  Service --> Controller : JSON-RPC or SSE response
 end
-Orchestrator --> Service : chunks
-Service --> Controller : chunks
-Controller --> User : SSE stream
-Orchestrator -> SwarmStore : save decision/event log
+
+Controller --> User : task response / chunk / a2ui / done
 
 note right of HandoffPolicy
-Handoff guardrails
-- method enum allowlist only
-- stream handoff only if downstream supports streaming
-- max handoff hops + duplicate path guard
+Current handoff guardrails
+- feature flag
+- route allowlist
+- allowed methods only
+- stream capability check
+- max hops / recent path guard
+- per-minute rate limit
 end note
-
-' 2026-04-13 sync with doc 34
-' - add handoff policy evaluation and feature-flag skip path
-' - handoff status is emitted through SupervisorProgressSupport
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
 @enduml

@@ -14,6 +14,7 @@ package "com.example.springsupervisorai" {
 
   package "controller" {
     class SupervisorA2AController
+    class SupervisorA2ARequestValidator
   }
 
   package "service" {
@@ -31,6 +32,7 @@ package "com.example.springsupervisorai" {
       interface A2AInvocationService
       class DefaultA2AInvocationService
       class A2AClientRegistry
+      class DownstreamAgentCardCache
     }
     package "handoff" {
       interface HandoffPolicyService
@@ -46,7 +48,23 @@ package "com.example.springsupervisorai" {
     }
     package "hitl" {
       interface HitlPolicyService
+      class LlmHitlPolicyService
       interface HitlDecisionService
+      class DefaultHitlDecisionService
+    }
+    package "swarm" {
+      interface SupervisorSwarmCoordinator
+      class DefaultSupervisorSwarmCoordinator
+    }
+    package "a2ui" {
+      interface SupervisorA2uiService
+      interface A2uiComposePromptProvider
+    }
+    package "runtime" {
+      interface SupervisorLlmRuntime
+      class DefaultSupervisorLlmRuntime
+      interface SupervisorChatGateway
+      class ReflectionSupervisorChatGateway
     }
     package "store" {
       interface ConversationStore
@@ -56,42 +74,49 @@ package "com.example.springsupervisorai" {
     }
   }
 
-  package "model" {
-    class SupervisorAgentRequest
-    class SupervisorPlanningContext
-    class SwarmSharedState
-    class HitlReviewContext
-    class RoutingPlan
-    class DownstreamCallResult
-    class HandoffDirective
-    class HandoffValidationResult
-    class SupervisorGraphState
-  }
-
   package "a2a" {
     class A2AJsonRpcClient
     class A2ARequestMapper
     class A2AResponseMapper
   }
+
+  package "a2a.lifecycle" {
+    class SupervisorA2aLifecycleService
+  }
+
+  package "a2a.idempotency" {
+    class SupervisorRequestIdempotencyService
+  }
+
+  package "model" {
+    class SupervisorAgentRequest
+    class SupervisorPlanningContext
+    class SwarmState
+    class HitlPolicyResult
+    class HitlReviewTicket
+    class RoutingPlan
+    class DownstreamCallResult
+    class HandoffDirective
+    class HandoffValidationResult
+    class SupervisorGraphState
+    class SupervisorRuntimeState
+  }
+
+  package "exception" {
+    class A2ARoutingException
+    class DownstreamA2AException
+    class SupervisorChatProcessingException
+  }
 }
 
 note bottom
 Rules
-- Supervisor agent는 하위 agent 내부 구현에 의존하지 않는다
+- Controller는 JSON-RPC/SSE 입구와 params 검증만 담당한다
+- Service는 HITL pre-gate, task lifecycle, idempotency를 담당한다
+- Orchestrator는 graph 실행과 persistence coordination을 담당한다
+- Graph 내부에서 planning/invoke/handoff를 수행하고 compose는 graph 외부에서 수행한다
 - 하위 agent 연동은 오직 A2A(JSON-RPC/SSE) 경계로 처리한다
-- SupervisorA2AController는 orchestration 세부를 알지 않는다
-- orchestrator는 포트(interface)에만 의존한다
-- Spring AI + LangGraph4J + Redis 구성은 기존 정책과 동일하게 유지한다
-- handoff는 `service.agent.handoff`로 분리하고 feature flag로 on/off한다
-- 진행상태/생각과정 출력은 SupervisorProgressSupport 공통 모듈을 사용한다
+- A2UI는 compose 결과 이후 선택적으로 부착된다
+- Swarm coordinator는 store 직접 노출 대신 rule/event mutation을 캡슐화한다
 end note
-
-' 2026-04-13 sync with doc 34
-' - add handoff package/model and progress support
-' - enforce handoff guardrails as policy-layer concern
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
 @enduml

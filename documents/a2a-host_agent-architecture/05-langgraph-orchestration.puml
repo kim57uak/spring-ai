@@ -8,70 +8,56 @@ skinparam ActivityDiamondFontSize 12
 
 start
 
-:Request validated;
-:Load history/checkpoint;
+:Service layer HITL pre-check;
+if (review required?) then (yes)
+  :create WAITING_REVIEW task;
+  :open review ticket;
+  stop
+endif
+
+:Create RUNNING task;
+:Load history/checkpoint/swarm;
 :Build SupervisorGraphState;
 :Invoke CompiledGraph;
 
-#FFE7A8:PLAN_INTENT node;
+#FFE7A8:PLAN node;
 note right
 <size:10>CallLLM</size>
 end note
-:RISK_ASSESS node;
-:HITL_GATE node;
-:WAIT_REVIEW node (if required);
-:APPLY_REVIEW node (APPROVE/CANCEL);
-:SELECT_DOWNSTREAM node;
 
-if (review decision = CANCEL?) then (yes)
-  :mark canceled + stop compose;
-  stop
-elseif (routing plan exists?) then (yes)
-  :CALL_A2A node;
+:SELECT node;
+if (routing plan exists?) then (yes)
+  :INVOKE node;
+  :record invocation batch to SwarmState;
   :HANDOFF_EVALUATE node;
-  if (handoff.enabled = false?) then (yes)
-    :HANDOFF_SKIPPED_BY_FLAG;
-  elseif (valid handoff directive?) then (yes)
+  if (accepted handoff exists?) then (yes)
     :HANDOFF_APPLY node;
   else (no)
-    :HANDOFF_SKIPPED_BY_POLICY;
+    :keep original routing queue;
   endif
-  :Emit progress via SupervisorProgressSupport;
+  :MERGE node;
   if (more plans?) then (yes)
-    :loop next routing plan;
+    :loop back to SELECT;
   endif
 else (no)
 endif
 
-:MERGE_RESULTS node;
-#FFE7A8:COMPOSE_RESPONSE node;
+:COMPOSE node entered;
+#FFE7A8:Compose outside graph;
 note right
 <size:10>CallLLM</size>
 end note
-:Persist history/checkpoint;
+:Persist history/checkpoint/task state;
 
 stop
 
 note right
-Graph contract
-- nodes: plan, risk_assess, hitl_gate, wait_review, apply_review, select, invoke, merge, compose
-- handoff branch: invoke -> handoff_evaluate -> (handoff_apply|handoff_skipped) -> merge
-- edge: select -> (invoke|compose)
-- invoke loop has max iteration guard
-- downstream call boundary is A2A only
-- data mutation(create/update/delete) requests always pass WAIT_REVIEW
-- graph state snapshot + swarm shared state must be persisted together
-- handoff feature flag default is off (`handoff.enabled=false`)
-- handoff method must be in allowed enum
-- stream handoff requires downstream streaming support
+Current graph contract
+- nodes: plan, select, invoke, handoff_evaluate, handoff_apply, merge, compose
+- no HITL wait node inside graph
+- select -> (invoke | compose)
+- invoke batch size is bounded by execution.maxConcurrency
+- max iteration guard exists
+- handoff is feature-flagged and policy-validated
 end note
-
-' 2026-04-13 sync with doc 34
-' - add handoff evaluate/apply/skipped branch
-' - add feature-flag behavior and progress common module usage
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
 @enduml

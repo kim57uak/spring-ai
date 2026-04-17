@@ -6,26 +6,34 @@ skinparam shadowing false
 skinparam componentStyle rectangle
 
 node "Supervisor Agent Spring Boot Runtime" {
-  [SupervisorA2AController] as SupervisorA2AController
-  [SupervisorAgentService] as SupervisorService
-  [SupervisorAgentOrchestrator] as SupervisorOrchestrator
+  [SupervisorA2AController] as Controller
+  [SupervisorA2ARequestValidator] as Validator
+  [SupervisorAgentService] as Service
+  [SupervisorA2aLifecycleService] as Lifecycle
+  [SupervisorRequestIdempotencyService] as Idempotency
+  [SupervisorAgentOrchestrator] as Orchestrator
   [LangGraphSupervisorStateGraphFactory] as GraphFactory
   [LlmSupervisorPlanningService] as Planner
   [DefaultA2AInvocationService] as Invoker
   [DefaultHandoffPolicyService] as HandoffPolicy
+  [DefaultSupervisorSwarmCoordinator] as SwarmCoordinator
   [LlmSupervisorResponseComposeService] as Composer
-  [DefaultHitlPolicyService] as HitlPolicy
+  [DefaultSupervisorProductInfoA2uiService] as A2uiService
+  [LlmHitlPolicyService] as HitlPolicy
   [DefaultHitlDecisionService] as HitlDecision
   [A2AClientRegistry] as Registry
   [A2AJsonRpcClient] as A2AClient
-  [SupervisorProgressSupport] as ProgressSupport
   [DefaultSupervisorLlmRuntime] as LlmRuntime
+  [ReflectionSupervisorChatGateway] as ChatGateway
+  [SupervisorProgressSupport] as ProgressSupport
 }
 
-database "Redis" as Redis {
-  [RedisConversationStore] as ConversationStore
-  [RedisGraphCheckpointStore] as CheckpointStore
-  [RedisSupervisorSwarmStateStore] as SwarmStateStore
+database "Redis / InMemory Stores" as Stores {
+  [ConversationStore] as ConversationStore
+  [GraphCheckpointStore] as CheckpointStore
+  [SupervisorSwarmStateStore] as SwarmStateStore
+  [SupervisorReviewStore] as ReviewStore
+  [A2ATaskStore] as TaskStore
 }
 
 cloud "LLM Providers" as LlmProviders
@@ -36,37 +44,43 @@ node "Downstream A2A Agents" {
   [Search Agent] as SearchAgent
 }
 
-artifact "a2a-supervisor.yml" as SupervisorConfig
+artifact "application.yml / a2a-supervisor-hitl.yml" as Config
 
-SupervisorA2AController --> SupervisorService
-SupervisorService --> SupervisorOrchestrator
-SupervisorOrchestrator --> GraphFactory
-SupervisorOrchestrator --> Planner
-SupervisorOrchestrator --> Invoker
-SupervisorOrchestrator --> HandoffPolicy
-SupervisorOrchestrator --> Composer
-SupervisorOrchestrator --> HitlPolicy
-SupervisorOrchestrator --> HitlDecision
-SupervisorOrchestrator --> ConversationStore
-SupervisorOrchestrator --> CheckpointStore
-SupervisorOrchestrator --> SwarmStateStore
-SupervisorOrchestrator --> ProgressSupport
+Controller --> Validator
+Controller --> Service
+Service --> Idempotency
+Service --> HitlPolicy
+Service --> HitlDecision
+Service --> Lifecycle
+Service --> Orchestrator
+Orchestrator --> GraphFactory
+GraphFactory --> Planner
+GraphFactory --> Invoker
+GraphFactory --> HandoffPolicy
+GraphFactory --> SwarmCoordinator
+Orchestrator --> Composer
+Composer --> A2uiService
 Planner --> LlmRuntime
+HitlPolicy --> LlmRuntime
 Composer --> LlmRuntime
-LlmRuntime --> LlmProviders
+LlmRuntime --> ChatGateway
+ChatGateway --> LlmProviders
 Invoker --> Registry
-Registry --> SupervisorConfig
+Registry --> Config
 Invoker --> A2AClient
 A2AClient --> ProductAgent
 A2AClient --> ReservationAgent
 A2AClient --> SearchAgent
+Orchestrator --> ConversationStore
+Orchestrator --> CheckpointStore
+SwarmCoordinator --> SwarmStateStore
+HitlDecision --> ReviewStore
+HitlDecision --> SwarmStateStore
+Lifecycle --> TaskStore
+Orchestrator --> ProgressSupport
 
-' 2026-04-13 sync with doc 34
-' - deploy handoff policy service as dedicated runtime component
-' - use SupervisorProgressSupport for unified trace/progress formatting
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
+note right of Service
+HITL is enforced before graph execution.
+WAITING_REVIEW requests do not enter orchestrator.
+end note
 @enduml
