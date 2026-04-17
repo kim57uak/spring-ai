@@ -8,58 +8,48 @@ skinparam componentStyle rectangle
 class SupervisorA2AController
 class SupervisorAgentService
 class SupervisorAgentOrchestrator
-class HitlDecisionService
-class HandoffPolicyService
+class LlmHitlPolicyService
+class LlmSupervisorResponseComposeService
 class DefaultA2AInvocationService
 class A2AJsonRpcClient
 class GlobalExceptionHandler
-class SupervisorSwarmStateStore
 
-class ChatProcessingException
-class DownstreamA2AException
 class A2ARoutingException
-class HitlDecisionRequiredException
-class HitlCanceledException
-class HandoffValidationException
+class DownstreamA2AException
+class SupervisorChatProcessingException
+class ChatProcessingException
 class WebClientResponseException
+class HttpMessageNotReadableException
+class IllegalArgumentException
+class IllegalStateException
 
 SupervisorA2AController --> SupervisorAgentService
 SupervisorAgentService --> SupervisorAgentOrchestrator
-SupervisorAgentOrchestrator --> HitlDecisionService
-SupervisorAgentOrchestrator --> HandoffPolicyService
+SupervisorAgentService --> LlmHitlPolicyService
+SupervisorAgentOrchestrator --> LlmSupervisorResponseComposeService
 SupervisorAgentOrchestrator --> DefaultA2AInvocationService
-SupervisorAgentOrchestrator --> SupervisorSwarmStateStore
 DefaultA2AInvocationService --> A2AJsonRpcClient
 
-A2AJsonRpcClient --> DownstreamA2AException : throw
-DefaultA2AInvocationService --> A2ARoutingException : throw
-SupervisorAgentOrchestrator --> ChatProcessingException : throw
-HitlDecisionService --> HitlDecisionRequiredException : throw
-HitlDecisionService --> HitlCanceledException : throw
-HandoffPolicyService --> HandoffValidationException : throw
+DefaultA2AInvocationService --> A2ARoutingException : invalid route / method
+A2AJsonRpcClient --> DownstreamA2AException : downstream A2A failure
+LlmSupervisorResponseComposeService --> SupervisorChatProcessingException : compose/planning failure
+SupervisorAgentOrchestrator --> IllegalStateException : state/persistence mismatch
+SupervisorA2AController --> IllegalArgumentException : validator / params
+SupervisorA2AController --> HttpMessageNotReadableException : invalid JSON
+A2AJsonRpcClient --> WebClientResponseException : upstream HTTP failure
 
 GlobalExceptionHandler --> ChatProcessingException : @ExceptionHandler
-GlobalExceptionHandler --> DownstreamA2AException : @ExceptionHandler
-GlobalExceptionHandler --> A2ARoutingException : @ExceptionHandler
-GlobalExceptionHandler --> HitlDecisionRequiredException : @ExceptionHandler
-GlobalExceptionHandler --> HitlCanceledException : @ExceptionHandler
-GlobalExceptionHandler --> HandoffValidationException : @ExceptionHandler
-GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
+GlobalExceptionHandler --> RuntimeException : name-based mapping\nA2ARoutingException / DownstreamA2AException /\nSupervisorChatProcessingException
 GlobalExceptionHandler --> IllegalArgumentException : @ExceptionHandler
 GlobalExceptionHandler --> IllegalStateException : @ExceptionHandler
+GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
+GlobalExceptionHandler --> HttpMessageNotReadableException : @ExceptionHandler
 
 note bottom of GlobalExceptionHandler
 Return sanitized response
 - /a2a/** -> JsonRpcResponse(error)
-- no downstream raw payload leak
+- non-A2A -> ErrorResponse
+- no downstream raw body/header leak
+- many JSON-RPC validation errors are returned directly by controller/validator without throwing
 end note
-
-' 2026-04-13 sync with doc 34
-' - add handoff validation exception mapping
-' - when handoff.enabled=false, directive is skipped (not failed)
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
 @enduml

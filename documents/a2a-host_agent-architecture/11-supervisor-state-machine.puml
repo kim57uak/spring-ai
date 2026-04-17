@@ -1,65 +1,65 @@
 @startuml
 !pragma layout smetana
-title 11. Supervisor Agent State Machine
+title 11. Supervisor Agent Request / Runtime State Machine
 
 skinparam shadowing false
 
-[*] --> REQUEST_VALIDATED
+[*] --> REQUEST_RECEIVED
+REQUEST_RECEIVED --> HITL_EVALUATING
+
+HITL_EVALUATING --> WAITING_REVIEW : HitlPolicyResult.required=true
+HITL_EVALUATING --> REQUEST_VALIDATED : HitlPolicyResult.required=false
+
+WAITING_REVIEW --> RUNNING_APPROVED : tasks/review/decide APPROVE
+WAITING_REVIEW --> CANCELED : tasks/review/decide CANCEL
+
+RUNNING_APPROVED --> REQUEST_VALIDATED
+
 REQUEST_VALIDATED --> HISTORY_LOADED
 HISTORY_LOADED --> PLANNED
-PLANNED --> HITL_EVALUATING
-HITL_EVALUATING --> HITL_WAITING : review required
-HITL_EVALUATING --> ROUTING_SELECTED : review not required
-HITL_WAITING --> HITL_APPROVED : decision=APPROVE
-HITL_WAITING --> HITL_CANCELED : decision=CANCEL
-HITL_APPROVED --> ROUTING_SELECTED
-HITL_CANCELED --> COMPLETED
-
+PLANNED --> ROUTING_SELECTED
 ROUTING_SELECTED --> A2A_CALLING : plans exist
-ROUTING_SELECTED --> COMPOSING : no plan
+ROUTING_SELECTED --> COMPOSING : no plan / max iteration reached
 
-A2A_CALLING --> HANDOFF_EVALUATING : call success
-A2A_CALLING --> HUMAN_MESSAGE : call failed and unrecoverable
-HANDOFF_EVALUATING --> HANDOFF_SKIPPED : handoff.enabled=false
-HANDOFF_EVALUATING --> HANDOFF_APPLIED : valid handoff directive
-HANDOFF_EVALUATING --> HANDOFF_SKIPPED : no/invalid handoff directive
+A2A_CALLING --> HANDOFF_EVALUATING
+HANDOFF_EVALUATING --> HANDOFF_APPLIED : accepted handoff exists
+HANDOFF_EVALUATING --> HANDOFF_SKIPPED : none / rejected / flag disabled
 HANDOFF_APPLIED --> A2A_RESULT_MERGED
 HANDOFF_SKIPPED --> A2A_RESULT_MERGED
 A2A_RESULT_MERGED --> ROUTING_SELECTED : next plan exists
-A2A_RESULT_MERGED --> COMPOSING : all plans done
+A2A_RESULT_MERGED --> COMPOSING : all plans consumed
 
 COMPOSING --> COMPLETED
-HUMAN_MESSAGE --> COMPLETED
+CANCELED --> [*]
 COMPLETED --> [*]
 
-note right of A2A_CALLING
-Per-call policy
-- endpoint allowlist check
-- timeout/retry
-- circuit breaker
+note right of WAITING_REVIEW
+This is a task/review lifecycle state,
+not SupervisorRuntimeState.
+end note
+
+note right of REQUEST_VALIDATED
+Current runtime enum sequence begins here.
+SupervisorRuntimeState values:
+- REQUEST_VALIDATED
+- HISTORY_LOADED
+- PLANNED
+- ROUTING_SELECTED
+- A2A_CALLING
+- HANDOFF_EVALUATING
+- HANDOFF_APPLIED
+- HANDOFF_SKIPPED
+- A2A_RESULT_MERGED
+- COMPOSING
+- COMPLETED
 end note
 
 note right of HANDOFF_EVALUATING
-Handoff policy
-- feature flag (`handoff.enabled`)
-- method enum allowlist
-- stream support validation
-- max hop / duplicate path guard
+Policy checks
+- feature flag
+- route allowlist
+- method allowlist
+- stream support
+- max hops / recent path / rate limit
 end note
-
-note left of HITL_WAITING
-Swarm state snapshot is updated
-- review request metadata
-- stateVersion
-- decision event log
-end note
-
-' 2026-04-13 sync with doc 34
-' - add handoff evaluating/applied/skipped states
-' - include feature-flag and handoff guardrails
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
 @enduml

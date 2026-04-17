@@ -6,60 +6,67 @@ skinparam shadowing false
 
 actor User
 participant "SupervisorA2AController" as Controller
+participant "SupervisorA2ARequestValidator" as Validator
 participant "SupervisorAgentService" as Service
+participant "HitlPolicyService" as HitlPolicy
+participant "SupervisorA2aLifecycleService" as Lifecycle
+participant "HitlDecisionService" as HitlDecision
 participant "SupervisorAgentOrchestrator" as Orchestrator
-participant "HITL Decision Service" as HitlDecision
-participant "Handoff Policy Service" as HandoffPolicy
 participant "SupervisorResponseComposeService" as Composer
-participant "SupervisorProgressSupport" as Progress
 participant "DefaultSupervisorLlmRuntime" as Runtime
-participant "ModelChatServiceFactory" as Factory
-participant "Provider ChatService" as Provider
 participant "Conversation Store" as ConversationStore
 participant "Checkpoint Store" as CheckpointStore
-participant "Swarm State Store" as SwarmStore
 
-User -> Controller : stream request (/a2a/supervisor)
-Controller -> Service : stream(...)
-Service -> Orchestrator : execute(request)
-Orchestrator --> Controller : preface summary chunk
-Controller --> User : SSE(summary)
+User -> Controller : POST /a2a/supervisor\nAccept: text/event-stream
+Controller -> Validator : precheck + validateSendParams
+Validator --> Controller : message + model
+Controller -> Service : stream(sessionId, message, model)
+Service --> Controller : progress(stage=hitl, 2%)
+Controller --> User : event: chunk
 
-Orchestrator -> HitlDecision : check APPROVE/CANCEL
-alt decision=APPROVE
-  Orchestrator -> HandoffPolicy : evaluate(results/context)
-  HandoffPolicy --> Orchestrator : handoff apply/skip
-  Orchestrator -> Progress : line(stage=handoff, metadata)
+Service -> HitlPolicy : evaluate(...)
+alt review required
+  Service -> Lifecycle : createAndMarkWaitingReview(...)
+  Service -> HitlDecision : openReview(...)
+  Service --> Controller : progress(stage=hitl, 5%)
+  Service --> Controller : progress(stage=hitl_waiting, 8%)
+  Controller --> User : event: chunk
+  Controller --> User : event: chunk
+  Controller --> User : event: done
+else review not required
+  Service -> Lifecycle : createAndMarkRunning(...)
+  Service -> Orchestrator : execute(request, taskId)
+  Orchestrator --> Controller : progress(initializing...)
+  Controller --> User : event: chunk
+
   Orchestrator -> Composer : streamCompose(context)
   Composer -> Runtime : stream(prompt, model, sessionId)
-  Runtime -> Factory : resolveStream(model)
-  Factory --> Runtime : StreamChatService
-  Runtime -> Provider : streamGenerate
-  Provider --> Runtime : Flux<String>
   Runtime --> Composer : Flux<String>
 
-  loop token chunks
-    Composer --> Orchestrator : chunk
-    Orchestrator --> Service : chunk
-    Service --> Controller : chunk
-    Controller --> User : SSE(token)
+  loop compose output
+    alt plain text chunk
+      Composer --> Orchestrator : chunk
+      Orchestrator --> Controller : chunk
+      Controller --> User : event: chunk
+    else wrapped A2UI payload
+      Composer --> Orchestrator : wrapped A2UI
+      Orchestrator --> Controller : wrapped A2UI
+      Controller --> User : event: a2ui
+    end
   end
-else decision=CANCEL
-  Orchestrator --> Controller : canceled message
-  Controller --> User : SSE(cancel)
+
+  Orchestrator -> ConversationStore : save history
+  Orchestrator -> CheckpointStore : save checkpoint
+  Orchestrator --> Controller : progress(completed...)
+  Controller --> User : event: chunk
+  Controller --> User : event: done
 end
 
-Orchestrator -> ConversationStore : save history
-Orchestrator -> CheckpointStore : save checkpoint
-Orchestrator -> SwarmStore : save hitl/event state
-Controller --> User : SSE complete
-
-' 2026-04-13 sync with doc 34
-' - stream response path includes handoff evaluate/apply or skip
-' - progress/trace emitted via SupervisorProgressSupport
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
+note right of Controller
+Current SSE framing
+- event: chunk
+- event: a2ui
+- event: error
+- event: done
+end note
 @enduml
