@@ -215,6 +215,26 @@ public class SupervisorAgentService {
     }
 
     /**
+     * HITL review 결정을 반영하고, 필요 시 후속 실행을 스트리밍한다.
+     *
+     * @param sessionId 호출자 세션 id
+     * @param taskId task id
+     * @param decision 결정 문자열(APPROVE/CANCEL)
+     * @param reason 결정 사유
+     * @param decisionId 결정 idempotency id
+     * @return 구조화된 supervisor output event flux
+     */
+    public Flux<SupervisorOutputEvent> decideReviewStream(
+            String sessionId,
+            String taskId,
+            String decision,
+            String reason,
+            String decisionId
+    ) {
+        return reviewApplicationService.decideReviewStream(sessionId, taskId, decision, reason, decisionId);
+    }
+
+    /**
      * HITL 요청이 필요한 경우 대기 상태 task/view 응답을 생성한다.
      */
     private JsonRpcResponse buildWaitingReviewResponse(

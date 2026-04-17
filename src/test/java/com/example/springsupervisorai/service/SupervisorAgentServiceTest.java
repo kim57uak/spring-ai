@@ -306,4 +306,44 @@ class SupervisorAgentServiceTest {
         assertThat(result).isPresent();
         verify(reviewApplicationService).decideReview("session-1", "sup-task-approve-1", "APPROVE", "approved", "dec-2");
     }
+
+    @Test
+    void decideReviewStreamShouldDelegateToReviewApplicationService() {
+        SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
+        A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
+        SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorAgentService service = new SupervisorAgentService(
+                orchestrator,
+                taskFacade,
+                responseMapper,
+                requestIdempotencyService,
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService
+        );
+
+        when(reviewApplicationService.decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2"))
+                .thenReturn(Flux.just(
+                        SupervisorOutputEvent.progress(SupervisorProgressSupport.event("hitl", 12, "승인이 완료되었습니다.", java.util.Map.of())),
+                        SupervisorOutputEvent.text("done")
+                ));
+
+        java.util.List<SupervisorOutputEvent> events = service.decideReviewStream(
+                "session-1",
+                "sup-task-approve-2",
+                "APPROVE",
+                "approved_from_ui",
+                "dec-2"
+        ).collectList().block();
+
+        assertThat(events).isNotNull();
+        assertThat(events).hasSize(2);
+        verify(reviewApplicationService).decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2");
+    }
 }

@@ -1484,9 +1484,9 @@
       return stage === 'hitl_waiting' || reviewStatus === 'WAITING_REVIEW';
     }
 
-    async function handleHitlWaitingProgress(ai, progress) {
+    function handleHitlWaitingProgress(ai, progress) {
       if (!isHitlWaitingProgress(progress)) return false;
-      await showHitlReviewPanel(
+      showHitlReviewPanel(
         ai,
         progress.metadata?.reason || progress.message,
         progress.metadata?.taskId || ''
@@ -1496,6 +1496,16 @@
         activity: '사용자 결정 대기'
       });
       return true;
+    }
+
+    function finalizeHitlWaitingUi(ai, message, opts = {}) {
+      const activity = opts.activity || '사용자 결정 대기';
+      ai.progressFill.style.width = '100%';
+      ai.currentStage.textContent = `🧑 검토 대기 - ${message}`;
+      setStatus('HITL 승인 대기 중', 'pending', {
+        progress: 100,
+        activity
+      });
     }
 
     function applySupervisorProgress(ai, progress, opts = {}) {
@@ -1546,6 +1556,254 @@
       return waiting?.id || '';
     }
 
+    async function getTask(taskId) {
+      const response = await rpcCall('tasks/get', { id: taskId });
+      return response?.result || null;
+    }
+
+    async function waitForTaskTerminal(taskId, opts = {}) {
+      const timeoutMs = Number(opts.timeoutMs || 120000);
+      const intervalMs = Number(opts.intervalMs || 1000);
+      const startedAt = Date.now();
+
+      while (Date.now() - startedAt < timeoutMs) {
+        const task = await getTask(taskId);
+        const status = String(task?.status || '').toUpperCase();
+        if (status === 'COMPLETED' || status === 'FAILED' || status === 'CANCELED') {
+          return task;
+        }
+        await sleep(intervalMs);
+      }
+      throw new Error('승인 후 task 완료 대기 시간이 초과되었습니다.');
+    }
+
+    async function renderTaskOutcome(ai, task, decision) {
+      if (task?.response) {
+        const parsed = splitSupervisorPayload(String(task.response));
+        if (parsed.logs.length > 0) {
+          ai.panel.style.display = 'block';
+          ai.panel.classList.remove('collapsed');
+          ai.toggle.textContent = '접기';
+          await replaySupervisorLogs(ai, parsed.logs);
+        }
+        if (parsed.answer.trim().length > 0) {
+          renderAssistantMarkdown(ai.answer, parsed.answer.trim());
+          await enhanceBubble(ai.answer);
+        }
+        const parsedA2ui = tryParseA2ui(parsed.a2ui);
+        if (parsedA2ui) {
+          renderA2ui(ai, parsedA2ui);
+        }
+      } else if (decision === 'CANCEL') {
+        renderAssistantMarkdown(ai.answer, '요청이 검토 단계에서 취소되었습니다.');
+      }
+    }
+
+    async function streamReviewDecision(ai, taskId, decision) {
+      const requestId = `ui-review-${Date.now()}`;
+      const payload = {
+        jsonrpc: '2.0',
+        id: requestId,
+        method: 'tasks/review/decide/stream',
+        params: {
+          id: taskId,
+          decision,
+          reason: decision === 'APPROVE' ? 'approved_from_ui' : 'canceled_from_ui',
+          decisionId: `ui-decision-${Date.now()}`
+        }
+      };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`HTTP ${res.status}: ${err}`);
+      }
+
+      const contentType = (res.headers.get('content-type') || '').toLowerCase();
+      if (!contentType.includes('text/event-stream')) {
+        const body = await res.text();
+        throw new Error(`Non-SSE response: ${body}`);
+      }
+
+      ai.answer.innerText = '';
+      ai.panel.style.display = 'block';
+      ai.panel.classList.remove('collapsed');
+      ai.toggle.textContent = '접기';
+
+      let acc = '';
+      let buffer = '';
+      let lineBuffer = '';
+      let streamedAnswer = '';
+      let pendingChars = '';
+      let typewriterRunning = false;
+      let lastProgress = 12;
+      let doneReceived = false;
+      const supervisorLogs = [];
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      const pumpTypewriter = async () => {
+        if (typewriterRunning) return;
+        typewriterRunning = true;
+        while (pendingChars.length > 0) {
+          const batchSize = Math.min(6, pendingChars.length);
+          const batch = pendingChars.slice(0, batchSize);
+          pendingChars = pendingChars.slice(batchSize);
+          streamedAnswer += batch;
+          renderAssistantMarkdown(ai.answer, streamedAnswer);
+          renderMath(ai.answer);
+          chatEl.scrollTop = chatEl.scrollHeight;
+          await sleep(8);
+        }
+        typewriterRunning = false;
+      };
+
+      const enqueueAssistantChars = (text) => {
+        if (!text) return;
+        pendingChars += text;
+        void pumpTypewriter();
+      };
+
+      const applyReviewProgressUi = (progress) => {
+        if (!progress) return;
+        lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
+        ai.reviewProgressFill.style.width = `${Math.max(30, Math.min(100, lastProgress))}%`;
+        ai.reviewProgressText.textContent = `${getStageLabel(progress.stage)} 진행 중...`;
+        ai.reviewDesc.textContent = progress.message || '승인 후 실행 중입니다.';
+      };
+
+      const consumeSupervisorChunk = (rawChunk) => {
+        lineBuffer += String(rawChunk);
+        const lines = lineBuffer.split('\n');
+        const trailing = lines.pop() || '';
+        lineBuffer = '';
+
+        let assistantDelta = '';
+        for (const rawLine of lines) {
+          const line = rawLine.trimEnd();
+          if (line.trim().startsWith('[supervisor]')) {
+            const normalized = line.trim();
+            supervisorLogs.push(normalized);
+            const progress = parseSupervisorProgress(normalized);
+            applyReviewProgressUi(progress);
+          } else if (line.length > 0) {
+            assistantDelta += rawLine + '\n';
+          }
+        }
+
+        if (trailing.length > 0) {
+          if (trailing.trim().startsWith('[supervisor]')) {
+            const normalized = trailing.trim();
+            const progress = parseSupervisorProgress(normalized);
+            if (progress) {
+              supervisorLogs.push(normalized);
+              applyReviewProgressUi(progress);
+            } else {
+              lineBuffer = trailing;
+            }
+          } else {
+            assistantDelta += trailing;
+          }
+        }
+
+        if (supervisorLogs.length > 0) {
+          ai.stream.textContent = supervisorLogs.join('\n');
+          ai.stream.scrollTop = ai.stream.scrollHeight;
+        }
+
+        if (assistantDelta.length > 0) {
+          acc += assistantDelta;
+          enqueueAssistantChars(assistantDelta);
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parsed = parseSseFrames(buffer);
+        buffer = parsed.rest;
+
+        for (const frame of parsed.frames) {
+          const parsedOuter = parseFrame(frame);
+          const { event, data } = normalizeNestedSse(parsedOuter.event, parsedOuter.data);
+          if (!data) continue;
+
+          if (event === 'chunk') {
+            let chunk = data;
+            try { chunk = JSON.parse(data); } catch (e) {}
+            consumeSupervisorChunk(chunk);
+            continue;
+          }
+
+          if (event === 'a2ui') {
+            const parsedA2ui = tryParseA2ui(data);
+            if (parsedA2ui) {
+              renderA2ui(ai, parsedA2ui);
+            }
+            continue;
+          }
+
+          if (event === 'error') {
+            let msg = data;
+            try {
+              const parsedErr = JSON.parse(data);
+              msg = parsedErr?.error?.message || parsedErr?.message || data;
+            } catch (e) {}
+            throw new Error(msg);
+          }
+
+          if (event === 'done') {
+            doneReceived = true;
+            ai.reviewProgressFill.style.width = '100%';
+            ai.reviewProgressText.textContent = '완료';
+          }
+        }
+      }
+
+      const remainder = lineBuffer.trim();
+      if (remainder.startsWith('[supervisor]')) {
+        supervisorLogs.push(remainder);
+        ai.stream.textContent = supervisorLogs.join('\n');
+        ai.stream.scrollTop = ai.stream.scrollHeight;
+        applyReviewProgressUi(parseSupervisorProgress(remainder));
+      } else if (lineBuffer.length > 0) {
+        acc += lineBuffer;
+        enqueueAssistantChars(lineBuffer);
+      }
+
+      while (typewriterRunning || pendingChars.length > 0) {
+        await sleep(10);
+      }
+
+      if (!doneReceived) {
+        throw new Error('승인 후 스트림이 비정상 종료되었습니다.');
+      }
+
+      if (!acc.trim()) {
+        const task = await waitForTaskTerminal(taskId, { timeoutMs: 120000, intervalMs: 1000 });
+        await renderTaskOutcome(ai, task, decision);
+      } else {
+        await enhanceBubble(ai.answer);
+      }
+
+      ai.progressFill.style.width = '100%';
+      ai.progressFill.classList.add('completed');
+      ai.currentStage.textContent = '✅ 완료 - 승인 후 실행이 정상 완료되었습니다.';
+      setStatus('완료', 'complete', {
+        progress: 100,
+        activity: '승인 후 실행 완료'
+      });
+    }
+
     async function handleReviewDecision(ai, taskId, decision) {
       // 버튼 비활성화
       ai.approveBtn.disabled = true;
@@ -1561,6 +1819,16 @@
       }
 
       try {
+        if (decision === 'APPROVE') {
+          await streamReviewDecision(ai, taskId, decision);
+          setTimeout(() => {
+            ai.reviewProgress.classList.remove('active');
+            ai.approveBtn.style.display = 'none';
+            ai.cancelBtn.style.display = 'none';
+          }, 1000);
+          return;
+        }
+
         // 50% 진행
         ai.reviewProgressFill.style.width = '50%';
 
@@ -1584,32 +1852,22 @@
 
 	        const task = decideRes?.result?.task;
 	        const review = decideRes?.result?.review;
-	        const taskStatus = String(task?.status || '').toUpperCase();
+	        let resolvedTask = task;
+	        let taskStatus = String(task?.status || '').toUpperCase();
 
         // 90% 진행
         ai.reviewProgressFill.style.width = '90%';
         ai.reviewProgressText.textContent = '결과 처리 중...';
 
-        ai.reviewDesc.textContent = `결정 완료: ${review?.status || decision}`;
-        if (task?.response) {
-          const parsed = splitSupervisorPayload(String(task.response));
-          if (parsed.logs.length > 0) {
-            ai.panel.style.display = 'block';
-            ai.panel.classList.remove('collapsed');
-            ai.toggle.textContent = '접기';
-            await replaySupervisorLogs(ai, parsed.logs);
-          }
-          if (parsed.answer.trim().length > 0) {
-            renderAssistantMarkdown(ai.answer, parsed.answer.trim());
-            await enhanceBubble(ai.answer);
-          }
-          const parsedA2ui = tryParseA2ui(parsed.a2ui);
-          if (parsedA2ui) {
-            renderA2ui(ai, parsedA2ui);
-          }
-        } else if (decision === 'CANCEL') {
-          renderAssistantMarkdown(ai.answer, '요청이 검토 단계에서 취소되었습니다.');
+        if (decision === 'APPROVE' && taskStatus !== 'COMPLETED') {
+          ai.reviewProgressText.textContent = '승인 후 실행 대기 중...';
+          ai.reviewDesc.textContent = '승인은 완료되었습니다. 후속 실행 상태를 확인 중입니다.';
+          resolvedTask = await waitForTaskTerminal(taskId);
+          taskStatus = String(resolvedTask?.status || '').toUpperCase();
         }
+
+        ai.reviewDesc.textContent = `결정 완료: ${review?.status || decision}`;
+        await renderTaskOutcome(ai, resolvedTask, decision);
 
 	        // 100% 완료
 	        ai.reviewProgressFill.style.width = '100%';
@@ -1744,16 +2002,7 @@
       }
     }
 
-    async function showHitlReviewPanel(ai, reason, preferredTaskId = '') {
-      const taskId = preferredTaskId || await findLatestWaitingTaskId();
-      if (!taskId) {
-        ai.reviewPanel.style.display = 'block';
-        ai.reviewDesc.textContent = '리뷰 대기 task를 찾지 못했습니다. 잠시 후 다시 시도해주세요.';
-        ai.approveBtn.disabled = true;
-        ai.cancelBtn.disabled = true;
-        return;
-      }
-      ai.reviewPanel.style.display = 'block';
+    function bindReviewTask(ai, taskId, reason) {
       ai.reviewDesc.textContent = `taskId=${taskId}${reason ? `, reason=${reason}` : ''}`;
       ai.approveBtn.style.display = '';
       ai.cancelBtn.style.display = '';
@@ -1761,6 +2010,49 @@
       ai.cancelBtn.disabled = false;
       ai.approveBtn.onclick = () => handleReviewDecision(ai, taskId, 'APPROVE');
       ai.cancelBtn.onclick = () => handleReviewDecision(ai, taskId, 'CANCEL');
+    }
+
+    function showHitlReviewPanel(ai, reason, preferredTaskId = '') {
+      ai.reviewPanel.style.display = 'block';
+      if (preferredTaskId) {
+        bindReviewTask(ai, preferredTaskId, reason);
+        return;
+      }
+
+      ai.reviewDesc.textContent = '리뷰 대기 task를 조회 중입니다...';
+      ai.approveBtn.disabled = true;
+      ai.cancelBtn.disabled = true;
+      ai.approveBtn.style.display = '';
+      ai.cancelBtn.style.display = '';
+
+      void (async () => {
+        try {
+          const taskId = await findLatestWaitingTaskId();
+          if (!taskId) {
+            ai.reviewDesc.textContent = '리뷰 대기 task를 찾지 못했습니다. 잠시 후 다시 시도해주세요.';
+            ai.approveBtn.disabled = true;
+            ai.cancelBtn.disabled = true;
+            return;
+          }
+          bindReviewTask(ai, taskId, reason);
+        } catch (e) {
+          ai.reviewDesc.textContent = `리뷰 대기 task 조회 실패: ${e.message || e}`;
+          ai.approveBtn.disabled = true;
+          ai.cancelBtn.disabled = true;
+        }
+      })();
+    }
+
+    async function handleHitlReviewFallback(ai) {
+      const taskId = await findLatestWaitingTaskId();
+      if (!taskId) {
+        ai.reviewPanel.style.display = 'block';
+        ai.reviewDesc.textContent = '리뷰 대기 task를 찾지 못했습니다. 잠시 후 다시 시도해주세요.';
+        ai.approveBtn.disabled = true;
+        ai.cancelBtn.disabled = true;
+        return;
+      }
+      bindReviewTask(ai, taskId, '');
     }
 
     async function send(overrideText, actionPayload) {
@@ -1886,7 +2178,7 @@
 	                  const progress = parseSupervisorProgress(line.trim());
 	                  if (progress) {
 	                    lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
-                      if (await handleHitlWaitingProgress(ai, progress)) {
+                      if (handleHitlWaitingProgress(ai, progress)) {
                         waitingReviewDetected = true;
                       }
 	                  }
@@ -1904,7 +2196,7 @@
                     ai.stream.textContent = supervisorLogs.join('\n');
                     ai.stream.scrollTop = ai.stream.scrollHeight;
 	                    lastProgress = applySupervisorProgress(ai, trailingProgress, { lastProgress });
-                      if (await handleHitlWaitingProgress(ai, trailingProgress)) {
+                      if (handleHitlWaitingProgress(ai, trailingProgress)) {
                         waitingReviewDetected = true;
                       }
 	                  } else {
@@ -1960,10 +2252,7 @@
             if (event === 'done') {
               doneReceived = true;
               if (waitingReviewDetected) {
-                setStatus('HITL 승인 대기 중', 'pending', {
-                  progress: Math.max(lastProgress, 82),
-                  activity: '사용자 결정 대기'
-                });
+                finalizeHitlWaitingUi(ai, '사용자 승인 대기 중입니다.');
               } else {
                 setStatus('응답 마무리 중...', 'streaming', {
                   progress: Math.max(lastProgress, 97),
@@ -1984,7 +2273,7 @@
           const remainderProgress = parseSupervisorProgress(trimmedRemainder);
           if (remainderProgress) {
             lastProgress = applySupervisorProgress(ai, remainderProgress, { lastProgress });
-            if (await handleHitlWaitingProgress(ai, remainderProgress)) {
+            if (handleHitlWaitingProgress(ai, remainderProgress)) {
               waitingReviewDetected = true;
             }
           }
@@ -2000,10 +2289,10 @@
         if (!acc) {
           if (waitingReviewDetected) {
             ai.answer.innerText = '요청이 HITL 승인 대기 상태입니다. 아래 버튼으로 승인/취소를 선택하세요.';
-            setStatus('HITL 승인 대기 중', 'pending', {
-              progress: Math.max(lastProgress, 82),
-              activity: '사용자 결정 대기'
-            });
+            if (ai.reviewPanel.style.display === 'none') {
+              await handleHitlReviewFallback(ai);
+            }
+            finalizeHitlWaitingUi(ai, '사용자 승인 대기 중입니다.');
           } else {
             ai.answer.innerText = '[응답 없음] 스트림에서 chunk를 받지 못했습니다.';
             setStatus('응답 없음', 'error');

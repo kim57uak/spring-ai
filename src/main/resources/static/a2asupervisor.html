@@ -454,7 +454,7 @@
       if (!progress) return false;
       const stage = String(progress.stage || '').toLowerCase();
       if (stage === 'hitl_waiting' || String(progress.metadata?.reviewStatus || '').toUpperCase() === 'WAITING_REVIEW') {
-        setStatus(`HITL 승인 대기 (${Math.max(progress.progress || 0, 8)}%) · ${progress.message}`, "pending");
+        setStatus(`HITL 승인 대기 (100%) · ${progress.message}`, "pending");
         return true;
       }
       if (stage === 'completed') {
