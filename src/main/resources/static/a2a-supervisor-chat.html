@@ -1711,14 +1711,16 @@
 
     async function send(overrideText, actionPayload) {
       if (streaming) return;
+      const isUiEventArg = overrideText && typeof overrideText === 'object' && typeof overrideText.type === 'string';
+      const normalizedOverrideText = isUiEventArg ? null : overrideText;
       const isAction = !!actionPayload;
-      const text = String(overrideText ?? promptEl.value).trim();
+      const text = String(normalizedOverrideText ?? promptEl.value).trim();
       if (!isAction && !text) return;
 
       if (!isAction) {
         addMessage('user', text.replace(/\n/g, '<br>'));
       }
-      if (!isAction && overrideText == null) {
+      if (!isAction && normalizedOverrideText == null) {
         promptEl.value = '';
       }
       autoResizePrompt();
@@ -1967,7 +1969,9 @@
       }
     }
 
-    sendBtn.addEventListener('click', send);
+    sendBtn.addEventListener('click', () => {
+      send();
+    });
     stopBtn.addEventListener('click', () => {
       if (abortController) abortController.abort();
     });
