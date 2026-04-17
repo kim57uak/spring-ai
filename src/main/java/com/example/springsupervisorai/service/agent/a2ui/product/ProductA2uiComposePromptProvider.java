@@ -11,15 +11,19 @@ public class ProductA2uiComposePromptProvider implements A2uiComposePromptProvid
 
     @Override
     public boolean supports(SupervisorPlanningContext context) {
-        if (context == null || context.getResults() == null) {
+        if (context == null) {
             return false;
         }
-        return context.getResults().stream().anyMatch(this::isSuccessfulProductResult);
+        boolean hasProductResult = context.getResults() != null
+                && context.getResults().stream().anyMatch(this::isSuccessfulProductResult);
+        boolean hasProductPlan = context.getRoutingPlans() != null
+                && context.getRoutingPlans().stream().anyMatch(plan -> "product".equalsIgnoreCase(plan.agentKey()));
+        return hasProductResult || hasProductPlan;
     }
 
     @Override
     public String supportedTemplateKeys() {
-        return "summary, pricing, timeline, booking";
+        return "summary, pricing, timeline, booking, creation_form";
     }
 
     @Override
@@ -34,6 +38,8 @@ public class ProductA2uiComposePromptProvider implements A2uiComposePromptProvid
                   when: 일정, 날짜, 출발/도착, 숙소, 미팅 시간 관련 요청
                 - key: booking
                   when: 예약 생성, 예약 진행, 신청 의도 관련 요청
+                - key: creation_form
+                  when: 상품 생성, 상품 등록, 출발 요일/기간/상품코드 입력이 필요한 요청
                 """;
     }
 

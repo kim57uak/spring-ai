@@ -20,6 +20,21 @@ package "com.example.springsupervisorai" {
   package "service" {
     class SupervisorAgentService
     class SupervisorAgentOrchestrator
+    class SupervisorExecutionService
+    class SupervisorExecutionResultCollector
+    class SupervisorReviewApplicationService
+    class SupervisorStreamProgressService
+    class SupervisorTaskFacade
+    class HitlGateService
+    class SupervisorProgressPublisher
+    class SupervisorExecutionPersistenceService
+    class SupervisorExecutionStateLoader
+    class SupervisorExceptionTranslator
+    class SupervisorFallbackInvokeService
+    class SupervisorGraphExecutionService
+    class SupervisorExecutionSummaryEmitter
+    class SupervisorHandoffProgressSupport
+    class SupervisorOutputEventSupport
     class SupervisorProgressSupport
   }
 
@@ -41,10 +56,23 @@ package "com.example.springsupervisorai" {
     package "compose" {
       interface SupervisorResponseComposeService
       class LlmSupervisorResponseComposeService
+      class ComposeOutcomeAnalyzer
+      class ComposePromptBuilder
+      class A2uiDecisionParser
+    }
+    package "a2ui.product" {
+      class DefaultSupervisorProductInfoA2uiService
+      class ProductPayloadExtractor
+      class ProductA2uiDataMapper
+      class ProductA2uiMessageBuilder
     }
     package "graph" {
       interface SupervisorStateGraphFactory
       class LangGraphSupervisorStateGraphFactory
+      class SupervisorGraphStateMapper
+      class SupervisorGraphInputBuilder
+      class SupervisorBatchExecutionPolicy
+      class SupervisorPlanRunner
     }
     package "hitl" {
       interface HitlPolicyService
@@ -90,6 +118,13 @@ package "com.example.springsupervisorai" {
 
   package "model" {
     class SupervisorAgentRequest
+    class SupervisorExecutionRequest
+    class SupervisorGraphSnapshot
+    class HitlPolicyContext
+    class HandoffPolicyContext
+    class InvocationPolicyContext
+    class SupervisorOutputEvent
+    class SupervisorOutputEventType
     class SupervisorPlanningContext
     class SwarmState
     class HitlPolicyResult
@@ -112,8 +147,42 @@ package "com.example.springsupervisorai" {
 note bottom
 Rules
 - Controller는 JSON-RPC/SSE 입구와 params 검증만 담당한다
-- Service는 HITL pre-gate, task lifecycle, idempotency를 담당한다
-- Orchestrator는 graph 실행과 persistence coordination을 담당한다
+- SupervisorAgentService는 use case orchestration만 담당한다
+- HitlGateService는 HITL pre-gate와 review lifecycle을 담당한다
+- SupervisorExecutionService는 실행 가능한 요청의 send/stream/resume 경계를 담당한다
+- SupervisorExecutionResultCollector는 sync/resume payload와 stream progress 경계를 분리한다
+- SupervisorReviewApplicationService는 review approve/cancel use case를 담당한다
+- SupervisorStreamProgressService는 stream 시작부 HITL progress event를 담당한다
+- SupervisorTaskFacade는 task lifecycle 전이를 캡슐화한다
+- SupervisorProgressPublisher는 사용자 progress 발행과 swarm event log 기록의 단일 경로를 담당한다
+- SupervisorExecutionPersistenceService는 completion persistence와 task 종료 반영을 담당한다
+- SupervisorExecutionStateLoader는 history/swarm/checkpoint 복원을 담당한다
+- SupervisorExceptionTranslator는 supervisor 예외를 표준 오류 코드와 메시지로 정규화한다
+- SupervisorFallbackInvokeService는 graph 결과가 비어 있을 때 fallback invoke를 담당한다
+- SupervisorGraphExecutionService는 graph 실행 준비와 context 복원을 담당한다
+- SupervisorExecutionSummaryEmitter는 graph completion/routing/invocation summary 출력을 담당한다
+- SupervisorHandoffProgressSupport는 handoff progress metadata 조립을 담당한다
+- SupervisorOutputEventSupport는 내부 typed event를 외부 string stream 계약으로 직렬화한다
+- SupervisorGraphStateMapper는 graph state와 도메인 타입 간 변환을 담당한다
+- SupervisorGraphInputBuilder는 graph 시작 입력을 typed snapshot 기반으로 조립한다
+- SupervisorBatchExecutionPolicy는 graph invoke batch 선택 규칙을 담당한다
+- SupervisorPlanRunner는 graph batch 실행과 resilience 규칙을 담당한다
+- ComposeOutcomeAnalyzer는 downstream 결과를 compose outcome으로 요약한다
+- ComposePromptBuilder는 compose/a2ui prompt 조립을 담당한다
+- A2uiDecisionParser는 compose 단계의 A2UI selection JSON 파싱을 담당한다
+- 내부 supervisor stream은 SupervisorOutputEvent 기반으로 유지하고, 외부 transport 직전만 문자열로 변환한다
+- Controller는 service가 반환한 SupervisorOutputEvent를 SSE event/data로 매핑하는 마지막 transport adapter 역할만 담당한다
+- Orchestrator progress는 taskId/sessionId/nodeType 문맥을 포함해 publisher로 전달한다
+- Graph node는 상태 전이만 담당하고, batch 실행 세부는 policy/runner로 분리한다
+- Fallback invoke도 graph와 동일한 batch policy/runner를 재사용한다
+- HITL/handoff 정책은 typed context 입력 모델을 통해 primitive 전달을 줄인다
+- invocation 경계도 typed context 입력 모델을 통해 primitive 전달을 줄인다
+- REVISE decision과 추가정보 수집은 별도 application service와 typed amendment/precondition model로 확장한다
+- DefaultSupervisorProductInfoA2uiService는 product A2UI use case facade를 담당한다
+- ProductPayloadExtractor는 product payload shape 복원과 추출을 담당한다
+- ProductA2uiDataMapper는 product 도메인 데이터를 rendering model로 정규화한다
+- ProductA2uiMessageBuilder는 rendering model을 A2UI protocol message로 조립한다
+- Orchestrator는 graph 실행과 상위 coordination을 담당한다
 - Graph 내부에서 planning/invoke/handoff를 수행하고 compose는 graph 외부에서 수행한다
 - 하위 agent 연동은 오직 A2A(JSON-RPC/SSE) 경계로 처리한다
 - A2UI는 compose 결과 이후 선택적으로 부착된다

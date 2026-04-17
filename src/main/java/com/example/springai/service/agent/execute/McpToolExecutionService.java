@@ -121,6 +121,21 @@ public class McpToolExecutionService implements ToolExecutionService {
             params = applyIdempotencyIfRequired(policy, params, context, serverName, resolvedTool);
             Map<String, Object> selectedToolSchema = findToolSchema(resolvedTool, availableTools);
             params = applyGuidIfPresent(params, selectedToolSchema);
+            if (policy.operation() == McpProperties.ToolOperation.MUTATION
+                    && !hasMeaningfulMutationArguments(params, selectedToolSchema)) {
+                String missingPayload = buildMutationGuardPayload(resolvedTool);
+                logger.warn("MCP mutation tool blocked due to missing explicit user arguments. sessionId={}, server={}, tool={}",
+                        sessionId, serverName, resolvedTool);
+                return new ToolExecutionResult(
+                        serverName,
+                        resolvedTool,
+                        missingPayload,
+                        Map.copyOf(params),
+                        false,
+                        true,
+                        terminalAfterExecution
+                );
+            }
             List<String> missingRequiredParams = detectMissingRequiredParams(params, selectedToolSchema);
             if (!missingRequiredParams.isEmpty()) {
                 String missingPayload = buildMissingRequiredPayload(resolvedTool, missingRequiredParams, selectedToolSchema);
@@ -753,6 +768,63 @@ public class McpToolExecutionService implements ToolExecutionService {
         return "[MISSING_REQUIRED_PARAMS] tool=" + toolName
                 + ", missing=" + missingPaths
                 + ", message=필수 입력값이 부족합니다. 다음 정보를 입력해 주세요: " + requested;
+    }
+
+    private String buildMutationGuardPayload(String toolName) {
+        return "[MISSING_REQUIRED_PARAMS] tool=" + toolName
+                + ", missing=[]"
+                + ", message=사용자가 명시한 필수 입력값이 부족하여 실행하지 않았습니다. 필요한 값을 먼저 입력해 주세요.";
+    }
+
+    private boolean hasMeaningfulMutationArguments(Map<String, Object> params, Map<String, Object> toolSchema) {
+        if (params == null || params.isEmpty()) {
+            return false;
+        }
+        Object inputSchemaObj = toolSchema == null ? null : toolSchema.get("inputSchema");
+        if (inputSchemaObj instanceof Map<?, ?> inputSchema) {
+            List<String> missingRequired = detectMissingRequiredParams(params, toolSchema);
+            if (!missingRequired.isEmpty()) {
+                return false;
+            }
+            return hasMeaningfulValues(params, "");
+        }
+        return hasMeaningfulValues(params, "");
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean hasMeaningfulValues(Object value, String path) {
+        if (value == null) {
+            return false;
+        }
+        String normalizedPath = path == null ? "" : path.trim().toLowerCase(Locale.ROOT);
+        if (isTechnicalRequiredField(normalizedPath)) {
+            return false;
+        }
+        if (value instanceof String text) {
+            return !text.trim().isBlank();
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return true;
+        }
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String childKey = stringValue(entry.getKey());
+                String childPath = normalizedPath.isBlank() ? childKey : normalizedPath + "." + childKey;
+                if (hasMeaningfulValues(entry.getValue(), childPath)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                if (hasMeaningfulValues(item, normalizedPath)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return !String.valueOf(value).trim().isBlank();
     }
 
     private String toParamLabel(String path, Map<String, Object> toolSchema) {

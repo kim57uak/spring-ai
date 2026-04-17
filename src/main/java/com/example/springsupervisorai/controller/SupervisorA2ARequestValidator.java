@@ -154,6 +154,9 @@ public class SupervisorA2ARequestValidator {
             if ("submit_reservation".equals(actionName)) {
                 return reservationPromptFromContext(contextNode).trim();
             }
+            if ("submit_product_creation".equals(actionName)) {
+                return productCreationPromptFromContext(contextNode).trim();
+            }
             StringBuilder builder = new StringBuilder("A2UI user action");
             if (!actionName.isBlank()) {
                 builder.append(": ").append(actionName);
@@ -204,6 +207,56 @@ public class SupervisorA2ARequestValidator {
                 "인원수: " + contextNode.path("headCount").asText("").trim(),
                 "생년월일: " + contextNode.path("birthDate").asText("").trim()
         );
+    }
+
+    private String productCreationPromptFromContext(JsonNode contextNode) {
+        if (contextNode == null || contextNode.isNull() || !contextNode.isObject()) {
+            return "";
+        }
+        String saleProductCode = contextNode.path("saleProductCode").asText("").trim();
+        if (saleProductCode.isBlank()) {
+            return "";
+        }
+        String departureDays = flattenDepartureDays(contextNode.path("departureDays"));
+        return String.join("\n",
+                "상품생성해줘",
+                "상품코드: " + saleProductCode,
+                "출발시작일: " + contextNode.path("departureStartDay").asText("").trim(),
+                "출발종료일: " + contextNode.path("departureEndDay").asText("").trim(),
+                "전체대상: " + ynText(contextNode.path("allTarget")),
+                "출발요일: " + departureDays
+        );
+    }
+
+    private String flattenDepartureDays(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "";
+        }
+        if (node.isArray()) {
+            java.util.List<String> values = new java.util.ArrayList<>();
+            for (JsonNode item : node) {
+                String value = item.asText("").trim();
+                if (!value.isBlank()) {
+                    values.add(value);
+                }
+            }
+            return String.join(", ", values);
+        }
+        return node.asText("").trim();
+    }
+
+    private String ynText(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return "";
+        }
+        if (node.isBoolean()) {
+            return node.asBoolean() ? "Y" : "N";
+        }
+        String value = node.asText("").trim();
+        if (value.isBlank()) {
+            return "";
+        }
+        return "true".equalsIgnoreCase(value) ? "Y" : "false".equalsIgnoreCase(value) ? "N" : value;
     }
 
     private String asFlatText(JsonNode value) {

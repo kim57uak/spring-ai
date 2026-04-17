@@ -243,13 +243,14 @@ A2UI는 항상 동작하지 않는다. 아래 조건을 모두 만족해야 한�
 
 - A2UI on/off 설정
 - compose 단계 통합 템플릿 선택
+- `common/product/reservation` 도메인 분리 구조
 - product 결과 기반 A2UI build
+- reservation 생성 입력 폼 A2UI build
 - 웹 렌더러 연동
 - A2UI userAction 입력 처리
 
 아직 없음:
 
-- 도메인별 다중 provider 확대
 - 템플릿별로 완전히 다른 component tree
 - 별도 template selection service
 - 순수 A2UI transport 단일화
@@ -257,13 +258,36 @@ A2UI는 항상 동작하지 않는다. 아래 조건을 모두 만족해야 한�
 
 ---
 
-## 11) 결론
+## 11) 폴더 정책
+
+`service/agent/a2ui` 아래 정책은 다음과 같이 고정한다.
+
+- `common`
+  - 표준 catalog/view 식별자
+  - provider registry
+  - domain service composite
+  - transport/serialization 공통 계약
+- `product`
+  - 상품조회/상품생성처럼 product 도메인 결과를 설명하거나 입력받는 A2UI
+- `reservation`
+  - 예약생성/예약접수처럼 reservation 도메인 입력과 후속 액션을 다루는 A2UI
+
+규칙:
+
+- A2UI payload는 항상 표준 catalog `https://a2ui.org/specification/v0_8/standard_catalog_definition.json` 기준으로 조립한다.
+- custom component catalog를 새로 만들지 않는다.
+- domain package는 자기 도메인의 payload 추출, typed model, message builder, template만 가진다.
+- 다른 도메인 입력 폼을 끌어다 직접 조립하지 않고, 필요하면 `common` 계약 또는 해당 도메인 service를 통해 연결한다.
+
+---
+
+## 12) 결론
 
 현재 supervisor A2UI는 “운영 가능한 최소 제품 형태”까지는 구현되어 있다.
 
 정확한 표현은 아래와 같다.
 
 - 템플릿 선택은 compose 단계에 이미 통합 구현됨
-- product 도메인 한정으로 A2UI payload 생성이 동작함
+- product/reservation 도메인 기준으로 A2UI payload 생성이 동작함
 - client action도 다시 supervisor 입력으로 연결됨
 - 다만 템플릿 시각적 차별화와 transport 표준화는 아직 후속 과제다

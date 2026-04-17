@@ -1,9 +1,8 @@
 package com.example.springsupervisorai.model;
 
 import org.bsc.langgraph4j.state.AgentState;
+import com.example.springsupervisorai.service.agent.graph.SupervisorGraphStateMapper;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class SupervisorGraphState extends AgentState {
@@ -30,147 +29,6 @@ public class SupervisorGraphState extends AgentState {
     }
 
     public SupervisorPlanningContext toPlanningContext() {
-        SupervisorPlanningContext context = new SupervisorPlanningContext(
-                value(TASK_ID).map(String.class::cast).orElse(""),
-                value(SESSION_ID).map(String.class::cast).orElse(""),
-                value(USER_MESSAGE).map(String.class::cast).orElse(""),
-                value(MODEL).map(String.class::cast).orElse("openai")
-        );
-        context.replaceHistory(readStringList(HISTORY));
-        context.setCheckpointId(value(CHECKPOINT_ID).map(String.class::cast).orElse(""));
-        context.setCurrentNode(value(CURRENT_NODE).map(String.class::cast).orElse(SupervisorRuntimeState.REQUEST_VALIDATED.value()));
-        context.setRoutingPlans(readPlans());
-        context.setResults(readResults());
-        context.setRoutingIndex(value(ROUTING_INDEX).map(Integer.class::cast).orElse(0));
-        context.setSwarmSharedFacts(readFlatMap(SWARM_SHARED_FACTS));
-        context.setSwarmStateVersion(readLong(SWARM_STATE_VERSION));
-        return context;
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> readStringList(String key) {
-        Object raw = value(key).orElse(List.of());
-        if (!(raw instanceof List<?> list)) {
-            return List.of();
-        }
-        List<String> result = new ArrayList<>();
-        for (Object item : list) {
-            if (item != null) {
-                result.add(String.valueOf(item));
-            }
-        }
-        return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<RoutingPlan> readPlans() {
-        Object raw = value(ROUTING_PLANS).orElse(List.of());
-        if (!(raw instanceof List<?> list)) {
-            return List.of();
-        }
-        List<RoutingPlan> plans = new ArrayList<>();
-        for (Object item : list) {
-            if (!(item instanceof Map<?, ?> map)) {
-                continue;
-            }
-            plans.add(new RoutingPlan(
-                    readString(map, "agentKey"),
-                    readString(map, "method"),
-                    readString(map, "reason"),
-                    readInt(map, "priority"),
-                    readMap(map, "arguments"),
-                    readString(map, "sourceType"),
-                    readInt(map, "handoffDepth"),
-                    readString(map, "parentAgentKey")
-            ));
-        }
-        return plans;
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<DownstreamCallResult> readResults() {
-        Object raw = value(DOWNSTREAM_RESULTS).orElse(List.of());
-        if (!(raw instanceof List<?> list)) {
-            return List.of();
-        }
-        List<DownstreamCallResult> results = new ArrayList<>();
-        for (Object item : list) {
-            if (!(item instanceof Map<?, ?> map)) {
-                continue;
-            }
-            results.add(new DownstreamCallResult(
-                    readString(map, "agentKey"),
-                    readString(map, "taskId"),
-                    readString(map, "status"),
-                    readString(map, "payload"),
-                    readString(map, "errorCode"),
-                    readString(map, "errorMessage"),
-                    readBoolean(map, "handoffRequested"),
-                    readString(map, "nextAgentKey"),
-                    readString(map, "handoffMethod"),
-                    readString(map, "handoffReason"),
-                    readMap(map, "handoffArguments")
-            ));
-        }
-        return results;
-    }
-
-    private boolean readBoolean(Map<?, ?> map, String key) {
-        Object value = map.get(key);
-        if (value instanceof Boolean bool) {
-            return bool;
-        }
-        return "true".equalsIgnoreCase(String.valueOf(value));
-    }
-
-    private String readString(Map<?, ?> map, String key) {
-        Object value = map.get(key);
-        return value == null ? "" : String.valueOf(value);
-    }
-
-    private int readInt(Map<?, ?> map, String key) {
-        Object value = map.get(key);
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        try {
-            return Integer.parseInt(String.valueOf(value));
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> readMap(Map<?, ?> map, String key) {
-        Object value = map.get(key);
-        if (!(value instanceof Map<?, ?> source)) {
-            return Map.of();
-        }
-        java.util.LinkedHashMap<String, Object> converted = new java.util.LinkedHashMap<>();
-        source.forEach((k, v) -> converted.put(String.valueOf(k), v));
-        return converted;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> readFlatMap(String key) {
-        Object raw = value(key).orElse(Map.of());
-        if (!(raw instanceof Map<?, ?> source)) {
-            return Map.of();
-        }
-        java.util.LinkedHashMap<String, Object> converted = new java.util.LinkedHashMap<>();
-        source.forEach((k, v) -> converted.put(String.valueOf(k), v));
-        return converted;
-    }
-
-    private long readLong(String key) {
-        Object raw = value(key).orElse(0L);
-        if (raw instanceof Number number) {
-            return number.longValue();
-        }
-        try {
-            return Long.parseLong(String.valueOf(raw));
-        } catch (Exception ignored) {
-            return 0L;
-        }
+        return SupervisorGraphStateMapper.INSTANCE.toPlanningContext(this);
     }
 }

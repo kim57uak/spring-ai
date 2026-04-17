@@ -11,7 +11,10 @@ import com.example.springsupervisorai.a2a.dto.TasksListParams;
 import com.example.springsupervisorai.a2a.dto.TasksListResult;
 import com.example.springsupervisorai.config.SupervisorStreamProperties;
 import com.example.springsupervisorai.model.SupervisorA2aMethod;
+import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.model.SupervisorOutputEventType;
 import com.example.springsupervisorai.service.SupervisorAgentService;
+import com.example.springsupervisorai.service.SupervisorOutputEventSupport;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -143,11 +146,9 @@ public class SupervisorA2AController {
         }
         SupervisorA2ARequestValidator.ResolvedSendParams params = validation.params();
         String sanitized = promptInjectionGuard.sanitize(params.messageText());
-        return supervisorAgentService.stream(session.getId(), sanitized, params.model())
+        return supervisorAgentService.streamEvents(session.getId(), sanitized, params.model())
                 .timeout(Duration.ofMillis(Math.max(1_000L, streamProperties.getTimeoutMs())))
-                .map(chunk -> SupervisorA2uiSupport.isWrapped(chunk)
-                        ? toSseEvent("a2ui", SupervisorA2uiSupport.unwrap(chunk))
-                        : toSseEvent("chunk", chunk))
+                .map(this::toSseEvent)
                 .concatWithValues(toSseEvent("done", Map.of("reason", "completed")))
                 .onErrorResume(TimeoutException.class, ex -> Flux.just(
                         toSseEvent("error", JsonRpcResponse.error(request.id(), STREAM_TIMEOUT, "Stream timeout")),
@@ -167,6 +168,22 @@ public class SupervisorA2AController {
                     // Sinks 관련 에러는 정상 종료로 처리
                     return Flux.just(toSseEvent("done", Map.of("reason", "completed")));
                 });
+    }
+
+    /**
+     * structured output event를 SSE event/data 프레임으로 직렬화한다.
+     *
+     * @param event supervisor output event
+     * @return SSE 문자열
+     */
+    private String toSseEvent(SupervisorOutputEvent event) {
+        if (event == null) {
+            return toSseEvent("chunk", "");
+        }
+        if (event.type() == SupervisorOutputEventType.A2UI) {
+            return toSseEvent("a2ui", event.content());
+        }
+        return toSseEvent("chunk", SupervisorOutputEventSupport.serialize(event));
     }
 
     /**

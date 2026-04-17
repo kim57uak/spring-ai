@@ -15,6 +15,17 @@ package "01 Entry" {
 package "02 Application" {
   [SupervisorAgent\nService] as Service
   [SupervisorAgent\nOrchestrator] as Orchestrator
+  [SupervisorReviewApplication\nService] as ReviewApp
+  [SupervisorExecution\nService] as ExecutionService
+  [SupervisorExecutionResult\nCollector] as ResultCollector
+  [SupervisorStreamProgress\nService] as StreamProgress
+  [SupervisorExecutionSummary\nEmitter] as SummaryEmitter
+  [SupervisorGraphExecution\nService] as GraphExecution
+  [SupervisorExecutionPersistence\nService] as PersistenceService
+  [SupervisorFallbackInvoke\nService] as FallbackService
+  [SupervisorGraphInput\nBuilder] as GraphInputBuilder
+  [SupervisorHandoffProgress\nSupport] as HandoffProgressSupport
+  [SupervisorProgress\nPublisher] as ProgressPublisher
   [SupervisorA2aLifecycle\nService] as Lifecycle
   [SupervisorRequestIdempotency\nService] as Idempotency
 }
@@ -68,17 +79,40 @@ Controller --> Service : send/stream/tasks
 Controller --> Advice : exception mapping
 
 Service --> Idempotency : send only
-Service --> HitlPolicyPort : evaluate pre-gate
-Service --> HitlDecisionPort : open/get/decide review
-Service --> Lifecycle : create/update task
-Service --> Orchestrator : execute when allowed
+Service --> StreamProgress : stream preface / hitl progress
+Service --> ReviewApp : review decide
+Service --> HitlPolicyPort : evaluate pre-gate via HitlGateService
+Service --> HitlDecisionPort : open/get/decide via HitlGateService
+Service --> ExecutionService : execute when allowed
 
-Orchestrator --> GraphFactoryPort : compiled graph
+ReviewApp --> HitlDecisionPort : decide review
+ReviewApp --> ExecutionService : resume approved task
+ReviewApp --> Lifecycle : task view lookup/update
+
+ExecutionService --> Lifecycle : create/update task
+ExecutionService --> Orchestrator : executeEvents(...)
+ExecutionService --> ResultCollector : sync/resume payload collect
+ExecutionService --> ProgressPublisher : cancel path / task context
+
+Orchestrator --> GraphExecution : load state + invoke graph
+Orchestrator --> SummaryEmitter : graph/routing/invocation summary
+Orchestrator --> PersistenceService : completion / clear session
+Orchestrator --> FallbackService : invoke when graph result empty
+Orchestrator --> ProgressPublisher : structured progress/event publish
 Orchestrator --> ComposePort : final response compose
-Orchestrator --> ConversationStorePort : history load/save
-Orchestrator --> CheckpointStorePort : checkpoint load/save
-Orchestrator --> SwarmCoordinatorPort : load/mutate swarm state
-Orchestrator --> Lifecycle : mark completed/failed
+Orchestrator --> Lifecycle : canceled status check
+
+GraphExecution --> GraphFactoryPort : compiled graph
+GraphExecution --> ConversationStorePort : history load
+GraphExecution --> CheckpointStorePort : checkpoint load
+GraphExecution --> SwarmCoordinatorPort : latest swarm load
+GraphExecution --> GraphInputBuilder : build typed input
+
+PersistenceService --> ConversationStorePort : history save
+PersistenceService --> CheckpointStorePort : checkpoint save/clear
+PersistenceService --> Lifecycle : mark completed/failed
+
+SummaryEmitter --> HandoffProgressSupport : handoff metadata
 
 GraphFactoryPort <|.. GraphFactoryImpl
 GraphFactoryImpl --> PlanningPort
@@ -115,8 +149,10 @@ Lifecycle --> TaskStorePort
 
 note right of Service
 Current application split
-- Service: HITL gate + task API
-- Orchestrator: graph execution + persistence
+- Service: use case dispatch + response mapping
+- ExecutionService: send/stream/resume execution boundary
+- ReviewApp: approve/cancel review use case
+- Orchestrator: graph/compose/cancel coordination
 end note
 
 note right of GraphFactoryImpl

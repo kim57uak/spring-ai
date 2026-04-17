@@ -38,6 +38,13 @@ This is a task/review lifecycle state,
 not SupervisorRuntimeState.
 end note
 
+note bottom
+Planned P2 extension states
+- REVISED
+- WAITING_FOR_USER_INPUT
+These are not implemented in current source yet.
+end note
+
 note right of REQUEST_VALIDATED
 Current runtime enum sequence begins here.
 SupervisorRuntimeState values:
