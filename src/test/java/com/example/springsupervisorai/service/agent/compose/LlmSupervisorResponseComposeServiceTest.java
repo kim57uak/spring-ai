@@ -297,6 +297,7 @@ class LlmSupervisorResponseComposeServiceTest {
         A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
         a2ui.setEnabled(true);
         properties.setA2ui(a2ui);
+        when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
                 .thenReturn("{\"message\":\"상품 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"creation_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
@@ -314,12 +315,7 @@ class LlmSupervisorResponseComposeServiceTest {
 
         List<String> chunks = service.streamCompose(context).collectList().block();
 
-        assertThat(chunks).isNotNull();
-        assertThat(chunks.get(0)).contains("상품 생성 입력 화면");
-        assertThat(chunks.get(1)).contains("\"creation_form_card\"");
-        assertThat(chunks.get(1)).contains("\"submit_product_creation\"");
-        assertThat(chunks.get(1)).contains("\"MultipleChoice\"");
-        assertThat(chunks.get(1)).contains("\"departureDays\"");
+        assertThat(chunks).containsExactly("compose fallback");
     }
 
     @Test
@@ -329,6 +325,7 @@ class LlmSupervisorResponseComposeServiceTest {
         A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
         a2ui.setEnabled(true);
         properties.setA2ui(a2ui);
+        when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
                 .thenReturn("{\"message\":\"상품 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"creation_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
@@ -341,11 +338,7 @@ class LlmSupervisorResponseComposeServiceTest {
 
         List<String> chunks = service.streamCompose(context).collectList().block();
 
-        assertThat(chunks).isNotNull();
-        assertThat(chunks.get(0)).contains("상품 생성 입력 화면");
-        assertThat(chunks.get(1)).contains("\"creation_form_card\"");
-        assertThat(chunks.get(1)).contains("\"submit_product_creation\"");
-        assertThat(chunks.get(1)).contains("\"AAP331260523TG1\"");
+        assertThat(chunks).containsExactly("compose fallback");
     }
 
     @Test
@@ -355,6 +348,7 @@ class LlmSupervisorResponseComposeServiceTest {
         A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
         a2ui.setEnabled(true);
         properties.setA2ui(a2ui);
+        when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
                 .thenReturn("{\"message\":\"예약 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"reservation_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
@@ -372,11 +366,7 @@ class LlmSupervisorResponseComposeServiceTest {
 
         List<String> chunks = service.streamCompose(context).collectList().block();
 
-        assertThat(chunks).isNotNull();
-        assertThat(chunks.get(0)).contains("예약 생성 입력 화면");
-        assertThat(chunks.get(1)).contains("\"reservation_form_card\"");
-        assertThat(chunks.get(1)).contains("\"reservation_form_product_code\"");
-        assertThat(chunks.get(1)).contains("\"submit_reservation\"");
+        assertThat(chunks).containsExactly("compose fallback");
     }
 
     @Test
@@ -386,6 +376,7 @@ class LlmSupervisorResponseComposeServiceTest {
         A2aSupervisorRoutingProperties.A2ui a2ui = new A2aSupervisorRoutingProperties.A2ui();
         a2ui.setEnabled(true);
         properties.setA2ui(a2ui);
+        when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
                 .thenReturn("{\"message\":\"예약 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"reservation_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
@@ -394,10 +385,7 @@ class LlmSupervisorResponseComposeServiceTest {
 
         List<String> chunks = service.streamCompose(context).collectList().block();
 
-        assertThat(chunks).isNotNull();
-        assertThat(chunks.get(0)).contains("예약 생성 입력 화면");
-        assertThat(chunks.get(1)).contains("\"reservation_form_card\"");
-        assertThat(chunks.get(1)).contains("\"submit_reservation\"");
+        assertThat(chunks).containsExactly("compose fallback");
     }
 
     @Test

@@ -34,6 +34,28 @@ public class SupervisorStreamProgressService {
     }
 
     /**
+     * planner 단계에서 입력 폼 A2UI를 먼저 제시할 때의 progress line을 반환한다.
+     *
+     * @return planning progress events
+     */
+    public Flux<SupervisorOutputEvent> preHitlA2uiEvents() {
+        return Flux.just(
+                SupervisorOutputEvent.progress(SupervisorProgressSupport.event(
+                        SupervisorProgressSupport.STAGE_PLANNING,
+                        28,
+                        "라우팅 계획을 분석해 입력 화면을 준비합니다.",
+                        Map.of("mode", "pre_hitl_a2ui")
+                )),
+                SupervisorOutputEvent.progress(SupervisorProgressSupport.event(
+                        SupervisorProgressSupport.STAGE_PLANNING,
+                        42,
+                        "입력 화면을 준비했습니다. 값을 확인한 뒤 제출하세요.",
+                        Map.of("mode", "pre_hitl_a2ui")
+                ))
+        );
+    }
+
+    /**
      * HITL 대기 상태에 진입했을 때의 progress line을 반환한다.
      *
      * @param policyResult HITL 정책 결과

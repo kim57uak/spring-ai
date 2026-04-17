@@ -73,6 +73,7 @@ class SupervisorA2ARequestValidatorTest {
                 validator.validateSendParams(request, objectMapper);
 
         assertThat(result.isError()).isFalse();
+        assertThat(result.params().messageText()).contains("A2UI_SUBMIT_ACTION: submit_reservation");
         assertThat(result.params().messageText()).contains("예약생성해줘");
         assertThat(result.params().messageText()).contains("상품코드: AAP331260523TG1");
         assertThat(result.params().messageText()).contains("예약자: 홍길동");
@@ -117,6 +118,7 @@ class SupervisorA2ARequestValidatorTest {
                 validator.validateSendParams(request, objectMapper);
 
         assertThat(result.isError()).isFalse();
+        assertThat(result.params().messageText()).contains("A2UI_SUBMIT_ACTION: submit_product_creation");
         assertThat(result.params().messageText()).contains("상품생성해줘");
         assertThat(result.params().messageText()).contains("상품코드: AAP331260523TG1");
         assertThat(result.params().messageText()).contains("출발시작일: 20261201");

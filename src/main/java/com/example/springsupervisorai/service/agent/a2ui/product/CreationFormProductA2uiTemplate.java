@@ -18,7 +18,7 @@ public class CreationFormProductA2uiTemplate extends AbstractProductA2uiTemplate
 
     @Override
     public String defaultMessage(String productName) {
-        return "상품 생성 입력 화면을 준비했습니다.";
+        return "요청에 맞는 입력 화면을 준비했습니다.";
     }
 
     @Override
