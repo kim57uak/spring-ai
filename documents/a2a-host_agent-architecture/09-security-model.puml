@@ -6,73 +6,75 @@ skinparam shadowing false
 skinparam componentStyle rectangle
 
 rectangle "Input Guard" {
-  [SupervisorA2AController] as SupervisorA2AController
+  [SupervisorA2AController] as Controller
+  [SupervisorA2ARequestValidator] as Validator
   [PromptInjectionGuard] as PromptGuard
-  [PII Validation/Masking] as PiiGuard
+}
+
+rectangle "Task / Review Ownership Guard" {
+  [SupervisorAgentService] as Service
+  [SupervisorA2aLifecycleService] as Lifecycle
+  [HitlDecisionService] as HitlDecision
 }
 
 rectangle "Routing & Invocation Guard" {
   [A2AClientRegistry] as Registry
-  [Endpoint Allowlist] as Allowlist
-  [A2AInvocationService] as Invoker
+  [Allowed Route Config] as Allowlist
+  [DefaultA2AInvocationService] as Invoker
   [Handoff Policy Service] as HandoffPolicy
-  [Handoff Method Enum Guard] as MethodGuard
+  [Allowed Method Guard] as MethodGuard
   [Streaming Capability Guard] as StreamGuard
-  [Timeout/Retry Policy] as TimeoutRetry
+  [Retry/Timeout Policy] as RetryTimeout
   [Circuit Breaker] as CircuitBreaker
-  [Payload Size Guard] as PayloadGuard
+}
+
+rectangle "State Integrity" {
+  [SupervisorSwarmCoordinator] as SwarmCoordinator
+  [Swarm State Version Check] as SwarmVersion
+  [Review Store] as ReviewStore
 }
 
 rectangle "Error Safety" {
   [GlobalExceptionHandler] as ErrorHandler
 }
 
-rectangle "HITL Safety Gate" {
-  [HitlPolicyService] as HitlPolicy
-  [HitlDecisionService] as HitlDecision
-  [Swarm State Integrity Check] as SwarmIntegrity
-}
-
-SupervisorA2AController --> PromptGuard : sanitize user text
-SupervisorA2AController --> PiiGuard : validate/mask name/phone/email
+Controller --> Validator : method/params/schema
+Controller --> PromptGuard : sanitize message text
+Validator --> Service : normalize text/A2UI userAction
+Service --> Lifecycle : session-owned task read/cancel/list
+Service --> HitlDecision : session-owned review get/decide
 Invoker --> Registry : resolve target
-Registry --> Allowlist : validate agent key/endpoint
-Invoker --> TimeoutRetry : bounded call
+Registry --> Allowlist : validate agent key / endpoint / method
+Invoker --> RetryTimeout : bounded retry/backoff
 Invoker --> CircuitBreaker : fail-fast on repeated errors
-Invoker --> PayloadGuard : truncate/validate payload
-HandoffPolicy --> MethodGuard : validate method enum
-HandoffPolicy --> StreamGuard : validate stream support
-ErrorHandler --> Invoker : sanitize exception mapping
-HitlPolicy --> HitlDecision : mandatory review for data mutation
-HitlDecision --> SwarmIntegrity : decision/version validation
+HandoffPolicy --> MethodGuard : allowMethods check
+HandoffPolicy --> StreamGuard : downstream stream support check
+SwarmCoordinator --> SwarmVersion : optimistic lock + retry
+HitlDecision --> ReviewStore : session-bound review ownership
+ErrorHandler --> Invoker : sanitize runtime failures
 
-note right of Allowlist
-Supervisor agent can call only
-- product A2A endpoint
-- reservation A2A endpoint
-- search A2A endpoint
+note right of Validator
+Current input handling
+- legacy messageText
+- v1.0 message.parts[].text
+- application/json+a2ui userAction
+- invalid decision values rejected before service
 end note
 
 note right of HandoffPolicy
-Handoff hardening
-- feature flag (`handoff.enabled`)
-- allowed method enum only
-- block stream handoff for non-stream-capable agent
-- max hops / duplicate path guard
+Current handoff hardening
+- feature flag
+- route allowlist only
+- method allowlist only
+- recent path duplicate block
+- max hops
+- per-minute rate limit
 end note
 
 note bottom of ErrorHandler
 No sensitive leak
-- internal stack
-- downstream raw headers/body
-- credentials
+- internal stack traces
+- downstream raw HTTP details
+- credentials / provider internals
 end note
-
-' 2026-04-13 sync with doc 34
-' - add handoff guardrails to security boundary
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
 @enduml

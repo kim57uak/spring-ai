@@ -1,377 +1,237 @@
-# SwarmState 및 Circuit Breaker 통합 가이드
+# 32. SwarmState 및 Circuit Breaker 통합 현행 가이드
 
-## 개요
+## 1) 목적
 
-본 문서는 Supervisor의 **SwarmState** 기반 분산 상태 관리와 **Circuit Breaker** 패턴의 통합 구조를 설명합니다.
+본 문서는 현재 구현 기준으로 supervisor의 `SwarmState`, circuit breaker, cooldown, handoff 상태 기록이 어떻게 연결되는지 설명한다.
+
+- 기준 클래스
+  - `DefaultSupervisorSwarmCoordinator`
+  - `DefaultA2AInvocationService`
+  - `InMemorySupervisorSwarmStateStore`
+  - `RedisSupervisorSwarmStateStore`
 
 ---
 
-## 1. SwarmState 아키텍처
+## 2) SwarmState 역할
 
-### 1.1 핵심 개념
-
-**SwarmState**는 supervisor 세션의 공유 상태를 관리하는 스냅샷 객체입니다.
+`SwarmState`는 세션 실행의 공유 facts와 이벤트 로그를 보존하는 스냅샷이다.
 
 ```java
 public record SwarmState(
     String taskId,
     String sessionId,
-    long stateVersion,        // 낙관적 락 버전
+    long stateVersion,
     Instant updatedAt,
-    Map<String, Object> sharedFacts,  // 공유 팩트/컨텍스트
-    List<Map<String, Object>> eventLog  // 이벤트 로그
+    Map<String, Object> sharedFacts,
+    List<Map<String, Object>> eventLog
 )
 ```
 
-### 1.2 저장소 구현체
+현재 역할:
 
-#### InMemorySupervisorSwarmStateStore (기본값)
+- routing 단계 필터링에 필요한 cooldown/circuit 정보 보관
+- invoke 결과 요약 보관
+- handoff hop/path/window 보관
+- hitl policy/review 결과 보관
+- graph 노드 실행 및 정책 이벤트 감사 로그 보관
 
-- **활성화 조건**: `spring.data.redis.enabled=false` 또는 미설정
-- **용도**: 단일 인스턴스 환경
-- **동시성 제어**: taskId별 ReentrantLock
-- **메모리 관리**:
-  - TTL: 1시간 자동 만료
-  - 최대 항목: 10,000개
-  - 초과 시 가장 오래된 20% 자동 제거
-
-#### RedisSupervisorSwarmStateStore (분산 환경)
-
-- **활성화 조건**: `spring.data.redis.enabled=true`
-- **용도**: 다중 인스턴스 환경
-- **동시성 제어**: Redis 트랜잭션 기반 낙관적 락
-- **메모리 관리**: Redis TTL (기본 1시간)
-- **인덱스**: sessionId → taskId 매핑
-
-```yaml
-# application.yml
-spring:
-  data:
-    redis:
-      enabled: true  # Redis 저장소 활성화
-      host: localhost
-      port: 6379
-```
+SwarmState는 graph checkpoint와 별개이며, checkpoint는 `GraphCheckpointStore`, 공유 상태는 `SupervisorSwarmStateStore`가 담당한다.
 
 ---
 
-## 2. 낙관적 락 (Optimistic Locking)
+## 3) 저장소 구현
 
-### 2.1 동작 원리
+### 3.1 InMemory 저장소
 
-SwarmState는 `stateVersion` 필드를 통해 동시 수정 충돌을 감지합니다.
+- 기본 단일 인스턴스용 구현
+- taskId 기준 저장
+- sessionId 기준 latest 조회 지원
 
-```java
-// 충돌 감지 로직
-if (state.stateVersion() > 0 && current != null) {
-    long expectedPreviousVersion = state.stateVersion() - 1;
-    if (current.stateVersion() != expectedPreviousVersion) {
-        throw new SwarmStateVersionConflictException(
-            taskId, expectedPreviousVersion, current.stateVersion()
-        );
-    }
-}
-```
+### 3.2 Redis 저장소
 
-### 2.2 버전 관리 규칙
+- 분산 환경용 구현
+- Redis keyspace + TTL 사용
+- sessionId 기준 latest lookup 지원
 
-- `stateVersion = 0`: 신규 생성, 무조건 저장
-- `stateVersion > 0`: 이전 버전 검증 후 저장
-- 충돌 시: `SwarmStateVersionConflictException` 발생 → 재시도 필요
+문서상 중요한 점은 저장소 종류보다 `stateVersion` 기반 정합성 규칙이 공통이라는 것이다.
 
 ---
 
-## 3. Circuit Breaker와 Swarm Cooldown 통합
+## 4) 낙관적 락과 재시도
 
-### 3.1 두 메커니즘의 차이
+현재 `DefaultSupervisorSwarmCoordinator`는 단순 upsert가 아니라 충돌 재시도를 수행한다.
 
-| 항목 | Circuit Breaker | Swarm Cooldown |
-|------|----------------|----------------|
-| **적용 단계** | Invoke (호출 단계) | Plan (라우팅 계획 단계) |
-| **동작 방식** | 연속 실패 시 호출 차단 (hard block) | 최근 실패 에이전트 우선순위 하락 (soft skip) |
-| **차단 시간** | 30초 (설정 가능) | 120초 (기본값) |
-| **설정 위치** | `host.a2a.circuit-breaker` | Swarm Coordinator 내부 |
-| **목적** | 장애 전파 방지 | 최적 라우팅 선택 |
+- 최대 재시도 횟수: 3
+- backoff: 선형 짧은 대기(`10ms * attempt`)
+- 초과 시 `SwarmStateVersionConflictException` 전파
 
-### 3.2 통합 시나리오
+즉, handoff나 invoke batch 같은 누적 이벤트 업데이트는 "read-merge-write + version conflict retry" 방식으로 동작한다.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. 에이전트 A가 3회 연속 실패                                      │
-└─────────────────────────────────────────────────────────────┘
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 2. Circuit Breaker가 30초간 open                             │
-│    → invoke() 호출 시 즉시 CIRCUIT_OPEN 에러 반환                │
-└─────────────────────────────────────────────────────────────┘
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 3. Swarm Coordinator가 실패 기록                              │
-│    → agentCooldownUntilEpochMs 업데이트 (현재 + 120초)          │
-└─────────────────────────────────────────────────────────────┘
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 4. 다음 요청 시 라우팅 계획 단계에서 에이전트 A 건너뜀                │
-│    → 에이전트 B로 우회                                          │
-└─────────────────────────────────────────────────────────────┘
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│ 5. 30초 후 Circuit Breaker 자동 복구                          │
-│ 6. 120초 후 Swarm Cooldown 해제                              │
-└─────────────────────────────────────────────────────────────┘
-```
+이 부분은 기존 설계 문서보다 현재 구현이 더 구체적이다.
 
-### 3.3 SwarmState Facts 구조
+---
+
+## 5) 공유 facts 구조
+
+현재 coordinator가 다루는 핵심 fact 키는 아래와 같다.
+
+- `agentCooldownUntilEpochMs`
+- `circuitBreakerOpenUntilEpochMs`
+- `handoffHopCount`
+- `handoffPath`
+- `handoffBlockedCount`
+- `lastHandoffAgent`
+- `lastHandoffAt`
+- `handoffWindowStartEpochMs`
+- `handoffWindowCount`
+- `lastInvokeFailedCount`
+- `lastInvokeSuccessCount`
+- `lastInvokeHandoffRequestedCount`
+- `lastInvokeHandoffAcceptedCount`
+- `hitlRequired`
+- `policyId`
+- `policyReason`
+- `hitlDecision`
+- `decisionReason`
+
+예시:
 
 ```json
 {
   "sharedFacts": {
     "agentCooldownUntilEpochMs": {
-      "product": 1714694400000,
-      "reservation": 1714694460000
+      "product": 1776385200000
     },
     "circuitBreakerOpenUntilEpochMs": {
-      "product": 1714694370000
+      "reservation": 1776385110000
     },
     "handoffHopCount": 1,
     "handoffPath": ["search", "product"],
-    "handoffBlockedCount": 0,
+    "handoffBlockedCount": 2,
     "lastHandoffAgent": "product",
-    "lastHandoffAt": "2026-04-13T10:00:00Z",
-    "lastInvokeFailedCount": 2,
-    "lastInvokeSuccessCount": 1
-  },
-  "eventLog": [
-    {
-      "type": "INVOKE_BATCH_RECORDED",
-      "at": "2026-04-12T10:00:00Z",
-      "batchSize": 3,
-      "failedCount": 2,
-      "successCount": 1
-    },
-    {
-      "type": "HANDOFF_APPLIED",
-      "at": "2026-04-13T10:00:01Z",
-      "fromAgent": "search",
-      "toAgent": "product",
-      "reason": "domain_delegate",
-      "handoffEnabled": true
-    }
-  ]
+    "lastHandoffAt": "2026-04-17T10:00:00Z",
+    "handoffWindowStartEpochMs": 1776385000000,
+    "handoffWindowCount": 1,
+    "lastInvokeFailedCount": 1,
+    "lastInvokeSuccessCount": 2,
+    "lastInvokeHandoffRequestedCount": 1,
+    "lastInvokeHandoffAcceptedCount": 1
+  }
 }
 ```
 
 ---
 
-## 4. 라우팅 필터링 규칙
+## 6) Circuit Breaker와 Cooldown의 실제 분담
 
-### 4.1 우선순위
+### 6.1 Circuit Breaker
 
-`DefaultSupervisorSwarmCoordinator.applyRoutingRule()`는 다음 순서로 필터링합니다:
+`DefaultA2AInvocationService`가 agent별 in-memory circuit state를 관리한다.
 
-1. **Circuit Breaker open 확인** (우선순위 높음)
-   - `circuitBreakerOpenUntilEpochMs` 확인
-   - open 중이면 라우팅에서 제외
+- 연속 실패 횟수 누적
+- threshold 도달 시 open
+- open 중이면 downstream 호출 전에 즉시 실패 반환
+- 성공 시 해당 agent circuit 상태 초기화
 
-2. **Swarm Cooldown 확인**
-   - `agentCooldownUntilEpochMs` 확인
-   - cooldown 중이면 라우팅에서 제외
+설정:
 
-3. **강제 허용**
-   - 모든 에이전트가 차단 중이면 첫 번째 계획 강제 허용
-   - 무응답 방지
+- `host.a2a.circuit-breaker.enabled`
+- `host.a2a.circuit-breaker.failure-threshold`
+- `host.a2a.circuit-breaker.open-duration-ms`
 
-### 4.2 코드 예시
+### 6.2 Swarm Cooldown
 
-```java
-@Override
-public List<RoutingPlan> applyRoutingRule(
-    String taskId,
-    String sessionId,
-    List<RoutingPlan> planned,
-    Map<String, Object> swarmFacts
-) {
-    Map<String, Long> cooldown = cooldownMap(swarmFacts);
-    Map<String, Long> circuitOpen = circuitBreakerMap(swarmFacts);
+`DefaultSupervisorSwarmCoordinator.recordInvocationBatch(...)`가 invoke 결과를 기준으로 cooldown map을 갱신한다.
 
-    long now = Instant.now().toEpochMilli();
-    List<RoutingPlan> filtered = new ArrayList<>();
+- 실패한 agent는 120초 cooldown
+- 성공한 agent는 cooldown 해제
 
-    for (RoutingPlan plan : planned) {
-        // Circuit Breaker 확인 (우선순위 높음)
-        if (circuitOpen.getOrDefault(plan.agentKey(), 0L) > now) {
-            continue;  // 차단
-        }
+### 6.3 두 메커니즘의 연결
 
-        // Swarm cooldown 확인
-        if (cooldown.getOrDefault(plan.agentKey(), 0L) > now) {
-            continue;  // 차단
-        }
+실제 실행 흐름은 아래와 같다.
 
-        filtered.add(plan);
-    }
+1. invoke 시 circuit open 여부를 먼저 검사
+2. open이면 즉시 `FAILED/CIRCUIT_OPEN`
+3. invoke batch 결과가 SwarmState에 기록되며 cooldown 갱신
+4. 다음 planning 단계에서 Swarm routing rule이 cooldown/circuit 정보를 보고 agent를 필터링
 
-    // 모든 에이전트가 차단 중이면 강제 허용
-    if (filtered.isEmpty() && !planned.isEmpty()) {
-        return List.of(planned.get(0));
-    }
+즉:
 
-    return filtered;
-}
-```
+- circuit breaker는 invoke 단계의 hard block
+- swarm cooldown은 planning 단계의 soft skip
 
 ---
 
-## 5. 이벤트 로그 관리
+## 7) 라우팅 필터링 규칙
 
-### 5.1 크기 제한
+`applyRoutingRule(...)`는 아래 순서로 동작한다.
 
-이벤트 로그는 최근 **100개**만 유지합니다 (메모리 누수 방지).
+1. `circuitBreakerOpenUntilEpochMs` 확인
+2. `agentCooldownUntilEpochMs` 확인
+3. 둘 중 하나라도 active이면 해당 agent를 계획에서 제외
+4. 모두 차단되어 filtered plan이 비면 첫 번째 원본 plan을 강제 허용
 
-```java
-// 이벤트 로그 크기 제한: 최근 MAX_EVENT_LOG_SIZE개만 유지
-if (events.size() > MAX_EVENT_LOG_SIZE) {
-    events.subList(0, events.size() - MAX_EVENT_LOG_SIZE).clear();
-}
-```
+강제 허용은 완전 무응답을 막기 위한 안전장치다.
 
-### 5.2 이벤트 타입
+동시에 coordinator는 아래 이벤트를 남긴다.
 
-- `GRAPH_NODE_EVENT`: 그래프 노드 실행
-- `INVOKE_BATCH_RECORDED`: 배치 호출 결과
-- `HANDOFF_REQUESTED`: invoke 결과에서 handoff 지시가 발견됨
-- `HANDOFF_ACCEPTED`: handoff 정책 검증 통과
-- `HANDOFF_REJECTED`: allowlist/method/hop-limit/stream 검증 실패
-- `HANDOFF_SKIPPED_BY_FLAG`: `handoff.enabled=false`로 스킵
-- `PLAN`: 라우팅 계획 수립
-- `SELECT`: 라우팅 선택
-- `INVOKE`: 하위 에이전트 호출
-- `MERGE`: 결과 병합
-- `COMPOSE`: 응답 합성
+- circuit로 스킵된 agent 목록
+- cooldown으로 스킵된 agent 목록
+- forced plan 여부
 
 ---
 
-## 6. Handoff 정책 통합
+## 8) 이벤트 로그
 
-### 6.1 Feature Flag
+현재 event log는 최근 100개까지만 유지된다.
 
-- `handoff.enabled=false` (기본): handoff directive는 실행하지 않고 이벤트만 기록
-- `handoff.enabled=true`: handoff 정책 검증 후 동적 routing plan 반영
+대표 이벤트 타입:
 
-### 6.2 검증 규칙
+- `GRAPH_NODE_EVENT`
+- `INVOKE_BATCH_RECORDED`
+- `HANDOFF_REQUESTED`
+- `HANDOFF_ACCEPTED`
+- `HANDOFF_REJECTED`
+- `HANDOFF_SKIPPED_BY_FLAG`
+- `HITL_REVIEW_OPENED`
+- `HITL_REVIEW_DECIDED`
 
-1. handoff method는 기존 허용 enum만 사용
-2. stream 미지원 agent 대상 stream handoff 금지
-3. `maxHops`, duplicate path, rate-limit 정책 적용
-4. 검증 실패 시 기존 plan 경로로 폴백
+참고:
 
-### 6.3 Progress/Trace 출력
-
-- handoff 단계 진행상태는 `SupervisorProgressSupport` 공통 모듈을 사용
-- 표준 포맷: `stage/progress/message/metadata`
-- 권장 stage: `handoff`, `handoff-skipped`, `handoff-applied`
-
----
-
-## 7. 병렬 실행 및 예외 처리
-
-### 7.1 병렬 실행 설정
-
-```yaml
-# a2a-supervisor.yml
-host:
-  a2a:
-    execution:
-      max-concurrency: 3  # 최대 동시 호출 수 (1이면 순차)
-```
-
-### 7.2 Resilience 패턴
-
-병렬 실행 시 일부 실패를 허용합니다:
-
-```java
-private List<DownstreamCallResult> invokeBatch(
-    List<RoutingPlan> batch,
-    SupervisorPlanningContext context
-) {
-    List<CompletableFuture<DownstreamCallResult>> futures = batch.stream()
-        .map(plan -> CompletableFuture.supplyAsync(
-            () -> invocationService.invoke(plan, context))
-            .exceptionally(error -> {
-                // 예외 발생 시 실패 결과 객체 반환 (전체 배치 중단 방지)
-                return new DownstreamCallResult(
-                    plan.agentKey(),
-                    context.getTaskId(),
-                    "FAILED",
-                    "",
-                    "BATCH_INVOCATION_ERROR",
-                    sanitize(error.getMessage())
-                );
-            }))
-        .toList();
-    return futures.stream().map(CompletableFuture::join).toList();
-}
-```
+- `PLAN`, `SELECT`, `INVOKE` 같은 값은 event type이 아니라 `GRAPH_NODE_EVENT`의 metadata `nodeType`으로 기록된다.
+- 이전 문서에서 node명을 event type처럼 적은 부분은 현재 구현과 달랐다.
 
 ---
 
-## 8. 운영 가이드
+## 9) Handoff와 SwarmState 통합
 
-### 8.1 모니터링 지표
+`recordHandoffEvaluations(...)`는 검증 결과를 기준으로 아래를 업데이트한다.
 
-SwarmState를 통해 다음 지표를 추적할 수 있습니다:
+- accepted 수에 따른 `handoffHopCount`
+- 최근 handoff path
+- 마지막 handoff agent/시간
+- 분당 handoff window 카운트
+- rejected 수에 따른 blocked count
 
-- `lastInvokeFailedCount`: 마지막 배치의 실패 개수
-- `lastInvokeSuccessCount`: 마지막 배치의 성공 개수
-- `agentCooldownUntilEpochMs`: 에이전트별 cooldown 만료 시각
-- `circuitBreakerOpenUntilEpochMs`: 에이전트별 circuit open 만료 시각
+그리고 아래 이벤트를 누적한다.
 
-### 8.2 튜닝 파라미터
+- directive 발견 시 `HANDOFF_REQUESTED`
+- 검증 통과 시 `HANDOFF_ACCEPTED`
+- 정책 차단 시 `HANDOFF_REJECTED`
+- feature flag off면 `HANDOFF_SKIPPED_BY_FLAG`
 
-```java
-// DefaultSupervisorSwarmCoordinator.java
-private static final long FAILED_AGENT_COOLDOWN_MS = 120_000L;  // 2분
-private static final int MAX_EVENT_LOG_SIZE = 100;
-
-// InMemorySupervisorSwarmStateStore.java
-private static final long MAX_TTL_MS = 3_600_000L;  // 1시간
-private static final int MAX_ENTRIES_PER_MAP = 10_000;
-
-// RedisSupervisorSwarmStateStore.java
-private static final Duration DEFAULT_TTL = Duration.ofHours(1);
-```
-
-### 8.3 트러블슈팅
-
-#### 문제: SwarmStateVersionConflictException 빈번 발생
-
-- **원인**: 동시 요청이 많아 버전 충돌 발생
-- **해결**:
-  1. Redis 저장소 사용 (`spring.data.redis.enabled=true`)
-  2. `max-concurrency` 값 조정
-
-#### 문제: 메모리 누수
-
-- **원인**: SwarmState가 계속 증가
-- **해결**:
-  1. TTL 확인 (기본 1시간)
-  2. `MAX_ENTRIES_PER_MAP` 값 확인 (기본 10,000)
-  3. Redis 저장소로 전환
-
-#### 문제: 모든 에이전트가 차단되어 무응답
-
-- **원인**: Circuit Breaker + Swarm Cooldown 동시 작동
-- **해결**:
-  - 자동으로 첫 번째 계획 강제 허용됨
-  - Circuit Breaker 임계값 조정: `failure-threshold`
-  - Cooldown 시간 조정: `FAILED_AGENT_COOLDOWN_MS`
+현재 구현은 "nextAgentKey가 존재한다"가 아니라 `HandoffValidationResult.accepted()`를 기준으로 accepted를 계산한다.
 
 ---
 
-## 9. 참고 자료
+## 10) 운영 관점 요약
 
-- [낙관적 락 vs 비관적 락](https://martinfowler.com/eaaCatalog/optimisticOfflineLock.html)
-- [Circuit Breaker 패턴](https://martinfowler.com/bliki/CircuitBreaker.html)
-- [Redis Transactions](https://redis.io/topics/transactions)
-- `16-reference-links.md`: 관련 참고 문서
-- `29-supervisor-security-vulnerability-review-and-hardening-plan.md`: 보안 강화 계획
+현재 구조를 운영 관점에서 요약하면 다음과 같다.
+
+- 호출 차단: circuit breaker
+- 다음 계획 우회: swarm cooldown/circuit fact
+- 이관 루프 제어: handoff hop/path/window fact
+- 감사 추적: event log
+- 동시성 보정: version conflict retry
+
+즉, SwarmState는 단순 로그 저장소가 아니라 routing 안정화와 handoff 제어에 직접 참여하는 운영 상태 저장소다.

@@ -7,133 +7,126 @@ skinparam componentStyle rectangle
 skinparam linetype ortho
 
 package "01 Entry" {
-  [SupervisorA2A\nController] as SupervisorA2AController
+  [SupervisorA2A\nController] as Controller
+  [SupervisorA2ARequest\nValidator] as Validator
   [GlobalException\nHandler] as Advice
 }
 
 package "02 Application" {
-  [SupervisorAgent\nService] as SupervisorService
-  [SupervisorAgent\nOrchestrator] as SupervisorOrchestrator
+  [SupervisorAgent\nService] as Service
+  [SupervisorAgent\nOrchestrator] as Orchestrator
+  [SupervisorA2aLifecycle\nService] as Lifecycle
+  [SupervisorRequestIdempotency\nService] as Idempotency
 }
 
-package "03-1 Usecase Ports (Contracts)" {
+package "03 Usecase Ports" {
+  interface "HITL Policy\nPort" as HitlPolicyPort
+  interface "HITL Decision\nPort" as HitlDecisionPort
   interface "Planning\nPort" as PlanningPort
   interface "Invocation\nPort" as InvocationPort
   interface "Handoff Policy\nPort" as HandoffPolicyPort
   interface "Compose\nPort" as ComposePort
-  interface "HITL Policy\nPort" as HitlPolicyPort
-  interface "HITL Decision\nPort" as HitlDecisionPort
+  interface "Graph Factory\nPort" as GraphFactoryPort
+  interface "Swarm Coordinator\nPort" as SwarmCoordinatorPort
 }
 
-package "03-2 Infra Ports (Contracts)" {
-  interface "Graph Factory\nPort" as GraphFactoryPort
+package "04 Infra Ports" {
   interface "Conversation Store\nPort" as ConversationStorePort
   interface "Checkpoint Store\nPort" as CheckpointStorePort
   interface "Swarm State Store\nPort" as SwarmStateStorePort
+  interface "Review Store\nPort" as ReviewStorePort
+  interface "Task Store\nPort" as TaskStorePort
 }
 
-package "04 Adapters (Implementations)" {
-  package "04-1 Usecase Adapters" {
-    [LlmSupervisor\nPlanningService\n<size:10><color:#7A5B00>CallLLM</color></size>] as PlanningImpl #FFE7A8
-    [DefaultA2A\nInvocationService] as InvocationImpl
-    [DefaultHandoff\nPolicyService] as HandoffPolicyImpl
-    [LlmSupervisorResponse\nComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>] as ComposeImpl #FFE7A8
-    [DefaultHitl\nPolicyService] as HitlPolicyImpl
-    [DefaultHitl\nDecisionService] as HitlDecisionImpl
-  }
-
-  package "04-2 Infra Adapters" {
-    [LangGraphSupervisor\nStateGraphFactory] as GraphFactoryImpl
-    [RedisConversation\nStore] as ConversationStoreImpl
-    [RedisGraphCheckpoint\nStore] as CheckpointStoreImpl
-    [RedisSupervisor\nSwarmStateStore] as SwarmStateStoreImpl
-  }
-
-  package "04-3 A2A Gateway" {
-    [A2AClient\nRegistry] as A2ARegistry
-    [A2AJsonRpc\nClient] as A2AJsonRpcClient
-  }
+package "05 Adapters" {
+  [LlmHitlPolicy\nService\n<size:10><color:#7A5B00>CallLLM</color></size>] as HitlPolicyImpl #FFE7A8
+  [DefaultHitlDecision\nService] as HitlDecisionImpl
+  [LlmSupervisorPlanning\nService\n<size:10><color:#7A5B00>CallLLM</color></size>] as PlanningImpl #FFE7A8
+  [DefaultA2A\nInvocationService] as InvocationImpl
+  [DefaultHandoff\nPolicyService] as HandoffImpl
+  [LangGraphSupervisor\nStateGraphFactory] as GraphFactoryImpl
+  [DefaultSupervisorSwarm\nCoordinator] as SwarmCoordinatorImpl
+  [LlmSupervisorResponse\nComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>] as ComposeImpl #FFE7A8
+  [DefaultSupervisorProductInfo\nA2uiService] as A2uiImpl
+  [RedisConversationStore /\nInMemory impl] as ConversationStoreImpl
+  [RedisGraphCheckpointStore] as CheckpointStoreImpl
+  [RedisSupervisorSwarmStateStore /\nInMemory impl] as SwarmStateStoreImpl
+  [RedisSupervisorReviewStore /\nInMemory impl] as ReviewStoreImpl
+  [RedisA2ATaskStore /\nInMemory impl] as TaskStoreImpl
 }
 
-package "05 Runtime / External" {
-  [SupervisorProgress\nSupport] as ProgressSupport
+package "06 Runtime / External" {
   [DefaultSupervisor\nLlmRuntime\n<size:10><color:#7A5B00>CallLLM</color></size>] as LlmRuntime #FFF4CC
-  [ModelChatService\nFactory] as ChatFactory
-  [LlmCallPolicy] as LlmPolicy
-  [a2a-supervisor.yml] as SupervisorConfig
-  [Product Agent\nA2A] as ProductAgent
-  [Reservation Agent\nA2A] as ReservationAgent
-  [Search Agent\nA2A] as SearchAgent
+  [A2AClient\nRegistry] as Registry
+  [A2AJsonRpc\nClient] as JsonRpcClient
+  [application.yml /\na2a-supervisor-hitl.yml] as Config
+  [Downstream A2A\nAgents] as Agents
 }
 
-SupervisorA2AController --> SupervisorService : request
-SupervisorA2AController --> Advice : exception mapping
-SupervisorService --> SupervisorOrchestrator : orchestrate
+Controller --> Validator : params/schema check
+Controller --> Service : send/stream/tasks
+Controller --> Advice : exception mapping
 
-SupervisorOrchestrator --> PlanningPort : intent plan
-SupervisorOrchestrator --> InvocationPort : downstream call
-SupervisorOrchestrator --> HandoffPolicyPort : evaluate/apply handoff
-SupervisorOrchestrator --> ComposePort : response compose
-SupervisorOrchestrator --> HitlPolicyPort : risk evaluate
-SupervisorOrchestrator --> HitlDecisionPort : approve/cancel apply
-SupervisorOrchestrator --> GraphFactoryPort : state graph
-SupervisorOrchestrator --> ConversationStorePort : history load/save
-SupervisorOrchestrator --> CheckpointStorePort : checkpoint load/save
-SupervisorOrchestrator --> SwarmStateStorePort : shared state load/save
-SupervisorOrchestrator --> ProgressSupport : trace/progress emit
+Service --> Idempotency : send only
+Service --> HitlPolicyPort : evaluate pre-gate
+Service --> HitlDecisionPort : open/get/decide review
+Service --> Lifecycle : create/update task
+Service --> Orchestrator : execute when allowed
 
-note right of ComposePort
-Usecase mappings
-- PlanningPort -> SupervisorPlanningService
-- InvocationPort -> A2AInvocationService
-- ComposePort -> SupervisorResponseComposeService
-end note
+Orchestrator --> GraphFactoryPort : compiled graph
+Orchestrator --> ComposePort : final response compose
+Orchestrator --> ConversationStorePort : history load/save
+Orchestrator --> CheckpointStorePort : checkpoint load/save
+Orchestrator --> SwarmCoordinatorPort : load/mutate swarm state
+Orchestrator --> Lifecycle : mark completed/failed
 
-note right of CheckpointStorePort
-Infra mappings
-- GraphFactoryPort -> SupervisorStateGraphFactory
-- ConversationStorePort -> ConversationStore
-- CheckpointStorePort -> GraphCheckpointStore
-end note
+GraphFactoryPort <|.. GraphFactoryImpl
+GraphFactoryImpl --> PlanningPort
+GraphFactoryImpl --> InvocationPort
+GraphFactoryImpl --> HandoffPolicyPort
+GraphFactoryImpl --> SwarmCoordinatorPort
 
-PlanningPort <|.. PlanningImpl
-InvocationPort <|.. InvocationImpl
-HandoffPolicyPort <|.. HandoffPolicyImpl
-ComposePort <|.. ComposeImpl
 HitlPolicyPort <|.. HitlPolicyImpl
 HitlDecisionPort <|.. HitlDecisionImpl
-GraphFactoryPort <|.. GraphFactoryImpl
+PlanningPort <|.. PlanningImpl
+InvocationPort <|.. InvocationImpl
+HandoffPolicyPort <|.. HandoffImpl
+ComposePort <|.. ComposeImpl
+SwarmCoordinatorPort <|.. SwarmCoordinatorImpl
+
 ConversationStorePort <|.. ConversationStoreImpl
 CheckpointStorePort <|.. CheckpointStoreImpl
 SwarmStateStorePort <|.. SwarmStateStoreImpl
+ReviewStorePort <|.. ReviewStoreImpl
+TaskStorePort <|.. TaskStoreImpl
 
+HitlPolicyImpl --> LlmRuntime
 PlanningImpl --> LlmRuntime
 ComposeImpl --> LlmRuntime
-LlmRuntime --> ChatFactory
-ChatFactory --> LlmPolicy
+ComposeImpl --> A2uiImpl
+InvocationImpl --> Registry
+InvocationImpl --> JsonRpcClient
+Registry --> Config
+JsonRpcClient --> Agents
+SwarmCoordinatorImpl --> SwarmStateStorePort
+HitlDecisionImpl --> ReviewStorePort
+HitlDecisionImpl --> SwarmStateStorePort
+Lifecycle --> TaskStorePort
 
-InvocationImpl --> A2ARegistry : resolve route
-InvocationImpl --> A2AJsonRpcClient : call json-rpc
-A2ARegistry --> SupervisorConfig : route config
-A2AJsonRpcClient --> ProductAgent
-A2AJsonRpcClient --> ReservationAgent
-A2AJsonRpcClient --> SearchAgent
-
-note bottom of InvocationImpl
-Supervisor boundary rule
-- no sub-agent internal dependency
-- A2A endpoint allowlist + timeout/retry
-- handoff method must be allowed enum only
-- stream handoff blocked for non-stream-capable agent
+note right of Service
+Current application split
+- Service: HITL gate + task API
+- Orchestrator: graph execution + persistence
 end note
 
-' 2026-04-13 sync with docs 34
-' - add HandoffPolicy port/adapter and feature-flag oriented orchestration
-' - progress/trace should use SupervisorProgressSupport common module
-' - handoff method 제한(enum) + stream 지원 여부 검증
-' 2026-04-12 sync with docs 30/31
-' - Scope: HITL decision limited to APPROVE/CANCEL in current phase
-' - Data mutation requests (create/update/delete) require mandatory HITL
-' - A2A compatibility mode keeps both legacy and v1.0 methods
-' - User profile input collection is deferred to next phase
+note right of GraphFactoryImpl
+Current graph nodes
+- plan
+- select
+- invoke
+- handoff_evaluate
+- handoff_apply
+- merge
+- compose
+end note
 @enduml
