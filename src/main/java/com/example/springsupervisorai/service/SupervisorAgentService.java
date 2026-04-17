@@ -4,21 +4,16 @@ import com.example.springsupervisorai.a2a.A2AResponseMapper;
 import com.example.springsupervisorai.a2a.dto.JsonRpcResponse;
 import com.example.springsupervisorai.a2a.dto.TaskView;
 import com.example.springsupervisorai.a2a.idempotency.SupervisorRequestIdempotencyService;
-import com.example.springsupervisorai.a2a.lifecycle.SupervisorA2aLifecycleService;
 import com.example.springsupervisorai.a2a.task.A2aTaskSnapshot;
-import com.example.springsupervisorai.model.HitlDecisionType;
 import com.example.springsupervisorai.model.HitlPolicyResult;
-import com.example.springsupervisorai.model.SupervisorAgentRequest;
 import com.example.springsupervisorai.model.HitlReviewTicket;
-import com.example.springsupervisorai.service.agent.hitl.HitlDecisionService;
-import com.example.springsupervisorai.service.agent.hitl.HitlPolicyService;
+import com.example.springsupervisorai.model.SupervisorExecutionRequest;
+import com.example.springsupervisorai.model.SupervisorOutputEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.SignalType;
 import reactor.core.scheduler.Schedulers;
 
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,33 +27,39 @@ import java.util.Optional;
 public class SupervisorAgentService {
 
     private final SupervisorAgentOrchestrator orchestrator;
-    private final SupervisorA2aLifecycleService lifecycleService;
+    private final SupervisorTaskFacade taskFacade;
     private final A2AResponseMapper responseMapper;
     private final SupervisorRequestIdempotencyService requestIdempotencyService;
-    private final HitlPolicyService hitlPolicyService;
-    private final HitlDecisionService hitlDecisionService;
+    private final HitlGateService hitlGateService;
+    private final SupervisorExecutionService executionService;
+    private final SupervisorReviewApplicationService reviewApplicationService;
+    private final SupervisorStreamProgressService streamProgressService;
 
     /**
      * 서비스 의존성을 생성자 주입으로 초기화한다.
      *
      * @param orchestrator supervisor 오케스트레이터
-     * @param lifecycleService supervisor task 라이프사이클 서비스
+     * @param taskFacade supervisor task facade
      * @param responseMapper task snapshot 응답 매퍼
      */
     public SupervisorAgentService(
             SupervisorAgentOrchestrator orchestrator,
-            SupervisorA2aLifecycleService lifecycleService,
+            SupervisorTaskFacade taskFacade,
             A2AResponseMapper responseMapper,
             SupervisorRequestIdempotencyService requestIdempotencyService,
-            HitlPolicyService hitlPolicyService,
-            HitlDecisionService hitlDecisionService
+            HitlGateService hitlGateService,
+            SupervisorExecutionService executionService,
+            SupervisorReviewApplicationService reviewApplicationService,
+            SupervisorStreamProgressService streamProgressService
     ) {
         this.orchestrator = orchestrator;
-        this.lifecycleService = lifecycleService;
+        this.taskFacade = taskFacade;
         this.responseMapper = responseMapper;
         this.requestIdempotencyService = requestIdempotencyService;
-        this.hitlPolicyService = hitlPolicyService;
-        this.hitlDecisionService = hitlDecisionService;
+        this.hitlGateService = hitlGateService;
+        this.executionService = executionService;
+        this.reviewApplicationService = reviewApplicationService;
+        this.streamProgressService = streamProgressService;
     }
 
     /**
@@ -100,15 +101,13 @@ public class SupervisorAgentService {
     }
 
     private JsonRpcResponse executeSend(Object requestId, String sessionId, String message, String model) {
-        HitlPolicyResult policyResult = hitlPolicyService.evaluate(sessionId, message, model);
+        HitlPolicyResult policyResult = hitlGateService.evaluate(sessionId, message, model);
         if (policyResult.required()) {
             return buildWaitingReviewResponse(requestId, sessionId, message, model, policyResult);
         }
 
-        A2aTaskSnapshot task = lifecycleService.createAndMarkRunning(sessionId, message);
-        String payload = collectOrchestrationPayload(new SupervisorAgentRequest(sessionId, message, model), task.taskId());
-        TaskView view = resolveTaskViewAfterSend(task, payload);
-        return JsonRpcResponse.success(requestId, view);
+        A2aTaskSnapshot task = executionService.executeSync(new SupervisorExecutionRequest(sessionId, message, model));
+        return JsonRpcResponse.success(requestId, responseMapper.toTaskView(task));
     }
 
     /**
@@ -120,17 +119,25 @@ public class SupervisorAgentService {
      * @return 응답 토큰 Flux
      */
     public Flux<String> stream(String sessionId, String message, String model) {
+        return streamEvents(sessionId, message, model).map(SupervisorOutputEventSupport::serialize);
+    }
+
+    /**
+     * SendStreamingMessage/message-stream 계열 요청을 구조화된 이벤트 스트림으로 처리한다.
+     *
+     * @param sessionId 사용자 세션 id
+     * @param message 사용자 메시지
+     * @param model 모델 식별자
+     * @return 구조화된 supervisor output event flux
+     */
+    public Flux<SupervisorOutputEvent> streamEvents(String sessionId, String message, String model) {
         return Flux.concat(
-                initialStreamProgress(sessionId),
+                streamProgressService.initialHitlEvaluationEvents(sessionId),
                 evaluateHitlPolicyAsync(sessionId, message, model)
                         .flatMapMany(policyResult -> policyResult.required()
                                 ? streamWhenHitlRequired(sessionId, message, model, policyResult)
                                 : streamWhenHitlPassed(sessionId, message, model))
         );
-    }
-
-    private String progressLine(String stage, int progress, String message, Map<String, Object> metadata) {
-        return SupervisorProgressSupport.line(stage, progress, message, metadata);
     }
 
     /**
@@ -140,7 +147,7 @@ public class SupervisorAgentService {
      * @return task snapshot(optional)
      */
     public Optional<A2aTaskSnapshot> getTask(String taskId, String sessionId) {
-        return lifecycleService.get(taskId, sessionId);
+        return taskFacade.getTask(taskId, sessionId);
     }
 
     /**
@@ -151,7 +158,7 @@ public class SupervisorAgentService {
      * @return 취소된 task snapshot(optional)
      */
     public Optional<A2aTaskSnapshot> cancelTask(String taskId, String sessionId, String reason) {
-        return lifecycleService.cancel(taskId, sessionId, reason);
+        return taskFacade.cancelTask(taskId, sessionId, reason);
     }
 
     /**
@@ -161,7 +168,7 @@ public class SupervisorAgentService {
      * @return task snapshot 목록
      */
     public java.util.List<A2aTaskSnapshot> listTasks(String sessionId, int limit) {
-        return lifecycleService.list(sessionId, limit);
+        return taskFacade.listTasks(sessionId, limit);
     }
 
     /**
@@ -181,7 +188,7 @@ public class SupervisorAgentService {
      * @return review 티켓(optional)
      */
     public Optional<HitlReviewTicket> getReview(String taskId, String sessionId) {
-        return hitlDecisionService.getReview(taskId, sessionId);
+        return hitlGateService.getReview(taskId, sessionId);
     }
 
     /**
@@ -204,20 +211,7 @@ public class SupervisorAgentService {
             String reason,
             String decisionId
     ) {
-        HitlDecisionType decisionType = parseDecisionType(decision);
-        if (decisionType == null) {
-            return Optional.empty();
-        }
-        Optional<HitlReviewTicket> decided = hitlDecisionService.decide(taskId, sessionId, decisionType, reason, decisionId);
-        if (decided.isEmpty()) {
-            return Optional.empty();
-        }
-        HitlReviewTicket ticket = decided.get();
-        if (decisionType == HitlDecisionType.CANCEL) {
-            return handleCancelDecision(sessionId, taskId, reason, ticket);
-        }
-
-        return handleApproveDecision(sessionId, taskId, ticket);
+        return reviewApplicationService.decideReview(sessionId, taskId, decision, reason, decisionId);
     }
 
     /**
@@ -230,140 +224,39 @@ public class SupervisorAgentService {
             String model,
             HitlPolicyResult policyResult
     ) {
-        A2aTaskSnapshot waitingTask = lifecycleService.createAndMarkWaitingReview(sessionId, message, policyResult.reason());
-        hitlDecisionService.openReview(waitingTask.taskId(), sessionId, message, model, policyResult);
+        A2aTaskSnapshot waitingTask = hitlGateService.openReview(sessionId, message, model, policyResult);
         TaskView waitingView = responseMapper.toTaskView(waitingTask);
         return JsonRpcResponse.success(requestId, waitingView);
-    }
-
-    /**
-     * 오케스트레이터 응답 스트림을 단일 payload 문자열로 집계한다.
-     */
-    private String collectOrchestrationPayload(SupervisorAgentRequest request, String taskId) {
-        return orchestrator.execute(request, taskId)
-                .collectList()
-                .map(chunks -> String.join("", chunks))
-                .blockOptional()
-                .orElse("");
-    }
-
-    /**
-     * send 처리 후 최신 task 상태를 조회해 응답 view를 생성한다.
-     */
-    private TaskView resolveTaskViewAfterSend(A2aTaskSnapshot task, String payload) {
-        Optional<A2aTaskSnapshot> latest = lifecycleService.get(task.taskId());
-        TaskView view = responseMapper.toTaskView(latest.orElse(task));
-        if (payload != null && !payload.isBlank() && latest.isEmpty()) {
-            lifecycleService.markCompleted(task.taskId(), payload);
-            return responseMapper.toTaskView(lifecycleService.get(task.taskId()).orElse(task));
-        }
-        return view;
-    }
-
-    /**
-     * stream 시작 시 HITL 정책 평가 안내 메시지를 생성한다.
-     */
-    private Flux<String> initialStreamProgress(String sessionId) {
-        return Flux.just(
-                progressLine(SupervisorProgressSupport.STAGE_HITL, 2, "HITL 정책 평가를 시작합니다.", Map.of(
-                        "sessionId", sessionId == null ? "" : sessionId
-                ))
-        );
     }
 
     /**
      * HITL 정책 평가를 비동기 스케줄러에서 수행한다.
      */
     private Mono<HitlPolicyResult> evaluateHitlPolicyAsync(String sessionId, String message, String model) {
-        return Mono.fromCallable(() -> hitlPolicyService.evaluate(sessionId, message, model))
+        return Mono.fromCallable(() -> hitlGateService.evaluate(sessionId, message, model))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
      * stream 요청이 HITL 대기 상태로 귀결되는 경우의 진행 이벤트를 생성한다.
      */
-    private Flux<String> streamWhenHitlRequired(
+    private Flux<SupervisorOutputEvent> streamWhenHitlRequired(
             String sessionId,
             String message,
             String model,
             HitlPolicyResult policyResult
     ) {
-        A2aTaskSnapshot waitingTask = lifecycleService.createAndMarkWaitingReview(sessionId, message, policyResult.reason());
-        hitlDecisionService.openReview(waitingTask.taskId(), sessionId, message, model, policyResult);
-        return Flux.just(
-                progressLine(SupervisorProgressSupport.STAGE_HITL, 5, "HITL 정책에서 사용자 승인 필요로 판단되었습니다.", Map.of(
-                        "policyId", policyResult.policyId(),
-                        "reason", policyResult.reason()
-                )),
-                progressLine(SupervisorProgressSupport.STAGE_HITL_WAITING, 8, policyResult.reason(), Map.of(
-                        "taskId", waitingTask.taskId(),
-                        "reviewStatus", "WAITING_REVIEW",
-                        "policyId", policyResult.policyId(),
-                        "reason", policyResult.reason()
-                ))
-        );
+        A2aTaskSnapshot waitingTask = hitlGateService.openReview(sessionId, message, model, policyResult);
+        return streamProgressService.hitlRequiredEvents(policyResult, waitingTask);
     }
 
     /**
      * stream 요청이 HITL 통과된 경우 오케스트레이션 실행 스트림을 생성한다.
      */
-    private Flux<String> streamWhenHitlPassed(String sessionId, String message, String model) {
-        A2aTaskSnapshot task = lifecycleService.createAndMarkRunning(sessionId, message);
-        Flux<String> acceptedProgress = Flux.just(
-                progressLine(SupervisorProgressSupport.STAGE_HITL, 5, "HITL 정책 평가를 통과했습니다. 오케스트레이션을 계속합니다.", Map.of(
-                        "policy", "PASSED"
-                ))
+    private Flux<SupervisorOutputEvent> streamWhenHitlPassed(String sessionId, String message, String model) {
+        return Flux.concat(
+                streamProgressService.hitlPassedEvents(),
+                executionService.executeStreamEvents(new SupervisorExecutionRequest(sessionId, message, model))
         );
-        return Flux.concat(acceptedProgress, orchestrator.execute(new SupervisorAgentRequest(sessionId, message, model), task.taskId()))
-                .doFinally(signalType -> {
-                    if (signalType == SignalType.CANCEL) {
-                        lifecycleService.cancel(task.taskId(), "Stream canceled");
-                    }
-                });
-    }
-
-    /**
-     * review 결정 문자열을 enum으로 변환한다.
-     */
-    private HitlDecisionType parseDecisionType(String decision) {
-        return HitlDecisionType.from(decision.toUpperCase(Locale.ROOT)).orElse(null);
-    }
-
-    /**
-     * CANCEL review 결정을 반영한다.
-     */
-    private Optional<Map<String, Object>> handleCancelDecision(
-            String sessionId,
-            String taskId,
-            String reason,
-            HitlReviewTicket ticket
-    ) {
-        lifecycleService.cancel(taskId, sessionId, reason == null ? "Canceled by reviewer" : reason);
-        return buildDecisionResult(sessionId, taskId, ticket);
-    }
-
-    /**
-     * APPROVE review 결정을 반영하고 오케스트레이션을 재개한다.
-     */
-    private Optional<Map<String, Object>> handleApproveDecision(
-            String sessionId,
-            String taskId,
-            HitlReviewTicket ticket
-    ) {
-        lifecycleService.markRunning(taskId);
-        String payload = collectOrchestrationPayload(new SupervisorAgentRequest(sessionId, ticket.message(), ticket.model()), taskId);
-        lifecycleService.markCompleted(taskId, payload);
-        return buildDecisionResult(sessionId, taskId, ticket);
-    }
-
-    /**
-     * review 결정 결과(task/review)를 응답 포맷으로 조합한다.
-     */
-    private Optional<Map<String, Object>> buildDecisionResult(String sessionId, String taskId, HitlReviewTicket ticket) {
-        return lifecycleService.get(taskId, sessionId)
-                .map(snapshot -> Map.<String, Object>of(
-                        "task", responseMapper.toTaskView(snapshot),
-                        "review", responseMapper.toTaskReviewView(ticket)
-                ));
     }
 }

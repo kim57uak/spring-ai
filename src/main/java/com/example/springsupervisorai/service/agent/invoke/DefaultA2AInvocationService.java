@@ -5,6 +5,7 @@ import com.example.springsupervisorai.a2a.A2ARequestMapper;
 import com.example.springsupervisorai.a2a.dto.JsonRpcRequest;
 import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
+import com.example.springsupervisorai.model.InvocationPolicyContext;
 import com.example.springsupervisorai.model.RoutingPlan;
 import com.example.springsupervisorai.model.SupervisorErrorCode;
 import com.example.springsupervisorai.model.SupervisorInvocationStatus;
@@ -75,7 +76,9 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
      * @return 표준화된 downstream 호출 결과
      */
     @Override
-    public DownstreamCallResult invoke(RoutingPlan plan, SupervisorPlanningContext context) {
+    public DownstreamCallResult invoke(InvocationPolicyContext invocationContext) {
+        RoutingPlan plan = invocationContext.plan();
+        SupervisorPlanningContext context = invocationContext.planningContext();
         A2aSupervisorRoutingProperties.CircuitBreaker circuitBreaker = clientRegistry.circuitBreakerPolicy();
         if (isCircuitOpen(plan.agentKey(), circuitBreaker)) {
             logger.warn("Supervisor circuit open sessionId={}, agentKey={}", context.getSessionId(), plan.agentKey());

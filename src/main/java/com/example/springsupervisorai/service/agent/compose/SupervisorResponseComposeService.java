@@ -1,6 +1,8 @@
 package com.example.springsupervisorai.service.agent.compose;
 
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
+import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.service.SupervisorOutputEventSupport;
 import reactor.core.publisher.Flux;
 
 /**
@@ -11,10 +13,20 @@ import reactor.core.publisher.Flux;
 public interface SupervisorResponseComposeService {
 
     /**
+     * 합성 응답 이벤트 스트림을 생성한다.
+     *
+     * @param context compose 입력 컨텍스트
+     * @return 구조화된 출력 이벤트 Flux
+     */
+    Flux<SupervisorOutputEvent> streamComposeEvents(SupervisorPlanningContext context);
+
+    /**
      * 합성 응답 스트림을 생성한다.
      *
      * @param context compose 입력 컨텍스트
      * @return 사용자 응답 토큰 Flux
      */
-    Flux<String> streamCompose(SupervisorPlanningContext context);
+    default Flux<String> streamCompose(SupervisorPlanningContext context) {
+        return streamComposeEvents(context).map(SupervisorOutputEventSupport::serialize);
+    }
 }

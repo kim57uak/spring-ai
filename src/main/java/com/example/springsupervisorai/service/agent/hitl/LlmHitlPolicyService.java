@@ -1,6 +1,7 @@
 package com.example.springsupervisorai.service.agent.hitl;
 
 import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
+import com.example.springsupervisorai.model.HitlPolicyContext;
 import com.example.springsupervisorai.config.SupervisorPromptProperties;
 import com.example.springsupervisorai.model.HitlPolicyResult;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
@@ -57,11 +58,11 @@ public class LlmHitlPolicyService implements HitlPolicyService {
      * {@inheritDoc}
      */
     @Override
-    public HitlPolicyResult evaluate(String sessionId, String message, String model) {
+    public HitlPolicyResult evaluate(HitlPolicyContext context) {
         try {
-            String prompt = buildPolicyPrompt(message);
-            String raw = llmRuntime.complete(prompt, normalizeModel(model), normalizeSessionId(sessionId));
-            PolicyDecision decision = tryParseWithRepair(raw, sessionId, model);
+            String prompt = buildPolicyPrompt(context.message());
+            String raw = llmRuntime.complete(prompt, normalizeModel(context.model()), normalizeSessionId(context.sessionId()));
+            PolicyDecision decision = tryParseWithRepair(raw, context);
             if (!decision.required()) {
                 return HitlPolicyResult.notRequired();
             }
@@ -79,14 +80,14 @@ public class LlmHitlPolicyService implements HitlPolicyService {
         }
     }
 
-    private PolicyDecision tryParseWithRepair(String raw, String sessionId, String model) throws Exception {
+    private PolicyDecision tryParseWithRepair(String raw, HitlPolicyContext context) throws Exception {
         try {
             return parseDecision(raw);
         } catch (Exception primaryFailure) {
             String repairedRaw = llmRuntime.complete(
                     buildRepairPrompt(raw),
-                    normalizeModel(model),
-                    normalizeSessionId(sessionId)
+                    normalizeModel(context.model()),
+                    normalizeSessionId(context.sessionId())
             );
             return parseDecision(repairedRaw);
         }

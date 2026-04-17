@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -98,6 +99,51 @@ class McpToolExecutionServicePolicyTest {
         assertThat(result.executed()).isTrue();
         assertThat(result.success()).isFalse();
         verify(client, times(1)).callTool(eq("createReservation"), any());
+    }
+
+    @Test
+    void mutationToolShouldBeBlockedWhenExplicitArgumentsAreMissing() {
+        McpProperties properties = singleServerProperties(
+                "sale-product",
+                List.of("createAutoCopySaleProducts"),
+                Map.of("createAutoCopySaleProducts", toolPolicy(
+                        McpProperties.ToolOperation.MUTATION,
+                        false,
+                        1,
+                        true
+                ))
+        );
+        McpClientFactory clientFactory = mock(McpClientFactory.class);
+        ToolSchemaRegistry schemaRegistry = mock(ToolSchemaRegistry.class);
+        McpClient client = mock(McpClient.class);
+        when(clientFactory.createClient("sale-product")).thenReturn(client);
+        when(schemaRegistry.loadTools(eq("sale-product"), any())).thenReturn(List.of(Map.of(
+                "name", "createAutoCopySaleProducts",
+                "inputSchema", Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "request", Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "guid", Map.of("type", "string"),
+                                                "saleProductCode", Map.of("type", "string")
+                                        )
+                                )
+                        )
+                )
+        )));
+
+        McpToolExecutionService service = new McpToolExecutionService(clientFactory, properties, schemaRegistry, new ObjectMapper());
+        PlanningContext context = new PlanningContext("session-guard-1", "판매상품생성해줘", "openai");
+        context.setScope(AgentScope.unrestricted());
+        ToolPlan plan = new ToolPlan("action-execution", "sale-product", "createAutoCopySaleProducts", "create", Map.of(), true);
+
+        ToolExecutionResult result = service.execute(plan, context);
+
+        assertThat(result.executed()).isTrue();
+        assertThat(result.success()).isFalse();
+        assertThat(result.rawPayload()).contains("[MISSING_REQUIRED_PARAMS]");
+        verify(client, never()).callTool(eq("createAutoCopySaleProducts"), any());
     }
 
     @Test

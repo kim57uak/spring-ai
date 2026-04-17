@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service.agent.a2ui.product;
 
+import com.example.springsupervisorai.service.agent.a2ui.common.A2uiTemplateView;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumMap;

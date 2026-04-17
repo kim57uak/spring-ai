@@ -3,13 +3,15 @@ package com.example.springsupervisorai.service;
 import com.example.springsupervisorai.a2a.lifecycle.SupervisorA2aLifecycleService;
 import com.example.springsupervisorai.model.SupervisorAgentRequest;
 import com.example.springsupervisorai.model.SupervisorErrorCode;
+import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.service.agent.graph.SupervisorBatchExecutionPolicy;
+import com.example.springsupervisorai.service.agent.graph.SupervisorGraphInputBuilder;
+import com.example.springsupervisorai.service.agent.graph.SupervisorPlanRunner;
 import com.example.springsupervisorai.service.agent.compose.SupervisorResponseComposeService;
-import com.example.springsupervisorai.service.agent.graph.SupervisorStateGraphFactory;
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import com.example.springsupervisorai.service.agent.store.ConversationStore;
 import com.example.springsupervisorai.service.agent.store.GraphCheckpointStore;
 import com.example.springsupervisorai.service.agent.swarm.SupervisorSwarmCoordinator;
-import org.bsc.langgraph4j.CompiledGraph;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -39,7 +41,7 @@ class SupervisorAgentOrchestratorExecuteTest {
     @Test
     void executeShouldMarkCompletedWhenComposeSucceeds() {
         Fixture fixture = new Fixture();
-        when(fixture.composeService.streamCompose(any())).thenReturn(Flux.just("answer"));
+        when(fixture.composeService.streamComposeEvents(any())).thenReturn(Flux.just(SupervisorOutputEvent.text("answer")));
         SupervisorAgentOrchestrator orchestrator = fixture.newOrchestrator();
 
         List<String> chunks = orchestrator.execute(new SupervisorAgentRequest("s1", "hello", "openai"), "task-1")
@@ -58,7 +60,7 @@ class SupervisorAgentOrchestratorExecuteTest {
     @Test
     void executeShouldMarkComposeFailureWhenComposeErrors() {
         Fixture fixture = new Fixture();
-        when(fixture.composeService.streamCompose(any())).thenReturn(Flux.error(new IllegalStateException("compose-boom")));
+        when(fixture.composeService.streamComposeEvents(any())).thenReturn(Flux.error(new IllegalStateException("compose-boom")));
         SupervisorAgentOrchestrator orchestrator = fixture.newOrchestrator();
 
         List<String> chunks = orchestrator.execute(new SupervisorAgentRequest("s2", "hello", "openai"), "task-2")
@@ -78,11 +80,28 @@ class SupervisorAgentOrchestratorExecuteTest {
 
         private final ConversationStore conversationStore = mock(ConversationStore.class);
         private final GraphCheckpointStore checkpointStore = mock(GraphCheckpointStore.class);
-        private final SupervisorStateGraphFactory graphFactory = mock(SupervisorStateGraphFactory.class);
         private final SupervisorResponseComposeService composeService = mock(SupervisorResponseComposeService.class);
         private final SupervisorA2aLifecycleService lifecycleService = mock(SupervisorA2aLifecycleService.class);
         private final A2AInvocationService invocationService = mock(A2AInvocationService.class);
         private final SupervisorSwarmCoordinator swarmCoordinator = mock(SupervisorSwarmCoordinator.class);
+        private final SupervisorProgressPublisher progressPublisher = new SupervisorProgressPublisher(swarmCoordinator);
+        private final SupervisorExecutionPersistenceService persistenceService =
+                new SupervisorExecutionPersistenceService(conversationStore, checkpointStore, lifecycleService);
+        private final SupervisorFallbackInvokeService fallbackInvokeService =
+                new SupervisorFallbackInvokeService(
+                        new SupervisorBatchExecutionPolicy(new com.example.springsupervisorai.config.A2aSupervisorRoutingProperties()),
+                        new SupervisorPlanRunner(invocationService),
+                        swarmCoordinator
+                );
+        private final com.example.springsupervisorai.service.agent.graph.SupervisorStateGraphFactory graphFactory =
+                mock(com.example.springsupervisorai.service.agent.graph.SupervisorStateGraphFactory.class);
+        private final SupervisorExecutionStateLoader stateLoader =
+                new SupervisorExecutionStateLoader(conversationStore, checkpointStore, swarmCoordinator);
+        private final SupervisorGraphExecutionService graphExecutionService =
+                new SupervisorGraphExecutionService(graphFactory, stateLoader, progressPublisher, new SupervisorGraphInputBuilder());
+        private final SupervisorExceptionTranslator exceptionTranslator = new SupervisorExceptionTranslator();
+        private final SupervisorExecutionSummaryEmitter executionSummaryEmitter =
+                new SupervisorExecutionSummaryEmitter(new SupervisorHandoffProgressSupport());
 
         /**
          * 기본 mock 동작을 주입해 테스트 가능한 오케스트레이터 인스턴스를 생성한다.
@@ -90,23 +109,25 @@ class SupervisorAgentOrchestratorExecuteTest {
          * @return 오케스트레이터 테스트 인스턴스
          */
         private SupervisorAgentOrchestrator newOrchestrator() {
-            @SuppressWarnings("unchecked")
-            CompiledGraph<com.example.springsupervisorai.model.SupervisorGraphState> graph =
-                    (CompiledGraph<com.example.springsupervisorai.model.SupervisorGraphState>) mock(CompiledGraph.class);
             when(conversationStore.load(any())).thenReturn(List.of("user: prev"));
+            when(lifecycleService.get(any())).thenReturn(Optional.empty());
+            @SuppressWarnings("unchecked")
+            org.bsc.langgraph4j.CompiledGraph<com.example.springsupervisorai.model.SupervisorGraphState> graph =
+                    (org.bsc.langgraph4j.CompiledGraph<com.example.springsupervisorai.model.SupervisorGraphState>) mock(org.bsc.langgraph4j.CompiledGraph.class);
             when(checkpointStore.loadCheckpoint(any())).thenReturn(Optional.empty());
             when(graphFactory.getCompiledGraph()).thenReturn(graph);
             when(graph.invoke(anyMap(), any())).thenReturn(Optional.empty());
-            when(lifecycleService.get(any())).thenReturn(Optional.empty());
             when(swarmCoordinator.loadLatestBySession(any())).thenReturn(Optional.empty());
             return new SupervisorAgentOrchestrator(
-                    conversationStore,
-                    checkpointStore,
-                    graphFactory,
                     composeService,
                     lifecycleService,
                     invocationService,
-                    swarmCoordinator
+                    progressPublisher,
+                    persistenceService,
+                    fallbackInvokeService,
+                    graphExecutionService,
+                    exceptionTranslator,
+                    executionSummaryEmitter
             );
         }
     }

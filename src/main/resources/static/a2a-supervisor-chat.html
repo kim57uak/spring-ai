@@ -1532,8 +1532,9 @@
           return;
         }
 
-        const task = decideRes?.result?.task;
-        const review = decideRes?.result?.review;
+	        const task = decideRes?.result?.task;
+	        const review = decideRes?.result?.review;
+	        const taskStatus = String(task?.status || '').toUpperCase();
 
         // 90% 진행
         ai.reviewProgressFill.style.width = '90%';
@@ -1560,19 +1561,38 @@
           renderAssistantMarkdown(ai.answer, '요청이 검토 단계에서 취소되었습니다.');
         }
 
-        // 100% 완료
-        ai.reviewProgressFill.style.width = '100%';
-        ai.reviewProgressText.textContent = '완료';
+	        // 100% 완료
+	        ai.reviewProgressFill.style.width = '100%';
+	        ai.reviewProgressText.textContent = '완료';
 
-        // 1초 후 프로그레스 바 숨기기
-        setTimeout(() => {
-          ai.reviewProgress.classList.remove('active');
-          ai.approveBtn.style.display = 'none';
-          ai.cancelBtn.style.display = 'none';
-        }, 1000);
+	        if (decision === 'APPROVE' && taskStatus === 'COMPLETED') {
+	          ai.progressFill.style.width = '100%';
+	          ai.progressFill.classList.add('completed');
+	          ai.currentStage.textContent = '✅ 완료 - 승인 후 실행이 정상 완료되었습니다.';
+	          setStatus('완료', 'complete', {
+	            progress: 100,
+	            activity: '승인 후 실행 완료'
+	          });
+	        } else if (decision === 'CANCEL' && taskStatus === 'CANCELED') {
+	          ai.currentStage.textContent = '🛑 검토 취소 - 요청이 검토 단계에서 종료되었습니다.';
+	          setStatus('검토 취소', 'ready', {
+	            progress: 0,
+	            activity: '사용자 취소'
+	          });
+	        }
 
-        setStatus(`Review ${decision} 완료`, 'complete');
-      } catch (e) {
+	        // 1초 후 프로그레스 바 숨기기
+	        setTimeout(() => {
+	          ai.reviewProgress.classList.remove('active');
+	          ai.approveBtn.style.display = 'none';
+	          ai.cancelBtn.style.display = 'none';
+	        }, 1000);
+
+	        if (!((decision === 'APPROVE' && taskStatus === 'COMPLETED')
+	            || (decision === 'CANCEL' && taskStatus === 'CANCELED'))) {
+	          setStatus(`Review ${decision} 완료`, 'complete');
+	        }
+	      } catch (e) {
         ai.reviewProgress.classList.remove('active');
         ai.reviewDesc.textContent = `결정 처리 실패: ${e.message}`;
         ai.approveBtn.disabled = false;

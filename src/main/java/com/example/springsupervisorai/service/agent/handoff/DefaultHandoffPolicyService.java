@@ -2,6 +2,7 @@ package com.example.springsupervisorai.service.agent.handoff;
 
 import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
+import com.example.springsupervisorai.model.HandoffPolicyContext;
 import com.example.springsupervisorai.model.HandoffDirective;
 import com.example.springsupervisorai.model.HandoffValidationResult;
 import com.example.springsupervisorai.model.RoutingPlan;
@@ -63,19 +64,21 @@ public class DefaultHandoffPolicyService implements HandoffPolicyService {
      * @return directive별 검증 결과 목록(순서 보존)
      */
     @Override
-    public List<HandoffValidationResult> evaluate(SupervisorPlanningContext context, List<DownstreamCallResult> batchResults) {
+    public List<HandoffValidationResult> evaluate(HandoffPolicyContext context) {
+        SupervisorPlanningContext planningContext = context.planningContext();
+        List<DownstreamCallResult> batchResults = context.batchResults();
         if (batchResults == null || batchResults.isEmpty()) {
             return List.of();
         }
-        int hopCount = currentHopCount(context.getSwarmSharedFacts());
-        List<String> handoffPath = handoffPath(context.getSwarmSharedFacts());
+        int hopCount = currentHopCount(planningContext.getSwarmSharedFacts());
+        List<String> handoffPath = handoffPath(planningContext.getSwarmSharedFacts());
         List<HandoffValidationResult> results = new ArrayList<>();
         for (DownstreamCallResult callResult : batchResults) {
             HandoffDirective directive = toDirective(callResult);
             if (directive == null) {
                 continue;
             }
-            results.add(validateDirective(context, directive, hopCount, handoffPath));
+            results.add(validateDirective(planningContext, directive, hopCount, handoffPath));
         }
         return results;
     }

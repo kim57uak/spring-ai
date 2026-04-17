@@ -10,10 +10,15 @@ actor User
 participant "SupervisorA2AController" as Controller
 participant "SupervisorA2ARequestValidator" as Validator
 participant "SupervisorAgentService" as Service
-participant "HitlPolicyService" as HitlPolicy
-participant "HitlDecisionService" as HitlDecision
-participant "SupervisorA2aLifecycleService" as Lifecycle
+participant "HitlGateService" as HitlGate
+participant "SupervisorReviewApplicationService" as ReviewApp
+participant "SupervisorExecutionService" as ExecutionService
+participant "SupervisorStreamProgressService" as StreamProgress
 participant "SupervisorAgentOrchestrator" as Orchestrator
+participant "SupervisorGraphExecutionService" as GraphExecution
+participant "SupervisorExecutionSummaryEmitter" as SummaryEmitter
+participant "SupervisorProgressPublisher" as ProgressPublisher
+participant "SupervisorExecutionPersistenceService" as PersistenceService
 participant "LangGraph CompiledGraph" as Graph
 participant "SupervisorPlanningService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Planner #FFE7A8
 participant "DefaultSupervisorLlmRuntime" as Runtime #FFF4CC
@@ -30,21 +35,22 @@ participant "Search Agent A2A" as SearchAgent
 User -> Controller : POST /a2a/supervisor\nmessage/send or message/stream
 Controller -> Validator : precheck + validate params
 Validator --> Controller : validated params
-Controller -> Service : send(...) or stream(...)
-Service -> HitlPolicy : evaluate(sessionId, message, model)
-HitlPolicy -> Runtime : complete(hitl policy prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-Runtime --> HitlPolicy : HitlPolicyResult
+Controller -> Service : send(...) or streamEvents(...)
+Service -> HitlGate : evaluate(sessionId, message, model)
+HitlGate -> Runtime : complete(hitl policy prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
+Runtime --> HitlGate : HitlPolicyResult
 
 alt HITL required
-  Service -> Lifecycle : createAndMarkWaitingReview(...)
-  Service -> HitlDecision : openReview(...)
-  HitlDecision -> Swarm : review facts/event update
+  Service -> HitlGate : openReview(...)
+  HitlGate -> Swarm : review facts/event update
   Service --> Controller : WAITING_REVIEW task or hitl_waiting progress
 else HITL passed
-  Service -> Lifecycle : createAndMarkRunning(...)
-  Service -> Orchestrator : execute(request, taskId)
-  Orchestrator -> Swarm : load latest session state
-  Orchestrator -> Graph : invoke(state)
+  Service -> StreamProgress : initial/hitl-passed events
+  Service -> ExecutionService : executeSync(...) or executeStreamEvents(...)
+  ExecutionService -> Orchestrator : executeEvents(request, taskId)
+  Orchestrator -> GraphExecution : execute(request, taskId, ...)
+  GraphExecution -> Swarm : load latest session state
+  GraphExecution -> Graph : invoke(state)
 
   Graph -> Planner : plan(context)
   Planner -> Runtime : complete(planning prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
@@ -72,15 +78,26 @@ else HITL passed
     Graph -> HandoffPolicy : evaluate(context, batchResults)
     HandoffPolicy --> Graph : validations
     Graph -> Swarm : recordHandoffEvaluations(...)
-    Graph -> Swarm : recordNodeEvent(...)
   end
 
-  Orchestrator -> Composer : streamCompose(context)
+  Orchestrator -> SummaryEmitter : emit graph/routing summary
+  Orchestrator -> Composer : streamComposeEvents(context)
   Composer -> Runtime : stream/complete(compose prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-  Runtime --> Composer : chunks or A2UI decision
-  Composer --> Orchestrator : response chunks / A2UI payload
-  Orchestrator --> Service : result stream
-  Service --> Controller : JSON-RPC or SSE response
+  Runtime --> Composer : output events / A2UI decision
+  Composer --> Orchestrator : SupervisorOutputEvent stream
+  Orchestrator -> ProgressPublisher : progress/event log publish
+  Orchestrator -> PersistenceService : persist completion / mark failed
+  Orchestrator --> ExecutionService : SupervisorOutputEvent stream
+  ExecutionService --> Service : task snapshot or event stream
+  Service --> Controller : JSON-RPC or SupervisorOutputEvent SSE stream
+end
+
+alt review decide endpoint
+  Controller -> Service : decideReview(...)
+  Service -> ReviewApp : decideReview(...)
+  ReviewApp -> HitlGate : decide(...)
+  ReviewApp -> ExecutionService : resumeApprovedTask(...) when APPROVE
+  ReviewApp --> Controller : task/review payload
 end
 
 Controller --> User : task response / chunk / a2ui / done

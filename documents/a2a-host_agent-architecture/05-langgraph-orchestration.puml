@@ -16,8 +16,8 @@ if (review required?) then (yes)
 endif
 
 :Create RUNNING task;
-:Load history/checkpoint/swarm;
-:Build SupervisorGraphState;
+:Load history/checkpoint/swarm via ExecutionStateLoader;
+:Build typed graph input via SupervisorGraphInputBuilder;
 :Invoke CompiledGraph;
 
 #FFE7A8:PLAN node;
@@ -47,7 +47,9 @@ endif
 note right
 <size:10>CallLLM</size>
 end note
-:Persist history/checkpoint/task state;
+:Emit graph/routing summary via SummaryEmitter;
+:Collect sync payload via ExecutionResultCollector (sync/resume only);
+:Persist history/checkpoint/task state via PersistenceService;
 
 stop
 
@@ -59,5 +61,7 @@ Current graph contract
 - invoke batch size is bounded by execution.maxConcurrency
 - max iteration guard exists
 - handoff is feature-flagged and policy-validated
+- graph input assembly is outside graph
+- summary/progress publish is outside graph
 end note
 @enduml
