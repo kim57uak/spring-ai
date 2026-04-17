@@ -743,6 +743,12 @@
       box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
     }
 
+    .status-indicator.pending {
+      background: var(--warning);
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+      animation: none;
+    }
+
     .status-indicator.complete {
       background: var(--success);
       box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
@@ -755,6 +761,7 @@
       animation: none;
     }
 
+    .status-indicator.pending::after,
     .status-indicator.complete::after,
     .status-indicator.error::after {
       animation: none;
@@ -1105,6 +1112,9 @@
       if (type === 'streaming') {
         statusIndicatorEl.classList.add('active', 'streaming');
         statusProgressEl.classList.add('active');
+      } else if (type === 'pending') {
+        statusIndicatorEl.classList.add('active', 'pending');
+        statusProgressEl.classList.add('active');
       } else if (type === 'complete') {
         statusIndicatorEl.classList.add('active', 'complete');
       } else if (type === 'error') {
@@ -1151,6 +1161,18 @@
           statusTargetProgress = 14;
         }
         beginStatusTicker();
+        return;
+      }
+
+      if (type === 'pending') {
+        stopStatusTicker();
+        updateStatusVisual('pending');
+        const pendingProgress = typeof options.progress === 'number'
+          ? Math.min(99, Math.max(0, options.progress))
+          : Math.max(82, statusDisplayProgress);
+        statusTargetProgress = pendingProgress;
+        statusDisplayProgress = pendingProgress;
+        statusProgressEl.style.width = `${pendingProgress}%`;
         return;
       }
 
@@ -1398,10 +1420,15 @@
 
       if (metadataStr) {
         // "key=value, key2=value2" 파싱
-        metadataStr.split(',').forEach(pair => {
-          const [key, value] = pair.trim().split('=');
-          if (key && value) {
-            metadata[key.trim()] = value.trim();
+        metadataStr.split(',').forEach(entry => {
+          const pair = entry.trim();
+          if (!pair) return;
+          const separatorIndex = pair.indexOf('=');
+          if (separatorIndex < 0) return;
+          const key = pair.slice(0, separatorIndex).trim();
+          const value = pair.slice(separatorIndex + 1).trim();
+          if (key) {
+            metadata[key] = value;
           }
         });
       }
@@ -1422,6 +1449,7 @@
         initializing: '🚀 초기화',
         analyzing: '🔍 분석',
         planning: '📋 계획',
+        hitl: '🛡️ HITL 평가',
         hitl_waiting: '🧑 검토 대기',
         routing: '🎯 라우팅',
         invoking: '⚡ 실행',
@@ -1449,6 +1477,27 @@
       return `${getStageLabel(progress.stage)} - ${progress.message} (${detail})`;
     }
 
+    function isHitlWaitingProgress(progress) {
+      if (!progress) return false;
+      const stage = String(progress.stage || '').toLowerCase();
+      const reviewStatus = String(progress.metadata?.reviewStatus || '').toUpperCase();
+      return stage === 'hitl_waiting' || reviewStatus === 'WAITING_REVIEW';
+    }
+
+    async function handleHitlWaitingProgress(ai, progress) {
+      if (!isHitlWaitingProgress(progress)) return false;
+      await showHitlReviewPanel(
+        ai,
+        progress.metadata?.reason || progress.message,
+        progress.metadata?.taskId || ''
+      );
+      setStatus('HITL 승인 대기 중', 'pending', {
+        progress: Math.max(Number(progress.progress || 0), 82),
+        activity: '사용자 결정 대기'
+      });
+      return true;
+    }
+
     function applySupervisorProgress(ai, progress, opts = {}) {
       if (!progress) return 0;
       const previous = Number(opts.lastProgress || 0);
@@ -1460,14 +1509,15 @@
       }
 
       const detail = progressAgentDetail(progress);
+      const waitingReview = isHitlWaitingProgress(progress);
       setStatus(
         detail
           ? `${getStageLabel(progress.stage)} (${detail}, ${pct}%)`
           : `${getStageLabel(progress.stage)} (${pct}%)`,
-        'streaming',
+        waitingReview ? 'pending' : 'streaming',
         {
-          progress: pct,
-          activity: progress.message
+          progress: waitingReview ? Math.max(pct, 82) : pct,
+          activity: waitingReview ? '사용자 결정 대기' : progress.message
         }
       );
       return pct;
@@ -1566,13 +1616,17 @@
 	        ai.reviewProgressText.textContent = '완료';
 
 	        if (decision === 'APPROVE' && taskStatus === 'COMPLETED') {
+	          // replaySupervisorLogs가 상태를 'streaming'으로 변경했을 수 있으므로 다시 완료 상태로 설정
 	          ai.progressFill.style.width = '100%';
 	          ai.progressFill.classList.add('completed');
 	          ai.currentStage.textContent = '✅ 완료 - 승인 후 실행이 정상 완료되었습니다.';
-	          setStatus('완료', 'complete', {
-	            progress: 100,
-	            activity: '승인 후 실행 완료'
-	          });
+	          // 약간의 지연 후 완료 상태 설정하여 replaySupervisorLogs의 효과를 덮어씀
+	          setTimeout(() => {
+	            setStatus('완료', 'complete', {
+	              progress: 100,
+	              activity: '승인 후 실행 완료'
+	            });
+	          }, 100);
 	        } else if (decision === 'CANCEL' && taskStatus === 'CANCELED') {
 	          ai.currentStage.textContent = '🛑 검토 취소 - 요청이 검토 단계에서 종료되었습니다.';
 	          setStatus('검토 취소', 'ready', {
@@ -1690,8 +1744,8 @@
       }
     }
 
-    async function showHitlReviewPanel(ai, reason) {
-      const taskId = await findLatestWaitingTaskId();
+    async function showHitlReviewPanel(ai, reason, preferredTaskId = '') {
+      const taskId = preferredTaskId || await findLatestWaitingTaskId();
       if (!taskId) {
         ai.reviewPanel.style.display = 'block';
         ai.reviewDesc.textContent = '리뷰 대기 task를 찾지 못했습니다. 잠시 후 다시 시도해주세요.';
@@ -1832,10 +1886,9 @@
 	                  const progress = parseSupervisorProgress(line.trim());
 	                  if (progress) {
 	                    lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
-	                    if (progress.stage === 'hitl_waiting') {
-	                      waitingReviewDetected = true;
-	                      await showHitlReviewPanel(ai, progress.metadata?.reason || progress.message);
-	                    }
+                      if (await handleHitlWaitingProgress(ai, progress)) {
+                        waitingReviewDetected = true;
+                      }
 	                  }
                 } else if (line.length > 0) {
                   assistantDelta += rawLine + '\n';
@@ -1851,10 +1904,9 @@
                     ai.stream.textContent = supervisorLogs.join('\n');
                     ai.stream.scrollTop = ai.stream.scrollHeight;
 	                    lastProgress = applySupervisorProgress(ai, trailingProgress, { lastProgress });
-	                    if (trailingProgress.stage === 'hitl_waiting') {
-	                      waitingReviewDetected = true;
-	                      await showHitlReviewPanel(ai, trailingProgress.metadata?.reason || trailingProgress.message);
-	                    }
+                      if (await handleHitlWaitingProgress(ai, trailingProgress)) {
+                        waitingReviewDetected = true;
+                      }
 	                  } else {
                     lineBuffer = trailing;
                   }
@@ -1907,10 +1959,17 @@
 
             if (event === 'done') {
               doneReceived = true;
-              setStatus('응답 마무리 중...', 'streaming', {
-                progress: Math.max(lastProgress, 97),
-                activity: '최종 응답 조합 중'
-              });
+              if (waitingReviewDetected) {
+                setStatus('HITL 승인 대기 중', 'pending', {
+                  progress: Math.max(lastProgress, 82),
+                  activity: '사용자 결정 대기'
+                });
+              } else {
+                setStatus('응답 마무리 중...', 'streaming', {
+                  progress: Math.max(lastProgress, 97),
+                  activity: '최종 응답 조합 중'
+                });
+              }
             }
           }
         }
@@ -1925,6 +1984,9 @@
           const remainderProgress = parseSupervisorProgress(trimmedRemainder);
           if (remainderProgress) {
             lastProgress = applySupervisorProgress(ai, remainderProgress, { lastProgress });
+            if (await handleHitlWaitingProgress(ai, remainderProgress)) {
+              waitingReviewDetected = true;
+            }
           }
         } else if (remainder.length > 0) {
           acc += remainder;
@@ -1938,7 +2000,7 @@
         if (!acc) {
           if (waitingReviewDetected) {
             ai.answer.innerText = '요청이 HITL 승인 대기 상태입니다. 아래 버튼으로 승인/취소를 선택하세요.';
-            setStatus('HITL 승인 대기 중', 'streaming', {
+            setStatus('HITL 승인 대기 중', 'pending', {
               progress: Math.max(lastProgress, 82),
               activity: '사용자 결정 대기'
             });
