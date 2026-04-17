@@ -91,6 +91,21 @@ public class SupervisorExecutionService {
     }
 
     /**
+     * review 승인 후 task를 스트리밍으로 재실행한다.
+     * <p>
+     * 기존 approve unary와 달리 같은 taskId로 progress/text 이벤트를 즉시 반환한다.
+     * 클라이언트 연결이 끊겨도 승인 사실 자체는 유지되어야 하므로 cancel 전이는 하지 않는다.
+     *
+     * @param taskId task id
+     * @param request 실행 요청
+     * @return supervisor 출력 이벤트 스트림
+     */
+    public Flux<SupervisorOutputEvent> resumeApprovedTaskStream(String taskId, SupervisorExecutionRequest request) {
+        taskFacade.markRunning(taskId);
+        return orchestrator.executeEvents(request.toAgentRequest(), taskId);
+    }
+
+    /**
      * sync/resume 실행용 결과를 수집한다.
      *
      * @param request 실행 요청

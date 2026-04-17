@@ -111,7 +111,7 @@ public class SupervisorA2AController {
                     case LIST_TASKS, TASKS_LIST -> handleList(request, session);
                     case GET_TASK_REVIEW, TASKS_REVIEW_GET -> handleReviewGet(request, session);
                     case DECIDE_TASK_REVIEW, TASKS_REVIEW_DECIDE -> handleReviewDecide(request, session);
-                    case SEND_STREAMING_MESSAGE, MESSAGE_STREAM -> JsonRpcResponse.error(
+                    case SEND_STREAMING_MESSAGE, MESSAGE_STREAM, DECIDE_TASK_REVIEW_STREAM, TASKS_REVIEW_DECIDE_STREAM -> JsonRpcResponse.error(
                             request.id(), METHOD_NOT_FOUND, "Use streaming endpoint for SendStreamingMessage or message/stream"
                     );
                 })
@@ -139,14 +139,32 @@ public class SupervisorA2AController {
         if (parsedMethod == null || !parsedMethod.isStream()) {
             return Flux.just(toSseEvent("error", JsonRpcResponse.error(request.id(), METHOD_NOT_FOUND, "Method not found")));
         }
-        SupervisorA2ARequestValidator.ValidationResult<SupervisorA2ARequestValidator.ResolvedSendParams> validation =
-                requestValidator.validateSendParams(request, objectMapper);
-        if (validation.isError()) {
-            return Flux.just(toSseEvent("error", validation.error()));
+        Flux<SupervisorOutputEvent> eventStream;
+        if (parsedMethod.isReviewDecideStream()) {
+            SupervisorA2ARequestValidator.ValidationResult<TaskReviewDecisionParams> validation =
+                    requestValidator.validateReviewDecision(request, objectMapper);
+            if (validation.isError()) {
+                return Flux.just(toSseEvent("error", validation.error()));
+            }
+            TaskReviewDecisionParams params = validation.params();
+            eventStream = supervisorAgentService.decideReviewStream(
+                    session.getId(),
+                    params.id(),
+                    params.decision(),
+                    params.reason(),
+                    params.decisionId()
+            );
+        } else {
+            SupervisorA2ARequestValidator.ValidationResult<SupervisorA2ARequestValidator.ResolvedSendParams> validation =
+                    requestValidator.validateSendParams(request, objectMapper);
+            if (validation.isError()) {
+                return Flux.just(toSseEvent("error", validation.error()));
+            }
+            SupervisorA2ARequestValidator.ResolvedSendParams params = validation.params();
+            String sanitized = promptInjectionGuard.sanitize(params.messageText());
+            eventStream = supervisorAgentService.streamEvents(session.getId(), sanitized, params.model());
         }
-        SupervisorA2ARequestValidator.ResolvedSendParams params = validation.params();
-        String sanitized = promptInjectionGuard.sanitize(params.messageText());
-        return supervisorAgentService.streamEvents(session.getId(), sanitized, params.model())
+        return eventStream
                 .timeout(Duration.ofMillis(Math.max(1_000L, streamProperties.getTimeoutMs())))
                 .map(this::toSseEvent)
                 .concatWithValues(toSseEvent("done", Map.of("reason", "completed")))
