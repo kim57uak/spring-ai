@@ -299,7 +299,7 @@ class LlmSupervisorResponseComposeServiceTest {
         properties.setA2ui(a2ui);
         when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
-                .thenReturn("{\"message\":\"상품 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"creation_form\"}");
+                .thenReturn("{\"message\":\"상품 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"package_sale_product_create_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "상품 생성 화면 보여줘", "openai");
         context.addResult(new DownstreamCallResult(
@@ -327,7 +327,7 @@ class LlmSupervisorResponseComposeServiceTest {
         properties.setA2ui(a2ui);
         when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
-                .thenReturn("{\"message\":\"상품 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"creation_form\"}");
+                .thenReturn("{\"message\":\"상품 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"package_sale_product_create_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
         SupervisorPlanningContext context = new SupervisorPlanningContext(
                 "s1",
@@ -350,7 +350,7 @@ class LlmSupervisorResponseComposeServiceTest {
         properties.setA2ui(a2ui);
         when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
-                .thenReturn("{\"message\":\"예약 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"reservation_form\"}");
+                .thenReturn("{\"message\":\"패키지 예약 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"package_reservation_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "AAP331260523TG1 상품 예약 생성 화면 보여줘", "openai");
         context.addResult(new DownstreamCallResult(
@@ -378,7 +378,7 @@ class LlmSupervisorResponseComposeServiceTest {
         properties.setA2ui(a2ui);
         when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("compose fallback"));
         when(llmRuntime.complete(anyString(), eq("openai"), eq("s1")))
-                .thenReturn("{\"message\":\"예약 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"reservation_form\"}");
+                .thenReturn("{\"message\":\"패키지 예약 생성 입력 화면을 준비했습니다.\",\"selectedView\":\"package_reservation_form\"}");
         LlmSupervisorResponseComposeService service = newService(llmRuntime, properties, productA2uiService());
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "예약 생성 폼 보여줘", "openai");
         context.setRoutingPlans(List.of(new DownstreamCallResultPlaceholder().reservationCreationPlan()));

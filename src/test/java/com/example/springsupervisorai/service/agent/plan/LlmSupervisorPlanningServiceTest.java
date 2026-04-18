@@ -220,7 +220,7 @@ class LlmSupervisorPlanningServiceTest {
         when(llmRuntime.complete(anyString(), anyString(), anyString()))
                 .thenReturn("""
                         {"complete":false,"plans":[
-                          {"agentKey":"reservation","method":"SendMessage","reason":"예약 생성 폼이 먼저 필요함","priority":1,"preHitlA2ui":"reservation_form","arguments":{"message":"예약 생성 요청"}}
+                          {"agentKey":"reservation","method":"SendMessage","reason":"예약 생성 폼이 먼저 필요함","priority":1,"preHitlA2ui":"package_reservation_form","arguments":{"message":"예약 생성 요청"}}
                         ]}
                         """);
 
@@ -242,7 +242,7 @@ class LlmSupervisorPlanningServiceTest {
 
         assertThat(plans).hasSize(1);
         assertThat(plans.get(0).arguments())
-                .containsEntry(SupervisorPreHitlA2uiService.PRE_HITL_A2UI_ARGUMENT, "reservation_form");
+                .containsEntry(SupervisorPreHitlA2uiService.PRE_HITL_A2UI_ARGUMENT, "package_reservation_form");
     }
 
     private static A2aSupervisorRoutingProperties.Route route(String endpoint) {

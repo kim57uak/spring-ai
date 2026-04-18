@@ -390,7 +390,7 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
         }
         Map<String, Object> arguments = readArguments(argumentsNode);
         String preHitlA2ui = node.path("preHitlA2ui").asText("").trim();
-        if ("reservation_form".equalsIgnoreCase(preHitlA2ui) || "creation_form".equalsIgnoreCase(preHitlA2ui)) {
+        if ("package_reservation_form".equalsIgnoreCase(preHitlA2ui) || "package_sale_product_create_form".equalsIgnoreCase(preHitlA2ui)) {
             LinkedHashMap<String, Object> augmented = new LinkedHashMap<>(arguments);
             augmented.put(SupervisorPreHitlA2uiService.PRE_HITL_A2UI_ARGUMENT, preHitlA2ui.toLowerCase(Locale.ROOT));
             arguments = Map.copyOf(augmented);

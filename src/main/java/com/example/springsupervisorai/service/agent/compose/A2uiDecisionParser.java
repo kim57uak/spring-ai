@@ -37,8 +37,8 @@ public class A2uiDecisionParser {
             case "PRICING" -> A2uiTemplateView.PRICING;
             case "TIMELINE" -> A2uiTemplateView.TIMELINE;
             case "BOOKING" -> A2uiTemplateView.BOOKING;
-            case "CREATION_FORM", "CREATE_FORM" -> A2uiTemplateView.CREATION_FORM;
-            case "RESERVATION_FORM" -> A2uiTemplateView.RESERVATION_FORM;
+            case "PACKAGE_SALE_PRODUCT_CREATE_FORM", "CREATE_FORM" -> A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM;
+            case "PACKAGE_RESERVATION_FORM" -> A2uiTemplateView.PACKAGE_RESERVATION_FORM;
             default -> throw new IllegalArgumentException("unsupported selectedView: " + selectedView);
         };
         return new ComposeA2uiDecision(message, view);

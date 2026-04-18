@@ -23,15 +23,15 @@ public class ReservationA2uiComposePromptProvider implements A2uiComposePromptPr
 
     @Override
     public String supportedTemplateKeys() {
-        return "reservation_form";
+        return "package_reservation_form";
     }
 
     @Override
     public String templateCatalogPrompt() {
         return """
                 templates:
-                - key: reservation_form
-                  when: 예약 생성, 예약 접수, 예약자 정보 입력, 예약 신청 폼이 필요한 요청
+                - key: package_reservation_form
+                  when: 패키지 예약 생성, 예약 접수, 예약자 정보 입력, 예약 신청 폼이 필요한 요청
                 """;
     }
 

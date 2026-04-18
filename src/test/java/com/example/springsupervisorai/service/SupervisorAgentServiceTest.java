@@ -387,7 +387,7 @@ class SupervisorAgentServiceTest {
         when(preHitlA2uiService.build("session-1", "상품 생성 화면 보여줘", "openai"))
                 .thenReturn(Optional.of(new SupervisorA2uiService.A2uiRenderResult(
                         "요청에 맞는 입력 화면을 준비했습니다.",
-                        "{\"messages\":[{\"metadata\":{\"component\":\"creation_form_card\"}}]}"
+                        "{\"messages\":[{\"metadata\":{\"component\":\"package_sale_product_create_form_card\"}}]}"
                 )));
         when(streamProgressService.preHitlA2uiEvents()).thenReturn(Flux.just(
                 SupervisorOutputEvent.progress(SupervisorProgressSupport.event("planning", 42, "입력 화면을 준비했습니다.", java.util.Map.of()))

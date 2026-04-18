@@ -81,8 +81,8 @@ public class SupervisorPreHitlA2uiService {
 
     private Optional<A2uiTemplateView> toTemplateView(String raw) {
         return switch (raw.toLowerCase(java.util.Locale.ROOT)) {
-            case "reservation_form" -> Optional.of(A2uiTemplateView.RESERVATION_FORM);
-            case "creation_form" -> Optional.of(A2uiTemplateView.CREATION_FORM);
+            case "package_reservation_form" -> Optional.of(A2uiTemplateView.PACKAGE_RESERVATION_FORM);
+            case "package_sale_product_create_form" -> Optional.of(A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM);
             default -> Optional.empty();
         };
     }
