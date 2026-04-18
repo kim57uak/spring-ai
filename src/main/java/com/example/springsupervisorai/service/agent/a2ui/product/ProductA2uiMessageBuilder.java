@@ -81,34 +81,34 @@ public class ProductA2uiMessageBuilder {
     private void addSummaryCard(List<Map<String, Object>> components, ProductPresentationModel model) {
         List<String> summaryChildren = new ArrayList<>();
         if (hasText(model.thumbnailUrl())) {
-            summaryChildren.add("summary_image");
-            components.add(component("summary_image", "Image", Map.of(
+            summaryChildren.add("package_summary_image");
+            components.add(component("package_summary_image", "Image", Map.of(
                     "url", literal(model.thumbnailUrl()),
                     "altText", literal(hasText(model.name()) ? model.name() : "상품 대표 이미지"),
                     "usageHint", "largeFeature",
                     "fit", "cover"
             )));
         }
-        summaryChildren.add("summary_code");
-        summaryChildren.add("summary_title");
+        summaryChildren.add("package_summary_code");
+        summaryChildren.add("package_summary_title");
         if (hasText(model.theme()) || hasText(model.brand()) || hasText(model.airline())) {
-            summaryChildren.add("summary_tags");
+            summaryChildren.add("package_summary_tags");
         }
-        summaryChildren.add("summary_trip");
-        summaryChildren.add("summary_route");
-        summaryChildren.add("summary_price");
+        summaryChildren.add("package_summary_trip");
+        summaryChildren.add("package_summary_route");
+        summaryChildren.add("package_summary_price");
 
-        components.add(textComponent("summary_code", valueOrBlank(model.productCode()), "caption"));
-        components.add(textComponent("summary_title", hasText(model.name()) ? model.name() : "상품 상세", "h3"));
-        if (summaryChildren.contains("summary_tags")) {
+        components.add(textComponent("package_summary_code", valueOrBlank(model.productCode()), "caption"));
+        components.add(textComponent("package_summary_title", hasText(model.name()) ? model.name() : "상품 상세", "h3"));
+        if (summaryChildren.contains("package_summary_tags")) {
             components.add(textComponent(
-                    "summary_tags",
+                    "package_summary_tags",
                     joinNonBlank(" · ", model.theme(), model.brand(), model.airline()),
                     "body"
             ));
         }
         components.add(textComponent(
-                "summary_trip",
+                "package_summary_trip",
                 joinNonBlank(" | ",
                         displayValue(model.departureDate(), "-"),
                         displayValue(model.arrivalDate(), "-"),
@@ -117,71 +117,71 @@ public class ProductA2uiMessageBuilder {
                 "body"
         ));
         components.add(textComponent(
-                "summary_route",
+                "package_summary_route",
                 joinNonBlank(" → ", model.departureCity(), model.arrivalCity()),
                 "body"
         ));
         components.add(textComponent(
-                "summary_price",
+                "package_summary_price",
                 "성인 기준가: " + formatMoney(model.price(), model.currency()),
                 "h4"
         ));
 
-        components.add(component("summary_body", "Column", Map.of(
+        components.add(component("package_summary_body", "Column", Map.of(
                 "children", explicit(summaryChildren),
                 "alignment", "stretch"
         )));
-        components.add(component("summary_card", "Card", Map.of("child", "summary_body")));
+        components.add(component("package_summary_card", "Card", Map.of("child", "package_summary_body")));
     }
 
     private void addPricingCard(List<Map<String, Object>> components, ProductPresentationModel model) {
         List<String> pricingChildren = new ArrayList<>(List.of(
-                "pricing_title",
-                "pricing_adult",
-                "pricing_child",
-                "pricing_infant",
-                "pricing_deposit"
+                "package_pricing_title",
+                "package_pricing_adult",
+                "package_pricing_child",
+                "package_pricing_infant",
+                "package_pricing_deposit"
         ));
-        components.add(textComponent("pricing_title", "가격 정보", "h4"));
-        components.add(textComponent("pricing_adult", "성인: " + formatMoney(model.adultPrice(), "KRW"), "body"));
-        components.add(textComponent("pricing_child", "아동: " + formatMoney(model.childPrice(), "KRW"), "body"));
-        components.add(textComponent("pricing_infant", "유아: " + formatMoney(model.infantPrice(), "KRW"), "body"));
-        components.add(textComponent("pricing_deposit", "계약금: " + formatMoney(model.depositPrice(), "KRW"), "body"));
+        components.add(textComponent("package_pricing_title", "가격 정보", "h4"));
+        components.add(textComponent("package_pricing_adult", "성인: " + formatMoney(model.adultPrice(), "KRW"), "body"));
+        components.add(textComponent("package_pricing_child", "아동: " + formatMoney(model.childPrice(), "KRW"), "body"));
+        components.add(textComponent("package_pricing_infant", "유아: " + formatMoney(model.infantPrice(), "KRW"), "body"));
+        components.add(textComponent("package_pricing_deposit", "계약금: " + formatMoney(model.depositPrice(), "KRW"), "body"));
         if (hasText(model.singleRoomNote())) {
-            pricingChildren.add("pricing_single_room");
-            components.add(textComponent("pricing_single_room", "1인 객실: " + model.singleRoomNote(), "body"));
+            pricingChildren.add("package_pricing_single_room");
+            components.add(textComponent("package_pricing_single_room", "1인 객실: " + model.singleRoomNote(), "body"));
         }
-        pricingChildren.add("pricing_included_title");
-        pricingChildren.add("pricing_included_list");
-        pricingChildren.add("pricing_optional_title");
-        pricingChildren.add("pricing_optional_list");
-        components.add(textComponent("pricing_included_title", "포함 사항", "h5"));
-        addTextList(components, "pricing_included_list", mapItems(model.includedItems(), item ->
+        pricingChildren.add("package_pricing_included_title");
+        pricingChildren.add("package_pricing_included_list");
+        pricingChildren.add("package_pricing_optional_title");
+        pricingChildren.add("package_pricing_optional_list");
+        components.add(textComponent("package_pricing_included_title", "포함 사항", "h5"));
+        addTextList(components, "package_pricing_included_list", mapItems(model.includedItems(), item ->
                 joinNonBlank(" ", item.get("category"), item.get("description"))));
-        components.add(textComponent("pricing_optional_title", "선택 경비", "h5"));
-        addTextList(components, "pricing_optional_list", mapItems(model.optionalItems(), item ->
+        components.add(textComponent("package_pricing_optional_title", "선택 경비", "h5"));
+        addTextList(components, "package_pricing_optional_list", mapItems(model.optionalItems(), item ->
                 joinNonBlank(" ", item.get("category"), item.get("description"))));
 
-        components.add(component("pricing_body", "Column", Map.of(
+        components.add(component("package_pricing_body", "Column", Map.of(
                 "children", explicit(pricingChildren),
                 "alignment", "stretch"
         )));
-        components.add(component("pricing_card", "Card", Map.of("child", "pricing_body")));
+        components.add(component("package_pricing_card", "Card", Map.of("child", "package_pricing_body")));
     }
 
     private void addTimelineCard(List<Map<String, Object>> components, ProductPresentationModel model) {
-        List<String> timelineChildren = new ArrayList<>(List.of("timeline_title"));
-        components.add(textComponent("timeline_title", "일정 정보", "h4"));
+        List<String> timelineChildren = new ArrayList<>(List.of("package_timeline_title"));
+        components.add(textComponent("package_timeline_title", "일정 정보", "h4"));
         if (hasText(model.meetingDate()) || hasText(model.meetingTime()) || hasText(model.meetingAirport())) {
-            timelineChildren.add("timeline_meeting");
+            timelineChildren.add("package_timeline_meeting");
             components.add(textComponent(
-                    "timeline_meeting",
+                    "package_timeline_meeting",
                     "미팅: " + joinNonBlank(" / ", model.meetingDate(), model.meetingTime(), model.meetingAirport()),
                     "body"
             ));
         }
-        timelineChildren.add("timeline_list");
-        addTextList(components, "timeline_list", mapItems(model.timeline(), item ->
+        timelineChildren.add("package_timeline_list");
+        addTextList(components, "package_timeline_list", mapItems(model.timeline(), item ->
                 joinNonBlank(" ",
                         item.get("day") == null ? "" : item.get("day") + "일차",
                         item.get("date"),
@@ -189,49 +189,49 @@ public class ProductA2uiMessageBuilder {
                         hotelLabel(item)
                 )));
 
-        components.add(component("timeline_body", "Column", Map.of(
+        components.add(component("package_timeline_body", "Column", Map.of(
                 "children", explicit(timelineChildren),
                 "alignment", "stretch"
         )));
-        components.add(component("timeline_card", "Card", Map.of("child", "timeline_body")));
+        components.add(component("package_timeline_card", "Card", Map.of("child", "package_timeline_body")));
     }
 
     private void addNoticeCard(List<Map<String, Object>> components, ProductPresentationModel model) {
-        components.add(textComponent("notice_title", "규정 및 안내", "h4"));
-        addTextList(components, "notice_list", mapItems(model.noticeItems(), item ->
+        components.add(textComponent("package_notice_title", "규정 및 안내", "h4"));
+        addTextList(components, "package_notice_list", mapItems(model.noticeItems(), item ->
                 joinNonBlank(" ", item.get("title"), item.get("content"))));
-        components.add(component("notice_body", "Column", Map.of(
-                "children", explicit(List.of("notice_title", "notice_list")),
+        components.add(component("package_notice_body", "Column", Map.of(
+                "children", explicit(List.of("package_notice_title", "package_notice_list")),
                 "alignment", "stretch"
         )));
-        components.add(component("notice_card", "Card", Map.of("child", "notice_body")));
+        components.add(component("package_notice_card", "Card", Map.of("child", "package_notice_body")));
     }
 
     private void addReservationCard(List<Map<String, Object>> components, ProductPresentationModel model) {
-        components.add(textComponent("reservation_title", "예약 생성", "h4"));
-        components.add(component("reservation_booker", "TextField", Map.of(
+        components.add(textComponent("package_reservation_title", "예약 생성", "h4"));
+        components.add(component("package_reservation_booker", "TextField", Map.of(
                 "label", literal("예약자"),
                 "text", Map.of("path", "/reservation/bookerName", "literalString", ""),
                 "textFieldType", "shortText"
         )));
-        components.add(component("reservation_contact", "TextField", Map.of(
+        components.add(component("package_reservation_contact", "TextField", Map.of(
                 "label", literal("연락처"),
                 "text", Map.of("path", "/reservation/contact", "literalString", ""),
                 "textFieldType", "shortText"
         )));
-        components.add(component("reservation_head_count", "TextField", Map.of(
+        components.add(component("package_reservation_head_count", "TextField", Map.of(
                 "label", literal("인원수"),
                 "text", Map.of("path", "/reservation/headCount", "literalString", "1"),
                 "textFieldType", "number"
         )));
-        components.add(component("reservation_birth_date", "TextField", Map.of(
+        components.add(component("package_reservation_birth_date", "TextField", Map.of(
                 "label", literal("생년월일"),
                 "text", Map.of("path", "/reservation/birthDate", "literalString", ""),
                 "textFieldType", "shortText"
         )));
-        components.add(textComponent("reservation_submit_text", "예약 생성", "body"));
-        components.add(component("reservation_submit", "Button", Map.of(
-                "child", "reservation_submit_text",
+        components.add(textComponent("package_reservation_submit_text", "예약 생성", "body"));
+        components.add(component("package_reservation_submit", "Button", Map.of(
+                "child", "package_reservation_submit_text",
                 "primary", true,
                 "action", Map.of(
                         "name", "submit_reservation",
@@ -244,25 +244,25 @@ public class ProductA2uiMessageBuilder {
                         )
                 )
         )));
-        components.add(component("reservation_body", "Column", Map.of(
+        components.add(component("package_reservation_body", "Column", Map.of(
                 "children", explicit(List.of(
-                        "reservation_title",
-                        "reservation_booker",
-                        "reservation_contact",
-                        "reservation_head_count",
-                        "reservation_birth_date",
-                        "reservation_submit"
+                        "package_reservation_title",
+                        "package_reservation_booker",
+                        "package_reservation_contact",
+                        "package_reservation_head_count",
+                        "package_reservation_birth_date",
+                        "package_reservation_submit"
                 )),
                 "alignment", "stretch"
         )));
-        components.add(component("reservation_card", "Card", Map.of("child", "reservation_body")));
+        components.add(component("package_reservation_card", "Card", Map.of("child", "package_reservation_body")));
     }
 
     /**
      * 생성 화면 상단에 현재 입력 대상과 기본 가이드를 요약한다.
      */
     private void addCreationSummaryCard(List<Map<String, Object>> components, ProductPresentationModel model) {
-        components.add(textComponent("creation_summary_code", valueOrBlank(model.creationProductCode()), "caption"));
+        components.add(textComponent("package_sale_product_create_summary_code", valueOrBlank(model.creationProductCode()), "caption"));
         components.add(textComponent("package_sale_product_create_summary_title", "상품 생성 입력", "h3"));
         components.add(textComponent(
                 "package_sale_product_create_summary_desc",
@@ -271,7 +271,7 @@ public class ProductA2uiMessageBuilder {
         ));
         components.add(component("package_sale_product_create_summary_body", "Column", Map.of(
                 "children", explicit(List.of(
-                        "creation_summary_code",
+                        "package_sale_product_create_summary_code",
                         "package_sale_product_create_summary_title",
                         "package_sale_product_create_summary_desc"
                 )),

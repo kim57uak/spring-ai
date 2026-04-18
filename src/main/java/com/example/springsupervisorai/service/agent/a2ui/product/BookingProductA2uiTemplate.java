@@ -10,7 +10,7 @@ public class BookingProductA2uiTemplate extends AbstractProductA2uiTemplate {
 
     @Override
     public A2uiTemplateView view() {
-        return A2uiTemplateView.BOOKING;
+        return A2uiTemplateView.PACKAGE_BOOKING;
     }
 
     @Override
@@ -20,6 +20,6 @@ public class BookingProductA2uiTemplate extends AbstractProductA2uiTemplate {
 
     @Override
     public List<String> rootChildren() {
-        return children("summary_card", "reservation_card", "pricing_card", "timeline_card", "notice_card");
+        return children("package_summary_card", "package_reservation_card", "package_pricing_card", "package_timeline_card", "package_notice_card");
     }
 }

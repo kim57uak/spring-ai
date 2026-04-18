@@ -31,12 +31,12 @@ public class A2uiDecisionParser {
         }
         JsonNode root = objectMapper.readTree(candidate);
         String message = safe(root.path("message").asText(""));
-        String selectedView = safe(root.path("selectedView").asText("summary")).trim().toUpperCase();
+        String selectedView = safe(root.path("selectedView").asText("package_summary")).trim().toUpperCase();
         A2uiTemplateView view = switch (selectedView) {
-            case "SUMMARY" -> A2uiTemplateView.SUMMARY;
-            case "PRICING" -> A2uiTemplateView.PRICING;
-            case "TIMELINE" -> A2uiTemplateView.TIMELINE;
-            case "BOOKING" -> A2uiTemplateView.BOOKING;
+            case "PACKAGE_SUMMARY", "SUMMARY" -> A2uiTemplateView.PACKAGE_SUMMARY;
+            case "PACKAGE_PRICING", "PRICING" -> A2uiTemplateView.PACKAGE_PRICING;
+            case "PACKAGE_TIMELINE", "TIMELINE" -> A2uiTemplateView.PACKAGE_TIMELINE;
+            case "PACKAGE_BOOKING", "BOOKING" -> A2uiTemplateView.PACKAGE_BOOKING;
             case "PACKAGE_SALE_PRODUCT_CREATE_FORM", "CREATE_FORM" -> A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM;
             case "PACKAGE_RESERVATION_FORM" -> A2uiTemplateView.PACKAGE_RESERVATION_FORM;
             default -> throw new IllegalArgumentException("unsupported selectedView: " + selectedView);
