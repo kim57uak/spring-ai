@@ -6,6 +6,7 @@ import com.example.springsupervisorai.model.SupervisorExecutionRequest;
 import com.example.springsupervisorai.model.SupervisorOutputEvent;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
+import reactor.core.Disposable;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -57,6 +58,26 @@ class SupervisorExecutionServiceTest {
 
         verify(taskFacade).markRunning("task-2");
         verify(taskFacade, never()).markCompleted(eq("task-2"), any());
+    }
+
+    @Test
+    void executeStreamEventsShouldCancelTaskWhenSubscriberStopsStream() {
+        SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
+        SupervisorExecutionResultCollector collector = new SupervisorExecutionResultCollector();
+        SupervisorExecutionService service = new SupervisorExecutionService(orchestrator, taskFacade, collector);
+
+        A2aTaskSnapshot running = task("task-3", A2aTaskStatus.RUNNING, "");
+        when(taskFacade.createRunningTask("s1", "hello")).thenReturn(running);
+        when(orchestrator.executeEvents(any(), eq("task-3"))).thenReturn(
+                Flux.just(SupervisorOutputEvent.text("partial")).concatWith(Flux.never())
+        );
+
+        Disposable subscription = service.executeStreamEvents(new SupervisorExecutionRequest("s1", "hello", "openai"))
+                .subscribe();
+        subscription.dispose();
+
+        verify(taskFacade).cancelTask("task-3", "Stream canceled");
     }
 
     private A2aTaskSnapshot task(String taskId, A2aTaskStatus status, String payload) {

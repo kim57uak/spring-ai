@@ -339,6 +339,10 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
             String sessionId,
             SwarmMutationBuilder mutationBuilder
     ) {
+        if (safe(taskId).isBlank()) {
+            logger.debug("Swarm persistence skipped because taskId is blank sessionId={}", safe(sessionId));
+            return;
+        }
         int attempt = 0;
         while (true) {
             SwarmState base = baseState(taskId, sessionId);
