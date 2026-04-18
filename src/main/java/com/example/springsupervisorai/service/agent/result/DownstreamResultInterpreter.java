@@ -75,7 +75,9 @@ public final class DownstreamResultInterpreter {
             return false;
         }
         String lower = text.toLowerCase(Locale.ROOT);
-        if (lower.contains("[error]")) {
+        if (lower.contains("[error]")
+                || lower.contains("[missing_required_params]")
+                || lower.contains("[policy_skipped]")) {
             return true;
         }
         try {
@@ -101,6 +103,12 @@ public final class DownstreamResultInterpreter {
         if (lower.contains("[error]")) {
             return "error_token";
         }
+        if (lower.contains("[missing_required_params]")) {
+            return "missing_required_params";
+        }
+        if (lower.contains("[policy_skipped]")) {
+            return "policy_skipped";
+        }
         try {
             JsonNode node = OBJECT_MAPPER.readTree(text);
             String jsonReason = jsonFailureReason(node, 0);
@@ -115,7 +123,10 @@ public final class DownstreamResultInterpreter {
             return false;
         }
         if (node.isTextual()) {
-            return node.asText("").toLowerCase(Locale.ROOT).contains("[error]");
+            String text = node.asText("").toLowerCase(Locale.ROOT);
+            return text.contains("[error]")
+                    || text.contains("[missing_required_params]")
+                    || text.contains("[policy_skipped]");
         }
         if (node.isObject()) {
             String status = normalizeStatus(node.path("status").asText(""));

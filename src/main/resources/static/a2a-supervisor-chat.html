@@ -1093,6 +1093,7 @@
 
     let streaming = false;
     let abortController = null;
+    let activeStreamTaskId = '';
     let statusTicking = false;
     let statusTargetProgress = 0;
     let statusDisplayProgress = 0;
@@ -1549,6 +1550,18 @@
       return await res.json();
     }
 
+    async function cancelActiveStreamTask(reason = 'stopped_from_ui') {
+      if (!activeStreamTaskId) return false;
+      const response = await rpcCall('tasks/cancel', {
+        id: activeStreamTaskId,
+        reason
+      });
+      if (response?.error) {
+        throw new Error(response.error.message || 'Task cancel failed');
+      }
+      return true;
+    }
+
     async function findLatestWaitingTaskId() {
       const listRes = await rpcCall('tasks/list', { limit: 30 });
       const tasks = listRes?.result?.tasks || [];
@@ -1644,6 +1657,7 @@
       let streamedAnswer = '';
       let pendingChars = '';
       let typewriterRunning = false;
+      activeStreamTaskId = '';
       let lastProgress = 12;
       let doneReceived = false;
       const supervisorLogs = [];
@@ -2177,6 +2191,7 @@
                   // 진행 상황 파싱 및 UI 업데이트
 	                  const progress = parseSupervisorProgress(line.trim());
 	                  if (progress) {
+	                    if (progress.metadata?.taskId) activeStreamTaskId = progress.metadata.taskId;
 	                    lastProgress = applySupervisorProgress(ai, progress, { lastProgress });
                       if (handleHitlWaitingProgress(ai, progress)) {
                         waitingReviewDetected = true;
@@ -2191,6 +2206,7 @@
                 if (trailing.trim().startsWith('[supervisor]')) {
                   const trailingProgress = parseSupervisorProgress(trailing.trim());
                   if (trailingProgress) {
+                    if (trailingProgress.metadata?.taskId) activeStreamTaskId = trailingProgress.metadata.taskId;
                     supervisorLogs.push(trailing.trim());
                     ai.panel.style.display = 'block';
                     ai.stream.textContent = supervisorLogs.join('\n');
@@ -2272,6 +2288,7 @@
           ai.stream.scrollTop = ai.stream.scrollHeight;
           const remainderProgress = parseSupervisorProgress(trimmedRemainder);
           if (remainderProgress) {
+            if (remainderProgress.metadata?.taskId) activeStreamTaskId = remainderProgress.metadata.taskId;
             lastProgress = applySupervisorProgress(ai, remainderProgress, { lastProgress });
             if (handleHitlWaitingProgress(ai, remainderProgress)) {
               waitingReviewDetected = true;
@@ -2317,14 +2334,23 @@
       } finally {
         streaming = false;
         abortController = null;
+        activeStreamTaskId = '';
       }
     }
 
     sendBtn.addEventListener('click', () => {
       send();
     });
-    stopBtn.addEventListener('click', () => {
-      if (abortController) abortController.abort();
+    stopBtn.addEventListener('click', async () => {
+      try {
+        if (activeStreamTaskId) {
+          await cancelActiveStreamTask();
+        }
+      } catch (e) {
+        console.warn('Failed to cancel active supervisor task:', e);
+      } finally {
+        if (abortController) abortController.abort();
+      }
     });
     clearBtn.addEventListener('click', async () => {
       try {
