@@ -2,6 +2,7 @@ package com.example.springsupervisorai.service.agent.hitl;
 
 import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.config.SupervisorPromptProperties;
+import com.example.springsupervisorai.model.HitlPolicyContext;
 import com.example.springsupervisorai.model.HitlPolicyResult;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
@@ -35,11 +36,11 @@ class LlmHitlPolicyServiceTest {
                 new ObjectMapper()
         );
 
-        HitlPolicyResult result = service.evaluate(
+        HitlPolicyResult result = service.evaluate(HitlPolicyContext.of(
                 "s1",
                 "예약생성 : 이름 - 김병두 , 판매상품코드 - AAP331260523TG1, 인원1명\n상품복사 : AAP331260523TG1,모든요일, 20261201~20261230",
                 "openai"
-        );
+        ));
 
         assertThat(result.required()).isTrue();
         assertThat(result.policyId()).isEqualTo("HITL-POL-DATA-MUTATION");
@@ -66,7 +67,7 @@ class LlmHitlPolicyServiceTest {
                 new ObjectMapper()
         );
 
-        HitlPolicyResult result = service.evaluate("s1", "최근 여행 트렌드 알려줘", "openai");
+        HitlPolicyResult result = service.evaluate(HitlPolicyContext.of("s1", "최근 여행 트렌드 알려줘", "openai"));
 
         assertThat(result.required()).isFalse();
         assertThat(result.reason()).isBlank();

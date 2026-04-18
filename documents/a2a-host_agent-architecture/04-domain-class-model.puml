@@ -1,11 +1,16 @@
 @startuml
-!pragma layout smetana
-title 04. Supervisor Agent Domain Class Model
+title 04. Supervisor Host Agent Domain Model (Current Source, 2026-04-18)
 
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 
 class SupervisorAgentRequest {
+  +sessionId: String
+  +message: String
+  +model: String
+}
+
+class SupervisorExecutionRequest {
   +sessionId: String
   +message: String
   +model: String
@@ -19,20 +24,33 @@ class SupervisorPlanningContext {
   +history: List<String>
   +routingPlans: List<RoutingPlan>
   +results: List<DownstreamCallResult>
-  +checkpointId: String
-  +currentNode: String
   +routingIndex: int
   +swarmStateVersion: long
   +swarmSharedFacts: Map<String, Object>
+  +currentNode: String
+  +checkpointId: String
 }
 
-class SwarmState {
+class RoutingPlan {
+  +agentKey: String
+  +method: String
+  +reason: String
+  +priority: int
+  +arguments: Map<String, Object>
+}
+
+class DownstreamCallResult {
+  +agentKey: String
   +taskId: String
-  +sessionId: String
-  +stateVersion: long
-  +updatedAt: Instant
-  +sharedFacts: Map<String, Object>
-  +eventLog: List<Map<String, Object>>
+  +status: String
+  +payload: String
+  +errorCode: String
+  +errorMessage: String
+  +handoffRequested: boolean
+  +nextAgentKey: String
+  +handoffMethod: String
+  +handoffReason: String
+  +handoffArguments: Map<String, Object>
 }
 
 class HitlPolicyResult {
@@ -50,35 +68,16 @@ class HitlReviewTicket {
   +policyReason: String
   +status: HitlReviewStatus
   +decisionReason: String
-  +requestedAt: Instant
-  +expiresAt: Instant
-  +decidedAt: Instant
   +decisionId: String
 }
 
-class RoutingPlan {
-  +agentKey: String
-  +method: String
-  +reason: String
-  +priority: int
-  +arguments: Map<String, Object>
-  +sourceType: String
-  +handoffDepth: int
-  +parentAgentKey: String
-}
-
-class DownstreamCallResult {
-  +agentKey: String
+class SwarmState {
   +taskId: String
-  +status: String
-  +payload: String
-  +errorCode: String
-  +errorMessage: String
-  +handoffRequested: boolean
-  +nextAgentKey: String
-  +handoffMethod: String
-  +handoffReason: String
-  +handoffArguments: Map<String, Object>
+  +sessionId: String
+  +stateVersion: long
+  +updatedAt: Instant
+  +sharedFacts: Map<String, Object>
+  +eventLog: List<Map<String, Object>>
 }
 
 class HandoffDirective {
@@ -95,6 +94,27 @@ class HandoffValidationResult {
   +directive: HandoffDirective
   +plan: RoutingPlan
   +hopCount: int
+}
+
+class InvocationPolicyContext {
+  +plan: RoutingPlan
+  +planningContext: SupervisorPlanningContext
+}
+
+class HitlPolicyContext {
+  +sessionId: String
+  +message: String
+  +model: String
+}
+
+class HandoffPolicyContext {
+  +planningContext: SupervisorPlanningContext
+  +batchResults: List<DownstreamCallResult>
+}
+
+class SupervisorOutputEvent {
+  +type: SupervisorOutputEventType
+  +content: String
 }
 
 class SupervisorGraphState {
@@ -116,39 +136,80 @@ class SupervisorGraphState {
   +SWARM_STATE_VERSION
 }
 
-interface HitlPolicyService {
-  +evaluate(sessionId, message, model): HitlPolicyResult
+class A2aTaskSnapshot {
+  +taskId: String
+  +sessionId: String
+  +status: A2aTaskStatus
+  +requestMessage: String
+  +responsePayload: String
+  +errorCode: String
+  +errorMessage: String
 }
 
-interface HitlDecisionService {
-  +openReview(taskId, sessionId, message, model, policy): HitlReviewTicket
-  +decide(taskId, sessionId, decision, reason, decisionId): Optional<HitlReviewTicket>
+enum A2aTaskStatus {
+  SUBMITTED
+  RUNNING
+  WAITING_REVIEW
+  COMPLETED
+  FAILED
+  CANCELED
 }
 
 interface SupervisorPlanningService {
   +plan(context): List<RoutingPlan>
 }
 
+interface HitlPolicyService {
+  +evaluate(context): HitlPolicyResult
+}
+
+interface HitlDecisionService {
+  +openReview(...): HitlReviewTicket
+  +getReview(...): Optional<HitlReviewTicket>
+  +decide(...): Optional<HitlReviewTicket>
+}
+
 interface A2AInvocationService {
-  +invoke(plan, context): DownstreamCallResult
+  +invoke(context): DownstreamCallResult
 }
 
 interface HandoffPolicyService {
-  +evaluate(context, batchResults): List<HandoffValidationResult>
+  +evaluate(context): List<HandoffValidationResult>
 }
 
 interface SupervisorResponseComposeService {
-  +streamCompose(context): Flux<String>
+  +streamComposeEvents(context): Flux<SupervisorOutputEvent>
+}
+
+interface SupervisorSwarmCoordinator {
+  +applyRoutingRule(...): List<RoutingPlan>
+  +loadLatestBySession(sessionId): Optional<SwarmState>
 }
 
 SupervisorAgentRequest --> SupervisorPlanningContext
+SupervisorExecutionRequest --> SupervisorAgentRequest
 SupervisorPlanningContext --> RoutingPlan
 SupervisorPlanningContext --> DownstreamCallResult
 SupervisorPlanningContext --> SwarmState
+SupervisorPlanningContext --> SupervisorGraphState
 DownstreamCallResult --> HandoffDirective
 HandoffValidationResult --> HandoffDirective
 HandoffValidationResult --> RoutingPlan
-SupervisorGraphState --> SupervisorPlanningContext
+InvocationPolicyContext --> RoutingPlan
+InvocationPolicyContext --> SupervisorPlanningContext
+HandoffPolicyContext --> SupervisorPlanningContext
+HandoffPolicyContext --> DownstreamCallResult
 HitlPolicyService --> HitlPolicyResult
 HitlDecisionService --> HitlReviewTicket
+SupervisorResponseComposeService --> SupervisorOutputEvent
+
+note bottom of SupervisorPlanningContext
+Current shared runtime state for:
+- planning
+- invoke/handoff
+- compose
+- swarm facts
+- checkpoint recovery
+end note
+
 @enduml

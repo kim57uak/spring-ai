@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service.agent.a2ui.product;
 
+import com.example.springsupervisorai.service.agent.a2ui.common.A2uiTemplateView;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -9,7 +10,7 @@ public class TimelineProductA2uiTemplate extends AbstractProductA2uiTemplate {
 
     @Override
     public A2uiTemplateView view() {
-        return A2uiTemplateView.TIMELINE;
+        return A2uiTemplateView.PACKAGE_TIMELINE;
     }
 
     @Override
@@ -19,6 +20,6 @@ public class TimelineProductA2uiTemplate extends AbstractProductA2uiTemplate {
 
     @Override
     public List<String> rootChildren() {
-        return children("summary_card", "timeline_card", "pricing_card", "notice_card", "reservation_card");
+        return children("package_summary_card", "package_timeline_card", "package_pricing_card", "package_notice_card", "package_reservation_card");
     }
 }

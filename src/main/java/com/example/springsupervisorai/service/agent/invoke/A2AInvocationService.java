@@ -1,6 +1,7 @@
 package com.example.springsupervisorai.service.agent.invoke;
 
 import com.example.springsupervisorai.model.DownstreamCallResult;
+import com.example.springsupervisorai.model.InvocationPolicyContext;
 import com.example.springsupervisorai.model.RoutingPlan;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 
@@ -12,11 +13,21 @@ import com.example.springsupervisorai.model.SupervisorPlanningContext;
 public interface A2AInvocationService {
 
     /**
+     * 단일 invocation 컨텍스트를 실행한다.
+     *
+     * @param context 실행 컨텍스트
+     * @return 표준화된 downstream 호출 결과
+     */
+    DownstreamCallResult invoke(InvocationPolicyContext context);
+
+    /**
      * 단일 라우팅 계획을 실행한다.
      *
      * @param plan 실행할 라우팅 계획
      * @param context 실행 컨텍스트
      * @return 표준화된 downstream 호출 결과
      */
-    DownstreamCallResult invoke(RoutingPlan plan, SupervisorPlanningContext context);
+    default DownstreamCallResult invoke(RoutingPlan plan, SupervisorPlanningContext context) {
+        return invoke(InvocationPolicyContext.of(plan, context));
+    }
 }

@@ -2,6 +2,7 @@ package com.example.springsupervisorai.a2a;
 
 import com.example.springsupervisorai.a2a.dto.JsonRpcRequest;
 import com.example.springsupervisorai.a2a.dto.TaskIdParams;
+import com.example.springsupervisorai.a2a.dto.TaskReviewDecisionParams;
 import com.example.springsupervisorai.a2a.dto.TaskSendParams;
 import com.example.springsupervisorai.a2a.dto.TasksListParams;
 import com.example.springsupervisorai.model.RoutingPlan;
@@ -47,7 +48,19 @@ public class A2ARequestMapper {
             case GET_TASK_REVIEW, TASKS_REVIEW_GET ->
                     new com.example.springsupervisorai.a2a.dto.TaskQueryParams(readString(plan.arguments(), "id"));
             case DECIDE_TASK_REVIEW, TASKS_REVIEW_DECIDE ->
-                    new TaskIdParams(readString(plan.arguments(), "id"), readString(plan.arguments(), "reason"));
+                    new TaskReviewDecisionParams(
+                            readString(plan.arguments(), "id"),
+                            readString(plan.arguments(), "decision"),
+                            readString(plan.arguments(), "reason"),
+                            readString(plan.arguments(), "decisionId")
+                    );
+            case DECIDE_TASK_REVIEW_STREAM, TASKS_REVIEW_DECIDE_STREAM ->
+                    new TaskReviewDecisionParams(
+                            readString(plan.arguments(), "id"),
+                            readString(plan.arguments(), "decision"),
+                            readString(plan.arguments(), "reason"),
+                            readString(plan.arguments(), "decisionId")
+                    );
             case SEND_MESSAGE -> buildSendMessageParams(plan, context);
             case SEND_STREAMING_MESSAGE -> buildSendMessageParams(plan, context);
             case MESSAGE_STREAM, MESSAGE_SEND -> buildTaskSendParams(plan, context);
@@ -85,11 +98,33 @@ public class A2ARequestMapper {
     }
 
     private String resolveDownstreamMessage(RoutingPlan plan, SupervisorPlanningContext context) {
+        String original = context == null || context.getUserMessage() == null
+                ? ""
+                : context.getUserMessage().trim();
         String extracted = extractAgentPrompt(plan.arguments());
-        if (!extracted.isBlank()) {
+        if (original.isBlank()) {
             return extracted;
         }
-        return context.getUserMessage() == null ? "" : context.getUserMessage();
+        if (shouldPreserveOriginal(plan, original)) {
+            return original;
+        }
+        return extracted.isBlank() ? original : extracted;
+    }
+
+    private boolean shouldPreserveOriginal(RoutingPlan plan, String original) {
+        String agentKey = plan == null || plan.agentKey() == null ? "" : plan.agentKey().trim().toLowerCase();
+        if ("reservation".equals(agentKey) || "product".equals(agentKey)) {
+            return true;
+        }
+        String normalized = original == null ? "" : original.toLowerCase();
+        return normalized.contains("예약")
+                || normalized.contains("생성")
+                || normalized.contains("등록")
+                || normalized.contains("수정")
+                || normalized.contains("삭제")
+                || normalized.contains("취소")
+                || normalized.contains("주문")
+                || normalized.contains("결제");
     }
 
     private String extractAgentPrompt(Map<String, Object> args) {

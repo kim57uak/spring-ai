@@ -5,15 +5,14 @@ import com.example.springsupervisorai.a2a.dto.JsonRpcResponse;
 import com.example.springsupervisorai.a2a.dto.TaskReviewView;
 import com.example.springsupervisorai.a2a.dto.TaskView;
 import com.example.springsupervisorai.a2a.idempotency.SupervisorRequestIdempotencyService;
-import com.example.springsupervisorai.a2a.lifecycle.SupervisorA2aLifecycleService;
 import com.example.springsupervisorai.a2a.task.A2aTaskSnapshot;
 import com.example.springsupervisorai.a2a.task.A2aTaskStatus;
 import com.example.springsupervisorai.model.HitlDecisionType;
 import com.example.springsupervisorai.model.HitlPolicyResult;
-import com.example.springsupervisorai.model.HitlReviewStatus;
 import com.example.springsupervisorai.model.HitlReviewTicket;
-import com.example.springsupervisorai.service.agent.hitl.HitlDecisionService;
-import com.example.springsupervisorai.service.agent.hitl.HitlPolicyService;
+import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.model.SupervisorOutputEventType;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
 import org.junit.jupiter.api.Test;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -39,48 +38,41 @@ class SupervisorAgentServiceTest {
     @Test
     void streamShouldCancelTaskWhenSubscriberCancels() {
         SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
-        SupervisorA2aLifecycleService lifecycleService = mock(SupervisorA2aLifecycleService.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
         A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
         SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
-        HitlPolicyService hitlPolicyService = mock(HitlPolicyService.class);
-        HitlDecisionService hitlDecisionService = mock(HitlDecisionService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
-                lifecycleService,
+                taskFacade,
                 responseMapper,
                 requestIdempotencyService,
-                hitlPolicyService,
-                hitlDecisionService
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService,
+                preHitlA2uiService
         );
 
-        A2aTaskSnapshot snapshot = new A2aTaskSnapshot(
-                "sup-task-1",
-                "session-1",
-                A2aTaskStatus.RUNNING,
-                Instant.now(),
-                Instant.now(),
-                "hello",
-                "",
-                "",
-                ""
-        );
-        CountDownLatch taskCreated = new CountDownLatch(1);
+        when(preHitlA2uiService.build("session-1", "hello", "openai")).thenReturn(Optional.empty());
+        CountDownLatch streamStarted = new CountDownLatch(1);
         CountDownLatch canceled = new CountDownLatch(1);
-        when(lifecycleService.createAndMarkRunning("session-1", "hello")).thenAnswer(invocation -> {
-            taskCreated.countDown();
-            return snapshot;
-        });
+        when(hitlGateService.evaluate("session-1", "hello", "openai")).thenReturn(HitlPolicyResult.notRequired());
+        when(streamProgressService.initialHitlEvaluationEvents("session-1")).thenReturn(Flux.just(SupervisorOutputEvent.text("preface")));
+        when(streamProgressService.hitlPassedEvents()).thenReturn(Flux.just(SupervisorOutputEvent.text("accepted")));
         doAnswer(invocation -> {
+            streamStarted.countDown();
             canceled.countDown();
-            return Optional.of(snapshot);
-        }).when(lifecycleService).cancel(eq("sup-task-1"), eq("Stream canceled"));
-        when(hitlPolicyService.evaluate("session-1", "hello", "openai")).thenReturn(HitlPolicyResult.notRequired());
-        when(orchestrator.execute(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("sup-task-1")))
-                .thenReturn(Flux.never());
+            return Flux.never();
+        }).when(executionService).executeStreamEvents(any());
 
         Disposable disposable = service.stream("session-1", "hello", "openai").subscribe();
         try {
-            assertThat(taskCreated.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(streamStarted.await(1, TimeUnit.SECONDS)).isTrue();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -90,27 +82,37 @@ class SupervisorAgentServiceTest {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-
-        verify(lifecycleService).cancel("sup-task-1", "Stream canceled");
+        verify(executionService).executeStreamEvents(argThat(request ->
+                request.sessionId().equals("session-1")
+                        && request.message().equals("hello")
+                        && request.model().equals("openai")
+        ));
     }
 
     @Test
     void sendShouldReturnWaitingReviewWhenPolicyRequiresHitl() {
         SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
-        SupervisorA2aLifecycleService lifecycleService = mock(SupervisorA2aLifecycleService.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
         A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
         SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
-        HitlPolicyService hitlPolicyService = mock(HitlPolicyService.class);
-        HitlDecisionService hitlDecisionService = mock(HitlDecisionService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
-                lifecycleService,
+                taskFacade,
                 responseMapper,
                 requestIdempotencyService,
-                hitlPolicyService,
-                hitlDecisionService
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService,
+                preHitlA2uiService
         );
 
+        when(preHitlA2uiService.build("session-1", "예약 생성해줘", "openai")).thenReturn(Optional.empty());
         when(requestIdempotencyService.executeOnce(anyString(), anyString(), any(), any()))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
@@ -140,27 +142,13 @@ class SupervisorAgentServiceTest {
                 "Human review is required"
         );
 
-        when(hitlPolicyService.evaluate("session-1", "예약 생성해줘", "openai")).thenReturn(
+        when(hitlGateService.evaluate("session-1", "예약 생성해줘", "openai")).thenReturn(
                 new HitlPolicyResult(true, "HITL-POL-DATA-MUTATION", "Data mutation request requires human approval")
         );
-        when(lifecycleService.createAndMarkWaitingReview("session-1", "예약 생성해줘", "Data mutation request requires human approval"))
+        when(hitlGateService.openReview("session-1", "예약 생성해줘", "openai",
+                new HitlPolicyResult(true, "HITL-POL-DATA-MUTATION", "Data mutation request requires human approval")))
                 .thenReturn(waiting);
         when(responseMapper.toTaskView(waiting)).thenReturn(waitingView);
-        when(hitlDecisionService.openReview(anyString(), anyString(), anyString(), anyString(), any()))
-                .thenReturn(new HitlReviewTicket(
-                        "sup-task-wait-1",
-                        "session-1",
-                        "예약 생성해줘",
-                        "openai",
-                        "HITL-POL-DATA-MUTATION",
-                        "Data mutation request requires human approval",
-                        HitlReviewStatus.WAITING,
-                        "",
-                        Instant.now(),
-                        Instant.now().plusSeconds(300),
-                        null,
-                        ""
-                ));
 
         JsonRpcResponse response = service.send("req-1", "session-1", "예약 생성해줘", "openai", "message/send");
 
@@ -172,18 +160,24 @@ class SupervisorAgentServiceTest {
     @Test
     void decideReviewCancelShouldCancelTask() {
         SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
-        SupervisorA2aLifecycleService lifecycleService = mock(SupervisorA2aLifecycleService.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
         A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
         SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
-        HitlPolicyService hitlPolicyService = mock(HitlPolicyService.class);
-        HitlDecisionService hitlDecisionService = mock(HitlDecisionService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
-                lifecycleService,
+                taskFacade,
                 responseMapper,
                 requestIdempotencyService,
-                hitlPolicyService,
-                hitlDecisionService
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService,
+                preHitlA2uiService
         );
 
         HitlReviewTicket canceledTicket = new HitlReviewTicket(
@@ -193,7 +187,7 @@ class SupervisorAgentServiceTest {
                 "openai",
                 "HITL-POL-DATA-MUTATION",
                 "Data mutation request requires human approval",
-                HitlReviewStatus.CANCELED,
+                com.example.springsupervisorai.model.HitlReviewStatus.CANCELED,
                 "operator cancel",
                 Instant.now(),
                 Instant.now().plusSeconds(300),
@@ -222,15 +216,15 @@ class SupervisorAgentServiceTest {
                 "operator cancel"
         );
 
-        when(hitlDecisionService.decide("sup-task-cancel-1", "session-1", HitlDecisionType.CANCEL, "operator cancel", "dec-1"))
-                .thenReturn(Optional.of(canceledTicket));
-        when(lifecycleService.get("sup-task-cancel-1", "session-1")).thenReturn(Optional.of(canceled));
-        when(responseMapper.toTaskView(canceled)).thenReturn(canceledView);
-        when(responseMapper.toTaskReviewView(canceledTicket)).thenReturn(new TaskReviewView(
+        when(reviewApplicationService.decideReview("session-1", "sup-task-cancel-1", "CANCEL", "operator cancel", "dec-1"))
+                .thenReturn(Optional.of(java.util.Map.of(
+                        "task", canceledView,
+                        "review", new TaskReviewView(
                 "sup-task-cancel-1", "CANCELED", "HITL-POL-DATA-MUTATION",
                 "Data mutation request requires human approval", "operator cancel",
                 Instant.now().toString(), Instant.now().toString(), Instant.now().plusSeconds(1).toString()
-        ));
+                        )
+                )));
 
         Optional<java.util.Map<String, Object>> result = service.decideReview(
                 "session-1",
@@ -241,24 +235,30 @@ class SupervisorAgentServiceTest {
         );
 
         assertThat(result).isPresent();
-        verify(lifecycleService).cancel("sup-task-cancel-1", "session-1", "operator cancel");
+        verify(reviewApplicationService).decideReview("session-1", "sup-task-cancel-1", "CANCEL", "operator cancel", "dec-1");
     }
 
     @Test
     void decideReviewApproveShouldResumeExecutionAndCompleteTask() {
         SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
-        SupervisorA2aLifecycleService lifecycleService = mock(SupervisorA2aLifecycleService.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
         A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
         SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
-        HitlPolicyService hitlPolicyService = mock(HitlPolicyService.class);
-        HitlDecisionService hitlDecisionService = mock(HitlDecisionService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
-                lifecycleService,
+                taskFacade,
                 responseMapper,
                 requestIdempotencyService,
-                hitlPolicyService,
-                hitlDecisionService
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService,
+                preHitlA2uiService
         );
 
         HitlReviewTicket approvedTicket = new HitlReviewTicket(
@@ -268,7 +268,7 @@ class SupervisorAgentServiceTest {
                 "openai",
                 "HITL-POL-RISK",
                 "Needs explicit human approval",
-                HitlReviewStatus.APPROVED,
+                com.example.springsupervisorai.model.HitlReviewStatus.APPROVED,
                 "approved",
                 Instant.now(),
                 Instant.now().plusSeconds(300),
@@ -297,16 +297,15 @@ class SupervisorAgentServiceTest {
                 ""
         );
 
-        when(hitlDecisionService.decide("sup-task-approve-1", "session-1", HitlDecisionType.APPROVE, "approved", "dec-2"))
-                .thenReturn(Optional.of(approvedTicket));
-        when(orchestrator.execute(any(), eq("sup-task-approve-1"))).thenReturn(Flux.just("chunk-a", "chunk-b"));
-        when(lifecycleService.get("sup-task-approve-1", "session-1")).thenReturn(Optional.of(completed));
-        when(responseMapper.toTaskView(completed)).thenReturn(completedView);
-        when(responseMapper.toTaskReviewView(approvedTicket)).thenReturn(new TaskReviewView(
+        when(reviewApplicationService.decideReview("session-1", "sup-task-approve-1", "APPROVE", "approved", "dec-2"))
+                .thenReturn(Optional.of(java.util.Map.of(
+                        "task", completedView,
+                        "review", new TaskReviewView(
                 "sup-task-approve-1", "APPROVED", "HITL-POL-RISK",
                 "Needs explicit human approval", "approved",
                 Instant.now().toString(), Instant.now().toString(), Instant.now().plusSeconds(1).toString()
-        ));
+                        )
+                )));
 
         Optional<java.util.Map<String, Object>> result = service.decideReview(
                 "session-1",
@@ -317,13 +316,91 @@ class SupervisorAgentServiceTest {
         );
 
         assertThat(result).isPresent();
-        verify(lifecycleService).markRunning("sup-task-approve-1");
-        verify(lifecycleService).markCompleted("sup-task-approve-1", "chunk-achunk-b");
-        verify(orchestrator).execute(
-                argThat(request -> request.sessionId().equals("session-1")
-                        && request.message().equals("상품 추천해줘")
-                        && request.model().equals("openai")),
-                eq("sup-task-approve-1")
+        verify(reviewApplicationService).decideReview("session-1", "sup-task-approve-1", "APPROVE", "approved", "dec-2");
+    }
+
+    @Test
+    void decideReviewStreamShouldDelegateToReviewApplicationService() {
+        SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
+        A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
+        SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        SupervisorAgentService service = new SupervisorAgentService(
+                orchestrator,
+                taskFacade,
+                responseMapper,
+                requestIdempotencyService,
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService,
+                preHitlA2uiService
         );
+
+        when(reviewApplicationService.decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2"))
+                .thenReturn(Flux.just(
+                        SupervisorOutputEvent.progress(SupervisorProgressSupport.event("hitl", 12, "승인이 완료되었습니다.", java.util.Map.of())),
+                        SupervisorOutputEvent.text("done")
+                ));
+
+        java.util.List<SupervisorOutputEvent> events = service.decideReviewStream(
+                "session-1",
+                "sup-task-approve-2",
+                "APPROVE",
+                "approved_from_ui",
+                "dec-2"
+        ).collectList().block();
+
+        assertThat(events).isNotNull();
+        assertThat(events).hasSize(2);
+        verify(reviewApplicationService).decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2");
+    }
+
+    @Test
+    void streamEventsShouldReturnPreHitlA2uiBeforePolicyEvaluation() {
+        SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
+        SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
+        A2AResponseMapper responseMapper = mock(A2AResponseMapper.class);
+        SupervisorRequestIdempotencyService requestIdempotencyService = mock(SupervisorRequestIdempotencyService.class);
+        HitlGateService hitlGateService = mock(HitlGateService.class);
+        SupervisorExecutionService executionService = mock(SupervisorExecutionService.class);
+        SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
+        SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
+        SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        SupervisorAgentService service = new SupervisorAgentService(
+                orchestrator,
+                taskFacade,
+                responseMapper,
+                requestIdempotencyService,
+                hitlGateService,
+                executionService,
+                reviewApplicationService,
+                streamProgressService,
+                preHitlA2uiService
+        );
+
+        when(preHitlA2uiService.build("session-1", "상품 생성 화면 보여줘", "openai"))
+                .thenReturn(Optional.of(new SupervisorA2uiService.A2uiRenderResult(
+                        "요청에 맞는 입력 화면을 준비했습니다.",
+                        "{\"messages\":[{\"metadata\":{\"component\":\"package_sale_product_create_form_card\"}}]}"
+                )));
+        when(streamProgressService.preHitlA2uiEvents()).thenReturn(Flux.just(
+                SupervisorOutputEvent.progress(SupervisorProgressSupport.event("planning", 42, "입력 화면을 준비했습니다.", java.util.Map.of()))
+        ));
+
+        java.util.List<SupervisorOutputEvent> events = service.streamEvents("session-1", "상품 생성 화면 보여줘", "openai")
+                .collectList()
+                .block();
+
+        assertThat(events).isNotNull();
+        assertThat(events).hasSize(3);
+        assertThat(events.get(1).content()).contains("요청에 맞는 입력 화면");
+        assertThat(events.get(2).type()).isEqualTo(SupervisorOutputEventType.A2UI);
+        verify(preHitlA2uiService).build("session-1", "상품 생성 화면 보여줘", "openai");
     }
 }

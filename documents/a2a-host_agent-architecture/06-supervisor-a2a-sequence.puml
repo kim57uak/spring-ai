@@ -1,6 +1,5 @@
 @startuml
-!pragma layout smetana
-title 06. Supervisor Agent A2A Routing Sequence
+title 06. Supervisor A2A Request Sequence (Current Source, 2026-04-18)
 
 skinparam shadowing false
 skinparam sequenceMessageAlign center
@@ -9,89 +8,82 @@ skinparam ParticipantPadding 20
 actor User
 participant "SupervisorA2AController" as Controller
 participant "SupervisorA2ARequestValidator" as Validator
-participant "SupervisorAgentService" as Service
-participant "HitlPolicyService" as HitlPolicy
-participant "HitlDecisionService" as HitlDecision
-participant "SupervisorA2aLifecycleService" as Lifecycle
+participant "SupervisorAgentService" as AgentService
+participant "SupervisorRequestIdempotencyService" as Idempotency
+participant "SupervisorPreHitlA2uiService" as PreHitlA2ui
+participant "HitlGateService" as HitlGate
+participant "SupervisorExecutionService" as ExecutionService
+participant "SupervisorReviewApplicationService" as ReviewApp
+participant "SupervisorTaskFacade" as TaskFacade
 participant "SupervisorAgentOrchestrator" as Orchestrator
+participant "SupervisorGraphExecutionService" as GraphExecution
 participant "LangGraph CompiledGraph" as Graph
-participant "SupervisorPlanningService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Planner #FFE7A8
-participant "DefaultSupervisorLlmRuntime" as Runtime #FFF4CC
 participant "A2AInvocationService" as Invoker
-participant "HandoffPolicyService" as HandoffPolicy
-participant "SupervisorSwarmCoordinator" as Swarm
-participant "A2AClientRegistry" as Registry
-participant "A2AJsonRpcClient" as A2AClient
-participant "SupervisorResponseComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Composer #FFE7A8
-participant "Product Agent A2A" as ProductAgent
-participant "Reservation Agent A2A" as ReservationAgent
-participant "Search Agent A2A" as SearchAgent
+participant "SupervisorResponseComposeService" as Composer
+participant "Downstream A2A Agents" as DownstreamAgents
 
-User -> Controller : POST /a2a/supervisor\nmessage/send or message/stream
+User -> Controller : POST /a2a/supervisor
 Controller -> Validator : precheck + validate params
-Validator --> Controller : validated params
-Controller -> Service : send(...) or stream(...)
-Service -> HitlPolicy : evaluate(sessionId, message, model)
-HitlPolicy -> Runtime : complete(hitl policy prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-Runtime --> HitlPolicy : HitlPolicyResult
 
-alt HITL required
-  Service -> Lifecycle : createAndMarkWaitingReview(...)
-  Service -> HitlDecision : openReview(...)
-  HitlDecision -> Swarm : review facts/event update
-  Service --> Controller : WAITING_REVIEW task or hitl_waiting progress
-else HITL passed
-  Service -> Lifecycle : createAndMarkRunning(...)
-  Service -> Orchestrator : execute(request, taskId)
-  Orchestrator -> Swarm : load latest session state
-  Orchestrator -> Graph : invoke(state)
+alt unary send
+  Controller -> AgentService : send(...)
+  AgentService -> Idempotency : executeOnce(...)
+  AgentService -> PreHitlA2ui : build(sessionId, message, model)
 
-  Graph -> Planner : plan(context)
-  Planner -> Runtime : complete(planning prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-  Runtime --> Planner : routing plans
-
-  loop for selected routing batches
-    Graph -> Invoker : invoke(plan, context)
-    Invoker -> Registry : resolve(agentKey, method)
-    Registry --> Invoker : endpoint/method/timeout
-    Invoker -> A2AClient : call JSON-RPC / stream
-
-    alt product route
-      A2AClient -> ProductAgent : downstream A2A call
-      ProductAgent --> A2AClient : result
-    else reservation route
-      A2AClient -> ReservationAgent : downstream A2A call
-      ReservationAgent --> A2AClient : result
-    else search route
-      A2AClient -> SearchAgent : downstream A2A call
-      SearchAgent --> A2AClient : result
+  alt pre-HITL A2UI resolved
+    AgentService -> TaskFacade : createRunningTask(...)
+    AgentService -> TaskFacade : markCompleted(...A2UI payload...)
+    AgentService --> Controller : JSON-RPC TaskView
+  else normal execution path
+    AgentService -> HitlGate : evaluate(...)
+    alt HITL required
+      AgentService -> HitlGate : openReview(...)
+      AgentService --> Controller : WAITING_REVIEW task
+    else HITL passed
+      AgentService -> ExecutionService : executeSync(...)
+      ExecutionService -> TaskFacade : createRunningTask(...)
+      ExecutionService -> Orchestrator : executeEvents(...)
+      Orchestrator -> GraphExecution : execute(...)
+      GraphExecution -> Graph : invoke(state)
+      Graph -> Invoker : invoke(plan batch)
+      Invoker -> DownstreamAgents : JSON-RPC / stream
+      DownstreamAgents --> Invoker : downstream results
+      Orchestrator -> Composer : streamComposeEvents(context)
+      Composer --> Orchestrator : text / a2ui events
+      ExecutionService -> TaskFacade : markCompleted(...)
+      AgentService --> Controller : JSON-RPC TaskView
     end
-
-    Invoker --> Graph : DownstreamCallResult
-    Graph -> Swarm : recordInvocationBatch(...)
-    Graph -> HandoffPolicy : evaluate(context, batchResults)
-    HandoffPolicy --> Graph : validations
-    Graph -> Swarm : recordHandoffEvaluations(...)
-    Graph -> Swarm : recordNodeEvent(...)
   end
-
-  Orchestrator -> Composer : streamCompose(context)
-  Composer -> Runtime : stream/complete(compose prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-  Runtime --> Composer : chunks or A2UI decision
-  Composer --> Orchestrator : response chunks / A2UI payload
-  Orchestrator --> Service : result stream
-  Service --> Controller : JSON-RPC or SSE response
+else stream request
+  Controller -> AgentService : streamEvents(...)
+  AgentService -> PreHitlA2ui : build(...)
+  alt pre-HITL A2UI resolved
+    AgentService --> Controller : progress + text + a2ui SSE
+  else normal stream path
+    AgentService -> HitlGate : evaluate(...)
+    alt HITL required
+      AgentService --> Controller : waiting review progress stream
+    else HITL passed
+      AgentService -> ExecutionService : executeStreamEvents(...)
+      ExecutionService -> TaskFacade : createRunningTask(...)
+      ExecutionService -> Orchestrator : executeEvents(...)
+      Orchestrator -> GraphExecution : execute(...)
+      GraphExecution -> Graph : invoke(state)
+      Graph -> Invoker : invoke(plan batch)
+      Invoker -> DownstreamAgents : JSON-RPC / stream
+      DownstreamAgents --> Invoker : downstream results
+      Orchestrator -> Composer : streamComposeEvents(context)
+      Composer --> Controller : SupervisorOutputEvent SSE
+    end
+  end
+else review endpoints
+  Controller -> AgentService : getReview / decideReview / decideReviewStream
+  AgentService -> ReviewApp : delegate review use case
+  ReviewApp -> HitlGate : decide(...)
+  ReviewApp -> ExecutionService : resumeApprovedTask / resumeApprovedTaskStream
+  ReviewApp --> Controller : review/task payload or stream
 end
 
-Controller --> User : task response / chunk / a2ui / done
+Controller --> User : JSON-RPC or SSE(chunk/a2ui/done)
 
-note right of HandoffPolicy
-Current handoff guardrails
-- feature flag
-- route allowlist
-- allowed methods only
-- stream capability check
-- max hops / recent path guard
-- per-minute rate limit
-end note
 @enduml

@@ -5,6 +5,7 @@ import com.example.springsupervisorai.config.SupervisorPromptProperties;
 import com.example.springsupervisorai.model.RoutingPlan;
 import com.example.springsupervisorai.model.SupervisorA2aMethod;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
+import com.example.springsupervisorai.service.SupervisorPreHitlA2uiService;
 import com.example.springsupervisorai.service.agent.invoke.DownstreamAgentCardCache;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
@@ -388,6 +389,12 @@ public class LlmSupervisorPlanningService implements SupervisorPlanningService {
             argumentsNode = node.path("params");
         }
         Map<String, Object> arguments = readArguments(argumentsNode);
+        String preHitlA2ui = node.path("preHitlA2ui").asText("").trim();
+        if ("package_reservation_form".equalsIgnoreCase(preHitlA2ui) || "package_sale_product_create_form".equalsIgnoreCase(preHitlA2ui)) {
+            LinkedHashMap<String, Object> augmented = new LinkedHashMap<>(arguments);
+            augmented.put(SupervisorPreHitlA2uiService.PRE_HITL_A2UI_ARGUMENT, preHitlA2ui.toLowerCase(Locale.ROOT));
+            arguments = Map.copyOf(augmented);
+        }
         return new RoutingPlan(agentKey, method, reason, priority, arguments);
     }
 

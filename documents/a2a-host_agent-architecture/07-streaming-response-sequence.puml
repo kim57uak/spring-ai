@@ -8,56 +8,59 @@ actor User
 participant "SupervisorA2AController" as Controller
 participant "SupervisorA2ARequestValidator" as Validator
 participant "SupervisorAgentService" as Service
-participant "HitlPolicyService" as HitlPolicy
-participant "SupervisorA2aLifecycleService" as Lifecycle
-participant "HitlDecisionService" as HitlDecision
+participant "HitlGateService" as HitlGate
+participant "SupervisorStreamProgressService" as StreamProgress
+participant "SupervisorExecutionService" as ExecutionService
 participant "SupervisorAgentOrchestrator" as Orchestrator
+participant "SupervisorProgressPublisher" as ProgressPublisher
 participant "SupervisorResponseComposeService" as Composer
 participant "DefaultSupervisorLlmRuntime" as Runtime
-participant "Conversation Store" as ConversationStore
-participant "Checkpoint Store" as CheckpointStore
+participant "SupervisorExecutionPersistenceService" as PersistenceService
 
 User -> Controller : POST /a2a/supervisor\nAccept: text/event-stream
 Controller -> Validator : precheck + validateSendParams
 Validator --> Controller : message + model
-Controller -> Service : stream(sessionId, message, model)
-Service --> Controller : progress(stage=hitl, 2%)
+Controller -> Service : streamEvents(sessionId, message, model)
+Service -> StreamProgress : initialHitlEvaluationEvents(...)
+Service --> Controller : SupervisorOutputEvent(PROGRESS)
 Controller --> User : event: chunk
 
-Service -> HitlPolicy : evaluate(...)
+Service -> HitlGate : evaluate(...)
 alt review required
-  Service -> Lifecycle : createAndMarkWaitingReview(...)
-  Service -> HitlDecision : openReview(...)
-  Service --> Controller : progress(stage=hitl, 5%)
-  Service --> Controller : progress(stage=hitl_waiting, 8%)
+  Service -> HitlGate : openReview(...)
+  Service -> StreamProgress : hitlRequiredEvents(...)
+  Service --> Controller : SupervisorOutputEvent(PROGRESS)
+  Service --> Controller : SupervisorOutputEvent(PROGRESS)
   Controller --> User : event: chunk
   Controller --> User : event: chunk
   Controller --> User : event: done
 else review not required
-  Service -> Lifecycle : createAndMarkRunning(...)
-  Service -> Orchestrator : execute(request, taskId)
-  Orchestrator --> Controller : progress(initializing...)
+  Service -> StreamProgress : hitlPassedEvents(...)
+  Service -> ExecutionService : executeStreamEvents(...)
+  ExecutionService -> Orchestrator : executeEvents(...)
+  Orchestrator -> ProgressPublisher : emitEvent(...)
+  Orchestrator --> Controller : SupervisorOutputEvent(PROGRESS)
   Controller --> User : event: chunk
 
-  Orchestrator -> Composer : streamCompose(context)
+  Orchestrator -> Composer : streamComposeEvents(context)
   Composer -> Runtime : stream(prompt, model, sessionId)
-  Runtime --> Composer : Flux<String>
+  Runtime --> Composer : Flux<SupervisorOutputEvent>
 
   loop compose output
-    alt plain text chunk
-      Composer --> Orchestrator : chunk
-      Orchestrator --> Controller : chunk
+    alt text event
+      Composer --> Orchestrator : SupervisorOutputEvent(TEXT)
+      Orchestrator --> Controller : SupervisorOutputEvent(TEXT)
       Controller --> User : event: chunk
-    else wrapped A2UI payload
-      Composer --> Orchestrator : wrapped A2UI
-      Orchestrator --> Controller : wrapped A2UI
+    else a2ui event
+      Composer --> Orchestrator : SupervisorOutputEvent(A2UI)
+      Orchestrator --> Controller : SupervisorOutputEvent(A2UI)
       Controller --> User : event: a2ui
     end
   end
 
-  Orchestrator -> ConversationStore : save history
-  Orchestrator -> CheckpointStore : save checkpoint
-  Orchestrator --> Controller : progress(completed...)
+  Orchestrator -> PersistenceService : persistCompletion(...)
+  Orchestrator -> ProgressPublisher : emit completed progress
+  Orchestrator --> Controller : SupervisorOutputEvent(PROGRESS)
   Controller --> User : event: chunk
   Controller --> User : event: done
 end

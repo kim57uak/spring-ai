@@ -16,8 +16,37 @@ public class A2uiComposePromptProviderRegistry {
     }
 
     public Optional<A2uiComposePromptProvider> resolve(SupervisorPlanningContext context) {
-        return providers.stream()
+        List<A2uiComposePromptProvider> matches = providers.stream()
                 .filter(provider -> provider.supports(context))
-                .findFirst();
+                .toList();
+        if (matches.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new A2uiComposePromptProvider() {
+            @Override
+            public boolean supports(SupervisorPlanningContext ignored) {
+                return true;
+            }
+
+            @Override
+            public String supportedTemplateKeys() {
+                return matches.stream()
+                        .map(A2uiComposePromptProvider::supportedTemplateKeys)
+                        .filter(value -> value != null && !value.isBlank())
+                        .distinct()
+                        .reduce((left, right) -> left + ", " + right)
+                        .orElse("");
+            }
+
+            @Override
+            public String templateCatalogPrompt() {
+                return matches.stream()
+                        .map(A2uiComposePromptProvider::templateCatalogPrompt)
+                        .filter(value -> value != null && !value.isBlank())
+                        .distinct()
+                        .reduce((left, right) -> left + "\n" + right)
+                        .orElse("");
+            }
+        });
     }
 }

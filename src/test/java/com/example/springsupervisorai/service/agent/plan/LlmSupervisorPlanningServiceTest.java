@@ -4,6 +4,7 @@ import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.config.SupervisorPromptProperties;
 import com.example.springsupervisorai.model.RoutingPlan;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
+import com.example.springsupervisorai.service.SupervisorPreHitlA2uiService;
 import com.example.springsupervisorai.service.agent.invoke.DownstreamAgentCardCache;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.example.springsupervisorai.service.agent.security.PromptInjectionGuard;
@@ -201,6 +202,47 @@ class LlmSupervisorPlanningServiceTest {
 
         assertThat(plans).isEmpty();
         verify(llmRuntime, times(1)).complete(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void planPreservesPreHitlA2uiHintFromPlannerOutput() {
+        A2aSupervisorRoutingProperties routingProperties = new A2aSupervisorRoutingProperties();
+        routingProperties.setRouting(Map.of(
+                "reservation", route("http://localhost:8082/a2a/reservation")
+        ));
+
+        SupervisorPromptProperties promptProperties = new SupervisorPromptProperties();
+        promptProperties.setPlanningSystem("system");
+        promptProperties.setPlanningTemplate("{planningSystem}\nallowed={allowedAgents}\ncards={agentCards}\nmsg={userMessage}\nhistory={history}");
+        promptProperties.setPlanningRepairTemplate("{invalidOutput}");
+
+        SupervisorLlmRuntime llmRuntime = mock(SupervisorLlmRuntime.class);
+        when(llmRuntime.complete(anyString(), anyString(), anyString()))
+                .thenReturn("""
+                        {"complete":false,"plans":[
+                          {"agentKey":"reservation","method":"SendMessage","reason":"예약 생성 폼이 먼저 필요함","priority":1,"preHitlA2ui":"package_reservation_form","arguments":{"message":"예약 생성 요청"}}
+                        ]}
+                        """);
+
+        DownstreamAgentCardCache cardCache = mock(DownstreamAgentCardCache.class);
+        when(cardCache.summarizeForPrompt(anyList())).thenReturn("cards");
+        when(cardCache.supportsStreaming(anyString())).thenReturn(false);
+
+        LlmSupervisorPlanningService service = new LlmSupervisorPlanningService(
+                llmRuntime,
+                promptProperties,
+                new SupervisorPromptRenderService(),
+                new PromptInjectionGuard(),
+                routingProperties,
+                cardCache,
+                new ObjectMapper()
+        );
+
+        List<RoutingPlan> plans = service.plan(new SupervisorPlanningContext("s1", "예약 접수 화면 먼저 열어줘", "mistral"));
+
+        assertThat(plans).hasSize(1);
+        assertThat(plans.get(0).arguments())
+                .containsEntry(SupervisorPreHitlA2uiService.PRE_HITL_A2UI_ARGUMENT, "package_reservation_form");
     }
 
     private static A2aSupervisorRoutingProperties.Route route(String endpoint) {

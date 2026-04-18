@@ -20,13 +20,15 @@ public enum SupervisorA2aMethod {
     CANCEL_TASK("CancelTask"),
     GET_TASK_REVIEW("GetTaskReview"),
     DECIDE_TASK_REVIEW("DecideTaskReview"),
+    DECIDE_TASK_REVIEW_STREAM("DecideTaskReviewStream"),
     MESSAGE_SEND("message/send"),
     MESSAGE_STREAM("message/stream"),
     TASKS_GET("tasks/get"),
     TASKS_LIST("tasks/list"),
     TASKS_CANCEL("tasks/cancel"),
     TASKS_REVIEW_GET("tasks/review/get"),
-    TASKS_REVIEW_DECIDE("tasks/review/decide");
+    TASKS_REVIEW_DECIDE("tasks/review/decide"),
+    TASKS_REVIEW_DECIDE_STREAM("tasks/review/decide/stream");
 
     private final String value;
 
@@ -74,7 +76,10 @@ public enum SupervisorA2aMethod {
      * @return stream 계열이면 true
      */
     public boolean isStream() {
-        return this == SEND_STREAMING_MESSAGE || this == MESSAGE_STREAM;
+        return this == SEND_STREAMING_MESSAGE
+                || this == MESSAGE_STREAM
+                || this == DECIDE_TASK_REVIEW_STREAM
+                || this == TASKS_REVIEW_DECIDE_STREAM;
     }
 
     /**
@@ -120,6 +125,15 @@ public enum SupervisorA2aMethod {
      */
     public boolean isReviewDecide() {
         return this == DECIDE_TASK_REVIEW || this == TASKS_REVIEW_DECIDE;
+    }
+
+    /**
+     * task review 결정 스트림 계열 메서드인지 판별한다.
+     *
+     * @return review 결정 스트림 계열이면 true
+     */
+    public boolean isReviewDecideStream() {
+        return this == DECIDE_TASK_REVIEW_STREAM || this == TASKS_REVIEW_DECIDE_STREAM;
     }
 
     /**

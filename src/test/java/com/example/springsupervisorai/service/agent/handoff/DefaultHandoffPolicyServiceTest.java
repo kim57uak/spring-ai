@@ -2,6 +2,7 @@ package com.example.springsupervisorai.service.agent.handoff;
 
 import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
+import com.example.springsupervisorai.model.HandoffPolicyContext;
 import com.example.springsupervisorai.model.HandoffValidationResult;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.service.agent.invoke.DownstreamAgentCardCache;
@@ -29,7 +30,7 @@ class DefaultHandoffPolicyServiceTest {
                 true, "product", "message/send", "delegate", Map.of("q", "camera")
         );
 
-        List<HandoffValidationResult> validations = service.evaluate(context, List.of(result));
+        List<HandoffValidationResult> validations = service.evaluate(HandoffPolicyContext.of(context, List.of(result)));
 
         assertThat(validations).hasSize(1);
         assertThat(validations.get(0).accepted()).isFalse();
@@ -50,7 +51,7 @@ class DefaultHandoffPolicyServiceTest {
                 true, "product", "message/stream", "delegate", Map.of()
         );
 
-        List<HandoffValidationResult> validations = service.evaluate(context, List.of(result));
+        List<HandoffValidationResult> validations = service.evaluate(HandoffPolicyContext.of(context, List.of(result)));
 
         assertThat(validations).hasSize(1);
         assertThat(validations.get(0).accepted()).isFalse();
@@ -71,7 +72,7 @@ class DefaultHandoffPolicyServiceTest {
                 true, "product", "message/send", "delegate", Map.of("query", "camera")
         );
 
-        List<HandoffValidationResult> validations = service.evaluate(context, List.of(result));
+        List<HandoffValidationResult> validations = service.evaluate(HandoffPolicyContext.of(context, List.of(result)));
 
         assertThat(validations).hasSize(1);
         HandoffValidationResult validation = validations.get(0);
@@ -99,7 +100,7 @@ class DefaultHandoffPolicyServiceTest {
                 true, "product", "message/send", "delegate", Map.of()
         );
 
-        List<HandoffValidationResult> validations = service.evaluate(context, List.of(result));
+        List<HandoffValidationResult> validations = service.evaluate(HandoffPolicyContext.of(context, List.of(result)));
 
         assertThat(validations).hasSize(1);
         assertThat(validations.get(0).accepted()).isFalse();
@@ -121,7 +122,7 @@ class DefaultHandoffPolicyServiceTest {
                 true, "product", "message/send", "delegate", Map.of()
         );
 
-        List<HandoffValidationResult> validations = service.evaluate(context, List.of(result));
+        List<HandoffValidationResult> validations = service.evaluate(HandoffPolicyContext.of(context, List.of(result)));
 
         assertThat(validations).hasSize(1);
         assertThat(validations.get(0).accepted()).isFalse();
@@ -143,7 +144,7 @@ class DefaultHandoffPolicyServiceTest {
                 true, "product", "message/send", "delegate", Map.of()
         );
 
-        List<HandoffValidationResult> validations = service.evaluate(context, List.of(result));
+        List<HandoffValidationResult> validations = service.evaluate(HandoffPolicyContext.of(context, List.of(result)));
 
         assertThat(validations).hasSize(1);
         assertThat(validations.get(0).accepted()).isFalse();

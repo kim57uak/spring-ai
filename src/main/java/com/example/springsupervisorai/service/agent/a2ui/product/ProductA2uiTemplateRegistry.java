@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service.agent.a2ui.product;
 
+import com.example.springsupervisorai.service.agent.a2ui.common.A2uiTemplateView;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumMap;
@@ -24,9 +25,9 @@ public class ProductA2uiTemplateRegistry {
         if (template != null) {
             return template;
         }
-        ProductA2uiTemplate fallback = templates.get(A2uiTemplateView.SUMMARY);
+        ProductA2uiTemplate fallback = templates.get(A2uiTemplateView.PACKAGE_SUMMARY);
         if (fallback == null) {
-            throw new IllegalStateException("Missing SUMMARY product A2UI template");
+            throw new IllegalStateException("Missing PACKAGE_SUMMARY product A2UI template");
         }
         return fallback;
     }

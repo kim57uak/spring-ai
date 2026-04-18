@@ -1,69 +1,127 @@
-# 17. Supervisor Package/Class Specification
+# 17. Supervisor Package / Class Specification
 
-## Recommended Package Structure
+Last synchronized with source: 2026-04-18  
+Source baseline: `src/main/java/com/example/springsupervisorai`
+
+## Current Package Structure
 
 ```text
 src/main/java/com/example/springsupervisorai
-├── config
-│   ├── A2aSupervisorRoutingProperties
-│   ├── SupervisorPromptProperties
-│   └── SupervisorStreamProperties
-├── controller
-│   └── SupervisorA2AController
-├── service
-│   ├── SupervisorAgentService
-│   ├── SupervisorAgentOrchestrator
-│   └── SupervisorProgressSupport
-├── service/agent
-│   ├── plan/{SupervisorPlanningService, LlmSupervisorPlanningService}
-│   ├── invoke/{A2AInvocationService, DefaultA2AInvocationService, A2AClientRegistry}
-│   ├── handoff/{HandoffPolicyService, DefaultHandoffPolicyService}
-│   ├── compose/{SupervisorResponseComposeService, LlmSupervisorResponseComposeService}
-│   ├── graph/{SupervisorStateGraphFactory, LangGraphSupervisorStateGraphFactory}
-│   ├── hitl/{HitlPolicyService, HitlDecisionService}
-│   └── store/{ConversationStore, GraphCheckpointStore, SupervisorSwarmStateStore, SupervisorReviewStore}
 ├── a2a
 │   ├── A2AJsonRpcClient
 │   ├── A2ARequestMapper
-│   └── A2AResponseMapper
-└── model
-    ├── SupervisorAgentRequest
-    ├── SupervisorPlanningContext
-    ├── SwarmSharedState
-    ├── HitlReviewContext
-    ├── RoutingPlan
-    ├── DownstreamCallResult
-    ├── HandoffDirective
-    └── HandoffValidationResult
+│   ├── A2AResponseMapper
+│   ├── dto/{JsonRpcRequest, JsonRpcResponse, JsonRpcError, TaskIdParams, TaskQueryParams, TaskSendParams, TaskReviewGetParams, TaskReviewDecisionParams, TaskView, TaskReviewView, TasksListParams, TasksListResult}
+│   ├── idempotency/SupervisorRequestIdempotencyService
+│   ├── lifecycle/SupervisorA2aLifecycleService
+│   └── task/{A2ATaskStore, A2aTaskSnapshot, A2aTaskSnapshotTransitions, A2aTaskStatus, InMemoryA2ATaskStore, RedisA2ATaskStore}
+├── common/redis/{RedisKeyspace, RedisTtlPolicy}
+├── config/{A2aSupervisorRoutingProperties, SupervisorPromptProperties, SupervisorStreamProperties}
+├── controller/{SupervisorA2AController, SupervisorA2ARequestValidator}
+├── exception/{A2ARoutingException, DownstreamA2AException, SupervisorChatProcessingException}
+├── model
+│   ├── DownstreamCallResult
+│   ├── HandoffDirective
+│   ├── HandoffPolicyContext
+│   ├── HandoffValidationResult
+│   ├── HitlDecisionType
+│   ├── HitlPolicyContext
+│   ├── HitlPolicyResult
+│   ├── HitlReviewStatus
+│   ├── HitlReviewTicket
+│   ├── InvocationPolicyContext
+│   ├── RoutingPlan
+│   ├── SupervisorA2aMethod
+│   ├── SupervisorAgentRequest
+│   ├── SupervisorErrorCode
+│   ├── SupervisorExecutionRequest
+│   ├── SupervisorGraphNode
+│   ├── SupervisorGraphRoute
+│   ├── SupervisorGraphSnapshot
+│   ├── SupervisorGraphState
+│   ├── SupervisorInvocationStatus
+│   ├── SupervisorOutputEvent
+│   ├── SupervisorOutputEventType
+│   ├── SupervisorPlanningContext
+│   ├── SupervisorProgressEvent
+│   ├── SupervisorRuntimeState
+│   └── SwarmState
+├── service
+│   ├── HitlGateService
+│   ├── SupervisorAgentOrchestrator
+│   ├── SupervisorAgentService
+│   ├── SupervisorExceptionTranslator
+│   ├── SupervisorExecutionPersistenceService
+│   ├── SupervisorExecutionResultCollector
+│   ├── SupervisorExecutionService
+│   ├── SupervisorExecutionStateLoader
+│   ├── SupervisorExecutionSummaryEmitter
+│   ├── SupervisorFallbackInvokeService
+│   ├── SupervisorGraphExecutionService
+│   ├── SupervisorHandoffProgressSupport
+│   ├── SupervisorOutputEventSupport
+│   ├── SupervisorPreHitlA2uiService
+│   ├── SupervisorProgressPublisher
+│   ├── SupervisorProgressSupport
+│   ├── SupervisorReviewApplicationService
+│   ├── SupervisorStreamProgressService
+│   ├── SupervisorTaskFacade
+│   ├── agent/a2ui/common/{A2uiComposePromptProvider, A2uiComposePromptProviderRegistry, A2uiTemplateView, CompositeSupervisorA2uiService, SupervisorA2uiDomainService, SupervisorA2uiService, SupervisorA2uiSupport}
+│   ├── agent/a2ui/product/{AbstractProductA2uiTemplate, BookingProductA2uiTemplate, CreationFormProductA2uiTemplate, DefaultSupervisorProductInfoA2uiService, PricingProductA2uiTemplate, ProductA2uiComposePromptProvider, ProductA2uiDataMapper, ProductA2uiMessageBuilder, ProductA2uiTemplate, ProductA2uiTemplateRegistry, ProductPayloadExtractor, ProductPresentationModel, SummaryProductA2uiTemplate, TimelineProductA2uiTemplate}
+│   ├── agent/a2ui/reservation/{DefaultSupervisorReservationA2uiService, ReservationA2uiComposePromptProvider, ReservationA2uiMessageBuilder, ReservationPayloadExtractor, ReservationPresentationModel}
+│   ├── agent/compose/{A2uiDecisionParser, ComposeOutcomeAnalyzer, ComposePromptBuilder, LlmSupervisorResponseComposeService, SupervisorResponseComposeService}
+│   ├── agent/graph/{LangGraphSupervisorStateGraphFactory, SupervisorBatchExecutionPolicy, SupervisorGraphInputBuilder, SupervisorGraphStateMapper, SupervisorPlanRunner, SupervisorStateGraphFactory}
+│   ├── agent/handoff/{DefaultHandoffPolicyService, HandoffPolicyService}
+│   ├── agent/hitl/{DefaultHitlDecisionService, HitlDecisionService, HitlPolicyService, LlmHitlPolicyService}
+│   ├── agent/invoke/{A2AClientRegistry, A2AInvocationService, DefaultA2AInvocationService, DownstreamAgentCardCache}
+│   ├── agent/plan/{LlmSupervisorPlanningService, SupervisorPlanningService}
+│   ├── agent/result/DownstreamResultInterpreter
+│   ├── agent/runtime/{DefaultSupervisorLlmRuntime, ReflectionSupervisorChatGateway, SupervisorChatGateway, SupervisorLlmRuntime}
+│   ├── agent/security/PromptInjectionGuard
+│   ├── agent/store/{ConversationStore, GraphCheckpointStore, InMemorySupervisorReviewStore, InMemorySupervisorSwarmStateStore, RedisSupervisorReviewStore, RedisSupervisorSwarmStateStore, SupervisorReviewStore, SupervisorSwarmStateStore, redis/RedisConversationStore, redis/RedisGraphCheckpointStore}
+│   ├── agent/swarm/{DefaultSupervisorSwarmCoordinator, SupervisorSwarmCoordinator, SwarmStateVersionConflictException}
+│   └── prompt/SupervisorPromptRenderService
 ```
 
-## Core Contracts
+## Current Core Contracts
 
 - `SupervisorPlanningService#plan(context): List<RoutingPlan>`
-- `A2AInvocationService#invoke(plan, context): DownstreamCallResult`
-- `HandoffPolicyService#evaluate(result, context): HandoffValidationResult`
-- `HandoffPolicyService#apply(context, validation): SupervisorPlanningContext`
-- `SupervisorResponseComposeService#streamCompose(context): Flux<String>`
-- `HitlPolicyService#evaluate(context, plans): HitlReviewContext`
-- `HitlDecisionService#decide(taskId, decision): HitlReviewContext`
+- `HitlPolicyService#evaluate(context): HitlPolicyResult`
+- `HitlDecisionService#openReview/getReview/decide(...)`
+- `A2AInvocationService#invoke(context): DownstreamCallResult`
+- `HandoffPolicyService#evaluate(context): List<HandoffValidationResult>`
+- `SupervisorResponseComposeService#streamComposeEvents(context): Flux<SupervisorOutputEvent>`
 - `SupervisorStateGraphFactory#getCompiledGraph(): CompiledGraph<SupervisorGraphState>`
-- `SupervisorProgressSupport#line(stage, progress, message, metadata): String`
+- `SupervisorSwarmCoordinator#applyRoutingRule/loadLatestBySession/...`
+- `SupervisorA2uiService#build(context, selectedView, message): Optional<A2uiRenderResult>`
+- `SupervisorExecutionService#executeSync/executeStreamEvents/resumeApprovedTask/resumeApprovedTaskStream`
+- `SupervisorReviewApplicationService#decideReview/decideReviewStream`
+- `SupervisorTaskFacade#createRunningTask/createWaitingReviewTask/getTask/listTasks/cancelTask`
 
----
+## Source-backed Dependency Shape
 
-## 2026-04-13 동기화 메모 (34 반영)
+- `SupervisorA2AController -> SupervisorA2ARequestValidator -> SupervisorAgentService`
+- `SupervisorAgentService -> SupervisorPreHitlA2uiService + HitlGateService + SupervisorExecutionService + SupervisorReviewApplicationService + SupervisorTaskFacade`
+- `SupervisorExecutionService -> SupervisorAgentOrchestrator + SupervisorTaskFacade + SupervisorExecutionResultCollector`
+- `SupervisorAgentOrchestrator -> SupervisorGraphExecutionService + SupervisorResponseComposeService + SupervisorExecutionPersistenceService + SupervisorFallbackInvokeService + SupervisorProgressPublisher + SupervisorA2aLifecycleService`
+- `SupervisorGraphExecutionService -> SupervisorExecutionStateLoader + SupervisorStateGraphFactory`
+- `LangGraphSupervisorStateGraphFactory -> SupervisorPlanningService + HandoffPolicyService + SupervisorSwarmCoordinator + SupervisorBatchExecutionPolicy + SupervisorPlanRunner`
+- `SupervisorPlanRunner -> A2AInvocationService`
+- `DefaultA2AInvocationService -> A2AClientRegistry + A2ARequestMapper + A2AJsonRpcClient`
+- `LlmSupervisorPlanningService / LlmHitlPolicyService / LlmSupervisorResponseComposeService -> DefaultSupervisorLlmRuntime`
 
-- handoff 기능은 `service/agent/handoff` 패키지로 분리해 SOLID(단일 책임/의존 역전) 원칙을 유지한다.
-- 진행상태/생각과정 출력은 `SupervisorProgressSupport` 공통 모듈을 사용한다.
-- handoff method는 기존 허용 enum만 통과시키고, stream 미지원 agent 대상 stream handoff는 차단한다.
-- 신규/수정 public 타입과 핵심 메서드는 Javadoc 필수 적용 대상으로 관리한다.
+## Current Source Constraints
 
----
+- supervisor entrypoint is `/a2a/supervisor`; no global multi-controller forwarding layer exists.
+- pre-HITL A2UI can terminate unary/stream requests before HITL/execution.
+- review decision supports unary and streaming variants.
+- A2UI support is split into:
+  - common registry/router
+  - product domain builder
+  - reservation domain builder
+- task persistence, review persistence, swarm persistence are independent stores.
 
-## 2026-04-12 동기화 메모 (30/31 반영)
+## Documentation Note
 
-- 본 문서는 `30`, `31`번 문서 기준으로 HITL/하이브리드 아키텍처 원칙을 상위 기준으로 따른다.
-- 이번 차례 구현 스코프는 `APPROVE`, `CANCEL`만 포함하며 `REVISE`는 다음 단계로 이관한다.
-- 상품/예약/주문 등 데이터 생성·변경(create/update/delete) 요청은 리스크 점수와 무관하게 HITL 강제 정책을 적용한다.
-- A2A 계약은 `legacy` + `v1.0`을 모두 충족하는 호환 모드로 유지한다(메서드 enum 기반 관리).
-- 사용자 추가정보 수집(이름/전화/이메일)은 향후 계획으로 분리하며, 입력 UX는 자연어/콤마 텍스트 수용 후 내부 구조화 원칙을 따른다.
+- This file reflects the current `springsupervisorai` package tree and public contracts.
+- Planning/proposal documents in the same folder remain historical design artifacts unless they explicitly state current synchronization.

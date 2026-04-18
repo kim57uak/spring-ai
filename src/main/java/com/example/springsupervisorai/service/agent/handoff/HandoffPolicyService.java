@@ -1,6 +1,7 @@
 package com.example.springsupervisorai.service.agent.handoff;
 
 import com.example.springsupervisorai.model.DownstreamCallResult;
+import com.example.springsupervisorai.model.HandoffPolicyContext;
 import com.example.springsupervisorai.model.HandoffValidationResult;
 import com.example.springsupervisorai.model.SupervisorPlanningContext;
 
@@ -20,9 +21,19 @@ public interface HandoffPolicyService {
     /**
      * 호출 배치 결과에서 handoff 지시를 검증한다.
      *
+     * @param context handoff 정책 입력 컨텍스트
+     * @return 결과별 검증 결과 목록
+     */
+    List<HandoffValidationResult> evaluate(HandoffPolicyContext context);
+
+    /**
+     * 호출 배치 결과에서 handoff 지시를 검증한다.
+     *
      * @param context 현재 supervisor 컨텍스트
      * @param batchResults 직전 invoke 배치 결과
      * @return 결과별 검증 결과 목록
      */
-    List<HandoffValidationResult> evaluate(SupervisorPlanningContext context, List<DownstreamCallResult> batchResults);
+    default List<HandoffValidationResult> evaluate(SupervisorPlanningContext context, List<DownstreamCallResult> batchResults) {
+        return evaluate(HandoffPolicyContext.of(context, batchResults));
+    }
 }

@@ -244,6 +244,11 @@
       background: #fef2f2;
     }
 
+    .status.pending {
+      color: #92400e;
+      background: #fffbeb;
+    }
+
     .log {
       max-height: 520px;
       overflow: auto;
@@ -408,6 +413,62 @@
       statusEl.className = "status " + type;
     }
 
+    function parseSupervisorProgress(line) {
+      const pattern = /^\[supervisor\]\s+\[([^\]]+)\]\s+\[(\d+)%\]\s+(.+?)(?:\s+\{(.+)\})?$/;
+      const match = String(line || '').match(pattern);
+      if (!match) return null;
+
+      const [, stage, progress, message, metadataStr] = match;
+      const metadata = {};
+      if (metadataStr) {
+        metadataStr.split(',').forEach((entry) => {
+          const pair = entry.trim();
+          if (!pair) return;
+          const separatorIndex = pair.indexOf('=');
+          if (separatorIndex < 0) return;
+          const key = pair.slice(0, separatorIndex).trim();
+          const value = pair.slice(separatorIndex + 1).trim();
+          if (key) metadata[key] = value;
+        });
+      }
+
+      return {
+        stage,
+        progress: Number(progress),
+        message,
+        metadata
+      };
+    }
+
+    function getStageLabel(stage) {
+      const labels = {
+        hitl: "HITL 평가",
+        hitl_waiting: "검토 대기",
+        completed: "완료",
+        error: "오류"
+      };
+      return labels[String(stage || '').toLowerCase()] || String(stage || '');
+    }
+
+    function applyProgressStatus(progress) {
+      if (!progress) return false;
+      const stage = String(progress.stage || '').toLowerCase();
+      if (stage === 'hitl_waiting' || String(progress.metadata?.reviewStatus || '').toUpperCase() === 'WAITING_REVIEW') {
+        setStatus(`HITL 승인 대기 (100%) · ${progress.message}`, "pending");
+        return true;
+      }
+      if (stage === 'completed') {
+        setStatus(`${getStageLabel(stage)} (${progress.progress}%) · ${progress.message}`, "ok");
+        return false;
+      }
+      if (stage === 'error') {
+        setStatus(`${getStageLabel(stage)} (${progress.progress}%) · ${progress.message}`, "err");
+        return false;
+      }
+      setStatus(`${getStageLabel(stage)} (${progress.progress}%) · ${progress.message}`);
+      return false;
+    }
+
     function resolveAccept(method) {
       const mode = acceptEl.value;
       if (mode === 'json') return 'application/json';
@@ -489,6 +550,7 @@
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let hitlWaitingDetected = false;
         setStatus("스트리밍 수신 중...", "");
         while (true) {
           const { value, done } = await reader.read();
@@ -505,11 +567,31 @@
               if (line.startsWith("data:")) data += line.slice(5).trim();
             }
             if (data) {
-              log(`[event:${event}] ${data}`);
+              let payload = data;
+              try {
+                payload = JSON.parse(data);
+              } catch (e) {
+                // no-op: JSON이 아니면 원문 사용
+              }
+              log(`[event:${event}] ${payload}`);
+
+              if (event === 'chunk') {
+                const payloadText = String(payload);
+                const lines = payloadText.split('\n');
+                for (const rawLine of lines) {
+                  const progress = parseSupervisorProgress(rawLine.trim());
+                  if (!progress) continue;
+                  if (applyProgressStatus(progress)) {
+                    hitlWaitingDetected = true;
+                  }
+                }
+              }
             }
           }
         }
-        setStatus("스트리밍 완료", "ok");
+        if (!hitlWaitingDetected) {
+          setStatus("스트리밍 완료", "ok");
+        }
       } catch (error) {
         if (error.name === 'AbortError') {
           log("[stream] aborted by user");
