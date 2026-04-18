@@ -1,74 +1,90 @@
 @startuml
 !pragma layout smetana
-title 19. Spring AI Agentic Sequence (Scoped + Mixed MCP Transport)
+title 19. SpringAI Runtime Sequence (HTTP + Scoped + A2A Current Source)
 
 skinparam shadowing false
 
 actor User
-participant "Agent Controller\n(Http/Product/Reservation/Search)" as Controller
-participant "Chat Service\n(HttpChatService/ScopedAgentChatService)" as ChatService
+participant "Base/A2A Controller" as Controller
+participant "HttpChatService or\nScopedAgentChatService" as ChatService
 participant "AgentScopeResolver" as ScopeResolver
+participant "A2aRequestIdempotencyService" as Idempotency
+participant "A2aLifecycleService" as A2aLifecycle
 participant "AgentOrchestrator" as Orchestrator
-participant "Conversation Store (Redis)" as HistoryRedis
-participant "Graph Checkpoint Store (Redis)" as CheckpointRedis
-participant "LangGraph4J CompiledGraph" as StateGraph
+participant "ConversationStore" as ConversationStore
+participant "GraphCheckpointStore" as CheckpointStore
+participant "LangGraph CompiledGraph" as Graph
 participant "PlanningService" as Planner
 participant "ToolExecutionService" as Executor
 participant "ResponseComposeService" as Composer
-participant "DefaultAgentLlmRuntime" as Runtime
-participant "ModelChatServiceFactory" as ChatFactory
-participant "Provider ChatService" as ProviderChatService
+participant "AgentLlmRuntime" as Runtime
 participant "ToolSchemaRegistry" as SchemaRegistry
 participant "McpClientFactory" as McpFactory
-participant "SSE MCP Server\n10.225.18.50:8080" as SseMcp
-participant "stdio MCP Server\nsearch-mcp-server" as StdioMcp
+participant "MCP Server" as McpServer
 
-User -> Controller : chat stream request
-Controller -> ScopeResolver : resolve scope (scoped controller only)
-Controller -> ChatService : streamChat(...)
-ChatService -> Orchestrator : execute(request)
+User -> Controller : request
 
-Orchestrator -> HistoryRedis : load history
-Orchestrator -> CheckpointRedis : load checkpoint
-Orchestrator -> StateGraph : invoke(state)
-StateGraph -> Planner : plan(context)
-Planner -> Runtime : complete(planning prompt)
+alt base scoped HTTP request
+  Controller -> ScopeResolver : resolveScoped(scope)
+  Controller -> ChatService : streamChat/chat(...)
+else unrestricted HTTP request
+  Controller -> ChatService : streamChat(...)
+else A2A unary request
+  Controller -> Idempotency : executeOnce(scope, session, method, requestId)
+  Idempotency -> A2aLifecycle : createAndMarkRunning(...)
+  Controller -> ScopeResolver : resolveScoped(scope)
+  Controller -> ChatService : chatForA2a(..., a2aContext)
+else A2A stream request
+  Controller -> A2aLifecycle : createAndMarkRunning(...)
+  Controller -> ScopeResolver : resolveScoped(scope)
+  Controller -> ChatService : streamChat(..., a2aContext)
+end
+
+ChatService -> Orchestrator : execute / executeSyncForA2a
+Orchestrator -> ConversationStore : load(sessionId)
+Orchestrator -> CheckpointStore : loadCheckpoint(sessionId)
+Orchestrator -> Graph : invoke(state)
+Graph -> Planner : plan(context)
 Planner -> SchemaRegistry : loadTools(server, scope)
+Planner -> Runtime : complete(planning prompt)
 
-alt tool required
-  StateGraph -> Executor : execute(plan, context)
+alt plan requires tool
+  Graph -> Executor : execute(plan, context)
   Executor -> SchemaRegistry : loadTools(server, scope)
-  Executor -> McpFactory : createClient(transport)
-  alt transport=sse
-    Executor -> SseMcp : call tool
-    SseMcp --> Executor : tool result
-  else transport=stdio
-    Executor -> StdioMcp : call tool
-    StdioMcp --> Executor : tool result
-  end
-else no tool required
-  StateGraph --> Orchestrator : skip execution
+  Executor -> McpFactory : createClient(server)
+  McpFactory -> McpServer : tool call
+  McpServer --> Executor : payload
 end
 
 Orchestrator -> Composer : streamCompose(context)
-Composer -> Runtime : stream(prompt, model, sessionId)
-Runtime -> ChatFactory : resolveStream(ChatModelType)
-ChatFactory --> Runtime : StreamChatService
-Runtime -> ProviderChatService : streamGenerate(prompt, context)
-ProviderChatService --> Runtime : tokens
-Runtime --> Composer : tokens
+Composer -> Runtime : stream(compose prompt)
+Runtime --> Composer : chunks
 Composer --> Orchestrator : chunks
-Orchestrator --> ChatService : chunks
-ChatService --> Controller : chunks
-Controller --> User : SSE stream
+Orchestrator -> ConversationStore : save(updated history)
+Orchestrator -> CheckpointStore : saveCheckpoint(...)
 
-Orchestrator -> HistoryRedis : save history
-Orchestrator -> CheckpointRedis : save checkpoint
+alt a2aContext present and stream/sync succeeded
+  Orchestrator -> A2aLifecycle : markCompleted(taskId, scope, response)
+else a2aContext present and failure
+  Orchestrator -> A2aLifecycle : markFailed(taskId, scope, code, message)
+end
 
-note right of Runtime
-Cost guardrail
-- LlmCallPolicy + LlmRequestRateLimiter 적용
-- retry/backoff는 llm.rate-limit.* 설정 기반
+Controller --> User : text / SSE / JSON-RPC task envelope
+
+note right of Controller
+A2A compatibility rules in source:
+- unary rejects stream methods
+- main /a2a/{scope} accepts stream methods
+- /a2a/{scope}/stream remains alias
+- X-A2A-Session-Id can override HttpSession id
+end note
+
+note right of Orchestrator
+Persist order in source:
+1. graph execution
+2. compose stream collection
+3. history/checkpoint save
+4. A2A lifecycle completion/failure update
 end note
 
 @enduml

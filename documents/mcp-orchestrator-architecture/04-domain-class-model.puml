@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 04. Agentic Domain and Contract Class Model (Current Source)
+title 04. SpringAI Domain / Contract Class Model (Current Source, 2026-04-18)
 
 skinparam shadowing false
 skinparam classAttributeIconSize 0
@@ -22,6 +22,7 @@ class A2aExecutionContext {
 class AgentScope {
   +allowedServers: Set<String>
   +allowedToolsByServer: Map<String, Set<String>>
+  +unrestricted: boolean
 }
 
 class PlanningContext {
@@ -31,10 +32,9 @@ class PlanningContext {
   +history: List<String>
   +currentNode: String
   +checkpointId: String
-  +plan: ToolPlan
   +plans: List<ToolPlan>
-  +toolTrace: List<String>
   +executionResult: ToolExecutionResult
+  +toolTrace: List<String>
   +scope: AgentScope
 }
 
@@ -43,18 +43,11 @@ class AgentGraphState {
   +USER_MESSAGE
   +MODEL
   +HISTORY
+  +CHECKPOINT_ID
   +CURRENT_NODE
   +PLAN_*
   +EXEC_*
   +SCOPE_*
-}
-
-enum ChunkType {
-  TOKEN
-  TOOL_RESULT
-  HUMAN_MESSAGE
-  COMPLETE
-  ERROR
 }
 
 class ToolPlan {
@@ -73,6 +66,31 @@ class ToolExecutionResult {
   +usedArguments: Map<String, Object>
   +success: boolean
   +executed: boolean
+  +terminalAfterExecution: boolean
+}
+
+class A2aStructuredResponse {
+  +response: String
+  +structuredData: Object
+}
+
+class A2aTaskSnapshot {
+  +taskId: String
+  +scopeName: AgentScopeName
+  +sessionId: String
+  +status: A2aTaskStatus
+  +requestMessage: String
+  +responsePayload: String
+  +errorCode: String
+  +errorMessage: String
+}
+
+enum A2aTaskStatus {
+  SUBMITTED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELED
 }
 
 interface ConversationStore {
@@ -103,8 +121,23 @@ interface AgentStateGraphFactory {
   +getCompiledGraph(): CompiledGraph<AgentGraphState>
 }
 
+interface A2ATaskStore {
+  +create(scopeName, sessionId, requestMessage): A2aTaskSnapshot
+  +get(taskId, scopeName): Optional<A2aTaskSnapshot>
+  +list(scopeName, limit): List<A2aTaskSnapshot>
+  +markRunning(...): Optional<A2aTaskSnapshot>
+  +markCompleted(...): Optional<A2aTaskSnapshot>
+  +markFailed(...): Optional<A2aTaskSnapshot>
+  +cancel(...): Optional<A2aTaskSnapshot>
+}
+
+class A2aLifecycleService
+class A2AResponseMapper
+class AgentCardRegistry
 class RedisConversationStore
 class RedisGraphCheckpointStore
+class InMemoryA2ATaskStore
+class RedisA2ATaskStore
 class HeuristicPlanningService
 class McpToolExecutionService
 class LlmResponseComposeService
@@ -112,24 +145,37 @@ class LangGraphAgentStateGraphFactory
 
 ConversationStore <|.. RedisConversationStore
 GraphCheckpointStore <|.. RedisGraphCheckpointStore
+A2ATaskStore <|.. InMemoryA2ATaskStore
+A2ATaskStore <|.. RedisA2ATaskStore
 PlanningService <|.. HeuristicPlanningService
 ToolExecutionService <|.. McpToolExecutionService
 ResponseComposeService <|.. LlmResponseComposeService
 AgentStateGraphFactory <|.. LangGraphAgentStateGraphFactory
 
-AgentChatRequest --> PlanningContext
 AgentChatRequest --> AgentScope
 AgentChatRequest --> A2aExecutionContext
+AgentGraphState --> PlanningContext
 PlanningContext --> ToolPlan
 PlanningContext --> ToolExecutionResult
 PlanningContext --> AgentScope
-AgentGraphState --> PlanningContext
+A2aExecutionContext --> AgentScopeName
+A2aLifecycleService --> A2ATaskStore
+A2AResponseMapper --> A2aTaskSnapshot
+AgentCardRegistry --> AgentScopeName
 
 note bottom of PlanningContext
-Shared orchestration state
-- request/session/model
-- plan list and execution trace
-- graph progression metadata
+Runtime orchestration state shared across:
+- planner
+- executor
+- composer
+- persistence
+end note
+
+note bottom of A2aTaskSnapshot
+Ownership and lifecycle are enforced by:
+- scopeName
+- sessionId
+- status transition helpers
 end note
 
 @enduml

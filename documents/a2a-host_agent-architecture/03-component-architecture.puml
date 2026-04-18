@@ -1,162 +1,183 @@
 @startuml
-!pragma layout smetana
-title 03. A2A Supervisor Agent Component Architecture
+title 03. Supervisor Host Agent Component Architecture (Current Source, 2026-04-18)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
-skinparam linetype ortho
 
-package "01 Entry" {
-  [SupervisorA2A\nController] as Controller
-  [SupervisorA2ARequest\nValidator] as Validator
-  [GlobalException\nHandler] as Advice
+package "entry" {
+  [SupervisorA2AController\n/a2a/supervisor] as Controller
+  [SupervisorA2ARequestValidator] as Validator
 }
 
-package "02 Application" {
-  [SupervisorAgent\nService] as Service
-  [SupervisorAgent\nOrchestrator] as Orchestrator
-  [SupervisorReviewApplication\nService] as ReviewApp
-  [SupervisorExecution\nService] as ExecutionService
-  [SupervisorExecutionResult\nCollector] as ResultCollector
-  [SupervisorStreamProgress\nService] as StreamProgress
-  [SupervisorExecutionSummary\nEmitter] as SummaryEmitter
-  [SupervisorGraphExecution\nService] as GraphExecution
-  [SupervisorExecutionPersistence\nService] as PersistenceService
-  [SupervisorFallbackInvoke\nService] as FallbackService
-  [SupervisorGraphInput\nBuilder] as GraphInputBuilder
-  [SupervisorHandoffProgress\nSupport] as HandoffProgressSupport
-  [SupervisorProgress\nPublisher] as ProgressPublisher
-  [SupervisorA2aLifecycle\nService] as Lifecycle
-  [SupervisorRequestIdempotency\nService] as Idempotency
+package "application services" {
+  [SupervisorAgentService] as AgentService
+  [SupervisorPreHitlA2uiService] as PreHitlA2uiService
+  [HitlGateService] as HitlGateService
+  [SupervisorExecutionService] as ExecutionService
+  [SupervisorReviewApplicationService] as ReviewAppService
+  [SupervisorStreamProgressService] as StreamProgressService
+  [SupervisorTaskFacade] as TaskFacade
+  [SupervisorAgentOrchestrator] as Orchestrator
+  [SupervisorGraphExecutionService] as GraphExecutionService
+  [SupervisorExecutionPersistenceService] as PersistenceService
+  [SupervisorExecutionResultCollector] as ResultCollector
+  [SupervisorExecutionStateLoader] as StateLoader
+  [SupervisorExecutionSummaryEmitter] as SummaryEmitter
+  [SupervisorFallbackInvokeService] as FallbackInvokeService
+  [SupervisorExceptionTranslator] as ExceptionTranslator
+  [SupervisorProgressPublisher] as ProgressPublisher
+  [SupervisorOutputEventSupport] as OutputEventSupport
 }
 
-package "03 Usecase Ports" {
-  interface "HITL Policy\nPort" as HitlPolicyPort
-  interface "HITL Decision\nPort" as HitlDecisionPort
-  interface "Planning\nPort" as PlanningPort
-  interface "Invocation\nPort" as InvocationPort
-  interface "Handoff Policy\nPort" as HandoffPolicyPort
-  interface "Compose\nPort" as ComposePort
-  interface "Graph Factory\nPort" as GraphFactoryPort
-  interface "Swarm Coordinator\nPort" as SwarmCoordinatorPort
+package "supervisor ports" {
+  [SupervisorPlanningService] <<port>> as PlanningPort
+  [HitlPolicyService] <<port>> as HitlPolicyPort
+  [HitlDecisionService] <<port>> as HitlDecisionPort
+  [A2AInvocationService] <<port>> as InvocationPort
+  [HandoffPolicyService] <<port>> as HandoffPolicyPort
+  [SupervisorResponseComposeService] <<port>> as ComposePort
+  [SupervisorStateGraphFactory] <<port>> as GraphFactoryPort
+  [SupervisorSwarmCoordinator] <<port>> as SwarmCoordinatorPort
+  [SupervisorA2uiService] <<port>> as A2uiPort
 }
 
-package "04 Infra Ports" {
-  interface "Conversation Store\nPort" as ConversationStorePort
-  interface "Checkpoint Store\nPort" as CheckpointStorePort
-  interface "Swarm State Store\nPort" as SwarmStateStorePort
-  interface "Review Store\nPort" as ReviewStorePort
-  interface "Task Store\nPort" as TaskStorePort
+package "storage ports" {
+  [ConversationStore] <<port>> as ConversationStorePort
+  [GraphCheckpointStore] <<port>> as CheckpointStorePort
+  [SupervisorSwarmStateStore] <<port>> as SwarmStateStorePort
+  [SupervisorReviewStore] <<port>> as ReviewStorePort
+  [A2ATaskStore] <<port>> as TaskStorePort
 }
 
-package "05 Adapters" {
-  [LlmHitlPolicy\nService\n<size:10><color:#7A5B00>CallLLM</color></size>] as HitlPolicyImpl #FFE7A8
-  [DefaultHitlDecision\nService] as HitlDecisionImpl
-  [LlmSupervisorPlanning\nService\n<size:10><color:#7A5B00>CallLLM</color></size>] as PlanningImpl #FFE7A8
-  [DefaultA2A\nInvocationService] as InvocationImpl
-  [DefaultHandoff\nPolicyService] as HandoffImpl
-  [LangGraphSupervisor\nStateGraphFactory] as GraphFactoryImpl
-  [DefaultSupervisorSwarm\nCoordinator] as SwarmCoordinatorImpl
-  [LlmSupervisorResponse\nComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>] as ComposeImpl #FFE7A8
-  [DefaultSupervisorProductInfo\nA2uiService] as A2uiImpl
-  [RedisConversationStore /\nInMemory impl] as ConversationStoreImpl
+package "implementations" {
+  [LlmSupervisorPlanningService] as PlanningImpl
+  [LlmHitlPolicyService] as HitlPolicyImpl
+  [DefaultHitlDecisionService] as HitlDecisionImpl
+  [DefaultA2AInvocationService] as InvocationImpl
+  [DefaultHandoffPolicyService] as HandoffImpl
+  [LlmSupervisorResponseComposeService] as ComposeImpl
+  [LangGraphSupervisorStateGraphFactory] as GraphFactoryImpl
+  [DefaultSupervisorSwarmCoordinator] as SwarmCoordinatorImpl
+  [CompositeSupervisorA2uiService] as CompositeA2uiService
+  [DefaultSupervisorProductInfoA2uiService] as ProductA2uiService
+  [DefaultSupervisorReservationA2uiService] as ReservationA2uiService
+  [RedisConversationStore] as ConversationStoreImpl
   [RedisGraphCheckpointStore] as CheckpointStoreImpl
-  [RedisSupervisorSwarmStateStore /\nInMemory impl] as SwarmStateStoreImpl
-  [RedisSupervisorReviewStore /\nInMemory impl] as ReviewStoreImpl
-  [RedisA2ATaskStore /\nInMemory impl] as TaskStoreImpl
+  [RedisSupervisorSwarmStateStore] as SwarmStateStoreImpl
+  [RedisSupervisorReviewStore] as ReviewStoreImpl
+  [RedisA2ATaskStore] as RedisTaskStore
+  [InMemoryA2ATaskStore] as InMemoryTaskStore
 }
 
-package "06 Runtime / External" {
-  [DefaultSupervisor\nLlmRuntime\n<size:10><color:#7A5B00>CallLLM</color></size>] as LlmRuntime #FFF4CC
-  [A2AClient\nRegistry] as Registry
-  [A2AJsonRpc\nClient] as JsonRpcClient
+package "runtime / integration" {
+  [DefaultSupervisorLlmRuntime] as LlmRuntime
+  [SupervisorChatGateway] <<port>> as ChatGatewayPort
+  [ReflectionSupervisorChatGateway] as ChatGatewayImpl
+  [A2AClientRegistry] as ClientRegistry
+  [A2ARequestMapper] as RequestMapper
+  [A2AJsonRpcClient] as JsonRpcClient
+  [SupervisorA2aLifecycleService] as LifecycleService
+  [SupervisorRequestIdempotencyService] as IdempotencyService
   [application.yml /\na2a-supervisor-hitl.yml] as Config
-  [Downstream A2A\nAgents] as Agents
+  [Downstream A2A Agents] as DownstreamAgents
 }
 
-Controller --> Validator : params/schema check
-Controller --> Service : send/stream/tasks
-Controller --> Advice : exception mapping
+Controller --> Validator
+Controller --> AgentService
+Controller --> OutputEventSupport
 
-Service --> Idempotency : send only
-Service --> StreamProgress : stream preface / hitl progress
-Service --> ReviewApp : review decide
-Service --> HitlPolicyPort : evaluate pre-gate via HitlGateService
-Service --> HitlDecisionPort : open/get/decide via HitlGateService
-Service --> ExecutionService : execute when allowed
+AgentService --> PreHitlA2uiService
+AgentService --> HitlGateService
+AgentService --> ExecutionService
+AgentService --> ReviewAppService
+AgentService --> StreamProgressService
+AgentService --> TaskFacade
+AgentService --> IdempotencyService
 
-ReviewApp --> HitlDecisionPort : decide review
-ReviewApp --> ExecutionService : resume approved task
-ReviewApp --> Lifecycle : task view lookup/update
+PreHitlA2uiService --> PlanningPort
+PreHitlA2uiService --> StateLoader
+PreHitlA2uiService --> SwarmCoordinatorPort
+PreHitlA2uiService --> A2uiPort
 
-ExecutionService --> Lifecycle : create/update task
-ExecutionService --> Orchestrator : executeEvents(...)
-ExecutionService --> ResultCollector : sync/resume payload collect
-ExecutionService --> ProgressPublisher : cancel path / task context
+HitlGateService --> HitlPolicyPort
+HitlGateService --> HitlDecisionPort
+HitlGateService --> TaskFacade
 
-Orchestrator --> GraphExecution : load state + invoke graph
-Orchestrator --> SummaryEmitter : graph/routing/invocation summary
-Orchestrator --> PersistenceService : completion / clear session
-Orchestrator --> FallbackService : invoke when graph result empty
-Orchestrator --> ProgressPublisher : structured progress/event publish
-Orchestrator --> ComposePort : final response compose
-Orchestrator --> Lifecycle : canceled status check
+ExecutionService --> Orchestrator
+ExecutionService --> TaskFacade
+ExecutionService --> ResultCollector
 
-GraphExecution --> GraphFactoryPort : compiled graph
-GraphExecution --> ConversationStorePort : history load
-GraphExecution --> CheckpointStorePort : checkpoint load
-GraphExecution --> SwarmCoordinatorPort : latest swarm load
-GraphExecution --> GraphInputBuilder : build typed input
+ReviewAppService --> HitlGateService
+ReviewAppService --> ExecutionService
+ReviewAppService --> TaskFacade
 
-PersistenceService --> ConversationStorePort : history save
-PersistenceService --> CheckpointStorePort : checkpoint save/clear
-PersistenceService --> Lifecycle : mark completed/failed
+TaskFacade --> LifecycleService
+LifecycleService --> TaskStorePort
 
-SummaryEmitter --> HandoffProgressSupport : handoff metadata
+Orchestrator --> GraphExecutionService
+Orchestrator --> ComposePort
+Orchestrator --> ProgressPublisher
+Orchestrator --> PersistenceService
+Orchestrator --> FallbackInvokeService
+Orchestrator --> ExceptionTranslator
+Orchestrator --> SummaryEmitter
+Orchestrator --> LifecycleService
 
-GraphFactoryPort <|.. GraphFactoryImpl
+GraphExecutionService --> StateLoader
+GraphExecutionService --> GraphFactoryPort
+GraphExecutionService --> ProgressPublisher
+StateLoader --> ConversationStorePort
+StateLoader --> CheckpointStorePort
+StateLoader --> SwarmCoordinatorPort
+
+GraphFactoryImpl ..> GraphFactoryPort : implements
+PlanningImpl ..> PlanningPort : implements
+HitlPolicyImpl ..> HitlPolicyPort : implements
+HitlDecisionImpl ..> HitlDecisionPort : implements
+InvocationImpl ..> InvocationPort : implements
+HandoffImpl ..> HandoffPolicyPort : implements
+ComposeImpl ..> ComposePort : implements
+SwarmCoordinatorImpl ..> SwarmCoordinatorPort : implements
+CompositeA2uiService ..> A2uiPort : implements
+
 GraphFactoryImpl --> PlanningPort
-GraphFactoryImpl --> InvocationPort
 GraphFactoryImpl --> HandoffPolicyPort
 GraphFactoryImpl --> SwarmCoordinatorPort
+GraphFactoryImpl --> ProgressPublisher
 
-HitlPolicyPort <|.. HitlPolicyImpl
-HitlDecisionPort <|.. HitlDecisionImpl
-PlanningPort <|.. PlanningImpl
-InvocationPort <|.. InvocationImpl
-HandoffPolicyPort <|.. HandoffImpl
-ComposePort <|.. ComposeImpl
-SwarmCoordinatorPort <|.. SwarmCoordinatorImpl
-
-ConversationStorePort <|.. ConversationStoreImpl
-CheckpointStorePort <|.. CheckpointStoreImpl
-SwarmStateStorePort <|.. SwarmStateStoreImpl
-ReviewStorePort <|.. ReviewStoreImpl
-TaskStorePort <|.. TaskStoreImpl
-
-HitlPolicyImpl --> LlmRuntime
 PlanningImpl --> LlmRuntime
+HitlPolicyImpl --> LlmRuntime
 ComposeImpl --> LlmRuntime
-ComposeImpl --> A2uiImpl
-InvocationImpl --> Registry
+ComposeImpl --> A2uiPort
+InvocationImpl --> ClientRegistry
+InvocationImpl --> RequestMapper
 InvocationImpl --> JsonRpcClient
-Registry --> Config
-JsonRpcClient --> Agents
-SwarmCoordinatorImpl --> SwarmStateStorePort
-HitlDecisionImpl --> ReviewStorePort
-HitlDecisionImpl --> SwarmStateStorePort
-Lifecycle --> TaskStorePort
+ClientRegistry --> Config
+JsonRpcClient --> DownstreamAgents
 
-note right of Service
-Current application split
-- Service: use case dispatch + response mapping
-- ExecutionService: send/stream/resume execution boundary
-- ReviewApp: approve/cancel review use case
-- Orchestrator: graph/compose/cancel coordination
+CompositeA2uiService --> ProductA2uiService
+CompositeA2uiService --> ReservationA2uiService
+
+ConversationStoreImpl ..> ConversationStorePort : implements
+CheckpointStoreImpl ..> CheckpointStorePort : implements
+SwarmStateStoreImpl ..> SwarmStateStorePort : implements
+ReviewStoreImpl ..> ReviewStorePort : implements
+RedisTaskStore ..> TaskStorePort : implements
+InMemoryTaskStore ..> TaskStorePort : implements
+
+ChatGatewayImpl ..> ChatGatewayPort : implements
+LlmRuntime --> ChatGatewayPort
+
+note right of AgentService
+Current use case split:
+- pre-HITL A2UI shortcut
+- HITL policy gate
+- unary/stream execution
+- review approve/cancel streams
 end note
 
 note right of GraphFactoryImpl
-Current graph nodes
+Current graph nodes:
 - plan
 - select
 - invoke
@@ -165,4 +186,12 @@ Current graph nodes
 - merge
 - compose
 end note
+
+note bottom of ComposeImpl
+Compose can emit:
+- text events
+- A2UI payload
+- pre-HITL-only A2UI views are skipped in post-invoke compose
+end note
+
 @enduml

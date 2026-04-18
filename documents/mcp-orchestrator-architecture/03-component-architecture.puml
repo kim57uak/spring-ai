@@ -1,78 +1,78 @@
 @startuml
-!pragma layout smetana
-title 03. Agentic MCP Component Architecture (Current Source)
+title 03. SpringAI Component Architecture (Current Source, 2026-04-18)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
 package "entry" {
-  [HttpChatController\n(unrestricted)] as HttpController
-  [ProductAgentController\n(restricted)] as ProductController
-  [ReservationAgentController\n(restricted)] as ReservationController
-  [SearchAgentController\n(restricted)] as SearchController
-  [ProductA2AController\n(restricted)] as ProductA2AController
-  [ReservationA2AController\n(restricted)] as ReservationA2AController
-  [SearchA2AController\n(restricted)] as SearchA2AController
-  [AgentCardController] as AgentCardController
+  [HttpChatController\n/api/chat] as HttpController
+  [ProductAgentController\n/api/product-agent/*] as ProductController
+  [ReservationAgentController\n/api/reservation-agent/*] as ReservationController
+  [SearchAgentController\n/api/search-agent/*] as SearchController
+  [ProductA2AController\n/a2a/product] as ProductA2AController
+  [ReservationA2AController\n/a2a/reservation] as ReservationA2AController
+  [SearchA2AController\n/a2a/search] as SearchA2AController
+  [AgentCardController\n/.well-known/agent.json] as AgentCardController
   [GlobalExceptionHandler] as Advice
 }
 
-package "service" {
+package "application services" {
   [HttpChatService] as HttpChatService
   [ScopedAgentChatService] as ScopedChatService
-  [AgentOrchestrator] as Orchestrator
   [AgentScopeResolver] as ScopeResolver
   [AgentScopeActivationService] as ScopeActivationService
+  [AgentOrchestrator] as Orchestrator
+  [A2aLifecycleService] as A2aLifecycleService
+  [A2aRequestIdempotencyService] as A2aIdempotency
+  [A2AResponseMapper] as A2aResponseMapper
+  [AgentCardRegistry] as AgentCardRegistry
 }
 
 package "agent ports" {
-  interface "PlanningService" as PlanningPort
-  interface "ToolExecutionService" as ExecutePort
-  interface "ResponseComposeService" as ComposePort
-  interface "ConversationStore" as ConversationStorePort
-  interface "GraphCheckpointStore" as CheckpointStorePort
-  interface "AgentStateGraphFactory" as GraphFactoryPort
-  interface "A2ATaskStore" as A2aTaskStorePort
+  [PlanningService] <<port>> as PlanningPort
+  [ToolExecutionService] <<port>> as ExecutePort
+  [ResponseComposeService] <<port>> as ComposePort
+  [ConversationStore] <<port>> as ConversationStorePort
+  [GraphCheckpointStore] <<port>> as CheckpointStorePort
+  [AgentStateGraphFactory] <<port>> as GraphFactoryPort
+  [A2ATaskStore] <<port>> as A2aTaskStorePort
+  [AgentLlmRuntime] <<port>> as LlmRuntimePort
 }
 
-package "agent impl" {
+package "agent implementations" {
   [HeuristicPlanningService] as PlanningImpl
   [McpToolExecutionService] as ExecuteImpl
   [LlmResponseComposeService] as ComposeImpl
   [LangGraphAgentStateGraphFactory] as GraphFactoryImpl
   [RedisConversationStore] as ConversationStoreImpl
   [RedisGraphCheckpointStore] as CheckpointStoreImpl
+  [InMemoryA2ATaskStore\n(redis disabled)] as InMemoryTaskStore
+  [RedisA2ATaskStore\n(redis enabled)] as RedisTaskStore
   [PromptInjectionGuard] as PromptGuard
   [HumanMessageService] as HumanMessageService
-  [A2aLifecycleService] as A2aLifecycleService
-  [InMemoryA2ATaskStore] as A2aTaskStoreImpl
-  [AgentCardRegistry] as AgentCardRegistry
-  [A2AResponseMapper] as A2aResponseMapper
+  [CompositeAgentStructuredDataExtractor] as StructuredDataExtractor
 }
 
-package "runtime/integration" {
-  interface "AgentLlmRuntime" as LlmRuntime
+package "runtime / integration" {
   [DefaultAgentLlmRuntime] as LlmRuntimeImpl
   [ModelChatServiceFactory] as ChatFactory
-  [LlmCallPolicy] as LlmPolicy
-  [LlmRequestRateLimiter] as LlmRateLimiter
-  [McpToolCallbackProvider] as ToolCallbackProvider
   [SpringAiCompatibleChatService] as SpringAiChatBase
   [OpenAiModelChatService] as OpenAiChatService
   [GeminiModelChatService] as GeminiChatService
   [GeminiLiteModelChatService] as GeminiLiteChatService
   [MistralModelChatService] as MistralChatService
+  [LlmCallPolicy] as LlmPolicy
+  [LlmRequestRateLimiter] as LlmRateLimiter
+  [McpToolCallbackProvider] as ToolCallbackProvider
+  [ToolSchemaRegistry] as ToolSchemaRegistry
   [McpClientFactory] as McpFactory
-  [StdioMcpClient] as StdioClient
   [SseMcpClient] as SseClient
-  [ToolSchemaRegistry\n(reconnect + cache)] as ToolSchemaRegistry
+  [StdioMcpClient] as StdioClient
   [mcp.yml] as McpYml
+  [application.yml] as AppYml
 }
 
 HttpController --> HttpChatService
-Advice --> HttpChatService : error mapping boundary
-HttpChatService --> Orchestrator : all servers/tools scope
-
 ProductController --> ScopedChatService
 ReservationController --> ScopedChatService
 SearchController --> ScopedChatService
@@ -82,71 +82,94 @@ SearchA2AController --> ScopedChatService
 ProductA2AController --> ScopeActivationService
 ReservationA2AController --> ScopeActivationService
 SearchA2AController --> ScopeActivationService
-ScopedChatService --> ScopeResolver
-ScopedChatService --> Orchestrator : restricted scope
-AgentCardController --> ScopeActivationService
+ProductA2AController --> A2aLifecycleService
+ReservationA2AController --> A2aLifecycleService
+SearchA2AController --> A2aLifecycleService
+ProductA2AController --> A2aIdempotency
+ReservationA2AController --> A2aIdempotency
+SearchA2AController --> A2aIdempotency
+ProductA2AController --> A2aResponseMapper
+ReservationA2AController --> A2aResponseMapper
+SearchA2AController --> A2aResponseMapper
 AgentCardController --> AgentCardRegistry
+AgentCardController --> ScopeActivationService
+Advice --> HttpController
+Advice --> ProductA2AController
 
-ScopeResolver --> McpYml : load allowedServers/allowedToolsByServer
+HttpChatService --> ScopeResolver
+HttpChatService --> Orchestrator
+ScopedChatService --> Orchestrator
+ScopedChatService --> ScopeResolver
+ScopeResolver --> AppYml : agent.scopes.*
+ScopeActivationService --> AppYml : agent.cards.enabled-scopes
 
-Orchestrator --> PlanningPort
-Orchestrator --> ExecutePort
-Orchestrator --> ComposePort
 Orchestrator --> ConversationStorePort
 Orchestrator --> CheckpointStorePort
 Orchestrator --> GraphFactoryPort
+Orchestrator --> ComposePort
 Orchestrator --> HumanMessageService
 Orchestrator --> A2aLifecycleService
+Orchestrator --> StructuredDataExtractor
 A2aLifecycleService --> A2aTaskStorePort
 
-PlanningPort <|.. PlanningImpl
-ExecutePort <|.. ExecuteImpl
-ComposePort <|.. ComposeImpl
-GraphFactoryPort <|.. GraphFactoryImpl
-ConversationStorePort <|.. ConversationStoreImpl
-CheckpointStorePort <|.. CheckpointStoreImpl
-A2aTaskStorePort <|.. A2aTaskStoreImpl
+PlanningImpl ..> PlanningPort : implements
+ExecuteImpl ..> ExecutePort : implements
+ComposeImpl ..> ComposePort : implements
+GraphFactoryImpl ..> GraphFactoryPort : implements
+ConversationStoreImpl ..> ConversationStorePort : implements
+CheckpointStoreImpl ..> CheckpointStorePort : implements
+InMemoryTaskStore ..> A2aTaskStorePort : implements
+RedisTaskStore ..> A2aTaskStorePort : implements
+LlmRuntimeImpl ..> LlmRuntimePort : implements
 
-PlanningImpl --> PromptGuard
-ExecuteImpl --> PromptGuard
-ComposeImpl --> LlmRuntime
-PlanningImpl --> LlmRuntime
-ExecuteImpl --> McpFactory
+GraphFactoryImpl --> PlanningPort
+GraphFactoryImpl --> ExecutePort
 PlanningImpl --> ToolSchemaRegistry
+PlanningImpl --> LlmRuntimePort
+PlanningImpl --> PromptGuard
+ExecuteImpl --> McpFactory
 ExecuteImpl --> ToolSchemaRegistry
-LlmRuntime <|.. LlmRuntimeImpl
+ExecuteImpl --> PromptGuard
+ComposeImpl --> LlmRuntimePort
+
 LlmRuntimeImpl --> ChatFactory
 ChatFactory --> SpringAiChatBase
 SpringAiChatBase --> LlmPolicy
 LlmPolicy --> LlmRateLimiter
 SpringAiChatBase --> ToolCallbackProvider
-SpringAiChatBase <|-- OpenAiChatService
-SpringAiChatBase <|-- GeminiChatService
-SpringAiChatBase <|-- GeminiLiteChatService
-SpringAiChatBase <|-- MistralChatService
+OpenAiChatService ..> SpringAiChatBase : extends
+GeminiChatService ..> SpringAiChatBase : extends
+GeminiLiteChatService ..> SpringAiChatBase : extends
+MistralChatService ..> SpringAiChatBase : extends
 
-McpFactory --> StdioClient : transport=stdio
+ToolSchemaRegistry --> McpFactory : listTools + cache
 McpFactory --> SseClient : transport=sse
-ToolSchemaRegistry --> McpFactory : on-demand reconnect
+McpFactory --> StdioClient : transport=stdio
 McpYml --> McpFactory : mcp.servers.*
-McpYml --> ToolSchemaRegistry : cache key fields
-
-note right of HttpController
-Backward compatibility:
-HttpChatController keeps unrestricted MCP access.
-end note
+McpYml --> ToolSchemaRegistry : allowTools/toolPolicies/timeoutMs
 
 note right of ProductA2AController
-A2A compatibility:
-- additive controller layer
-- same scope policy as existing controllers
-- no cross-controller forwarding
+Current A2A protocol surface:
+- unary on /a2a/{scope}
+- stream on /a2a/{scope} when method is stream
+- legacy alias /a2a/{scope}/stream
+- session override: X-A2A-Session-Id
+end note
+
+note bottom of Orchestrator
+Orchestrator flow:
+load history/checkpoint
+-> LangGraph(plan/execute/compose)
+-> persist history/checkpoint
+-> sync A2A lifecycle when a2aContext exists
 end note
 
 note bottom of ToolSchemaRegistry
-Unique cache key:
-transport|serverName|endpointOrCommandSignature|toolSetHash|scopeHash
-serverName-only cache is forbidden.
+Current schema strategy:
+- prewarm on startup
+- scope cache + server cache
+- remote reconnect first
+- static allowTools fallback
 end note
 
 @enduml

@@ -1,6 +1,5 @@
 @startuml
-!pragma layout smetana
-title 19. Spring AI Supervisor Usecase Sequence (A2A Controller Only)
+title 19. Supervisor Runtime Sequence (Current Source, 2026-04-18)
 
 skinparam shadowing false
 skinparam sequenceMessageAlign center
@@ -9,73 +8,64 @@ skinparam ParticipantPadding 20
 actor User
 participant "SupervisorA2AController" as Controller
 participant "SupervisorA2ARequestValidator" as Validator
-participant "SupervisorAgentService" as Service
-participant "SupervisorRequestIdempotencyService" as Idempotency
+participant "SupervisorAgentService" as AgentService
+participant "SupervisorPreHitlA2uiService" as PreHitlA2ui
 participant "HitlGateService" as HitlGate
-participant "SupervisorReviewApplicationService" as ReviewApp
-participant "SupervisorStreamProgressService" as StreamProgress
 participant "SupervisorExecutionService" as ExecutionService
 participant "SupervisorAgentOrchestrator" as Orchestrator
 participant "SupervisorGraphExecutionService" as GraphExecution
-participant "SupervisorPlanningService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Planner #FFE7A8
-participant "DefaultSupervisorLlmRuntime" as Runtime #FFF4CC
+participant "SupervisorExecutionStateLoader" as StateLoader
+participant "LangGraph CompiledGraph" as Graph
+participant "SupervisorPlanningService" as Planner
 participant "A2AInvocationService" as Invoker
 participant "HandoffPolicyService" as HandoffPolicy
-participant "SupervisorResponseComposeService\n<size:10><color:#7A5B00>CallLLM</color></size>" as Composer #FFE7A8
 participant "SupervisorSwarmCoordinator" as Swarm
+participant "SupervisorResponseComposeService" as Composer
+participant "SupervisorExecutionPersistenceService" as Persistence
 
-User -> Controller : JSON-RPC message/send | message/stream
-Controller -> Validator : precheck + validate params
-Validator --> Controller : normalized text/model
+User -> Controller : request
+Controller -> Validator : precheck + validate
 
-alt unary send
-  Controller -> Service : send(requestId, sessionId, message, model, method)
-  Service -> Idempotency : executeOnce(...)
-  Idempotency -> HitlGate : evaluate(...)
-else streaming
-  Controller -> Service : streamEvents(sessionId, message, model)
-  Service -> StreamProgress : initialHitlEvaluationEvents(...)
-  Service -> HitlGate : evaluate(...)
+alt send/stream request
+  Controller -> AgentService : send(...) or streamEvents(...)
+  AgentService -> PreHitlA2ui : build(sessionId, message, model)
+
+  alt pre-HITL A2UI exists
+    AgentService --> Controller : task or progress + text + a2ui
+  else no pre-HITL A2UI
+    AgentService -> HitlGate : evaluate(...)
+    alt HITL required
+      AgentService -> HitlGate : openReview(...)
+      AgentService --> Controller : waiting review response/events
+    else HITL passed
+      AgentService -> ExecutionService : executeSync(...) / executeStreamEvents(...)
+      ExecutionService -> Orchestrator : executeEvents(...)
+      Orchestrator -> GraphExecution : execute(...)
+      GraphExecution -> StateLoader : load(sessionId)
+      StateLoader -> Swarm : loadLatestBySession
+      GraphExecution -> Graph : invoke(state)
+      Graph -> Planner : plan(context)
+      Graph -> Swarm : applyRoutingRule(...)
+
+      loop invoke / handoff cycle
+        Graph -> Invoker : invoke(invocationContext)
+        Invoker --> Graph : DownstreamCallResult
+        Graph -> HandoffPolicy : evaluate(handoffContext)
+        HandoffPolicy --> Graph : HandoffValidationResult list
+        Graph -> Swarm : record invocation/handoff events
+      end
+
+      Orchestrator -> Composer : streamComposeEvents(context)
+      Composer --> Orchestrator : text / a2ui events
+      Orchestrator -> Persistence : persistCompletion / markCompleted or markFailed
+      Orchestrator --> Controller : SupervisorOutputEvent stream
+    end
+  end
+else review endpoint
+  Controller -> AgentService : getReview / decideReview / decideReviewStream
+  AgentService --> Controller : review/task result
 end
 
-HitlGate -> Runtime : complete(hitl policy prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-Runtime --> HitlGate : policy json/result
+Controller --> User : JSON-RPC or SSE
 
-alt review required
-  Service -> HitlGate : openReview(...)
-  HitlGate -> Swarm : update review facts/event
-  Service --> Controller : waiting review response/progress
-else review not required
-  Service -> ExecutionService : executeSync(...) or executeStreamEvents(...)
-  ExecutionService -> Orchestrator : executeEvents(supervisorRequest, taskId)
-  Orchestrator -> GraphExecution : execute(...)
-  GraphExecution -> Planner : plan(context)
-  Planner -> Runtime : complete(planning prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-  Runtime --> Planner : routing plans
-  GraphExecution -> Invoker : invoke(selected plans)
-  Invoker --> GraphExecution : downstream results
-  GraphExecution -> HandoffPolicy : evaluate(context, batchResults)
-  HandoffPolicy --> GraphExecution : validations / applied plans
-  GraphExecution -> Swarm : record invoke/handoff events
-  Orchestrator -> Composer : streamComposeEvents(context + results)
-  Composer -> Runtime : stream or complete(compose prompt)\n<size:10><color:#7A5B00>CallLLM</color></size>
-  Runtime --> Composer : SupervisorOutputEvent / A2UI decision
-  Composer --> Controller : SupervisorOutputEvent stream
-end
-
-alt review decide endpoint
-  Controller -> Service : decideReview(...)
-  Service -> ReviewApp : decideReview(...)
-  ReviewApp -> HitlGate : decide(...)
-  ReviewApp -> ExecutionService : resumeApprovedTask(...) when approve
-end
-
-Controller --> User : JSON-RPC result or SSE(chunk/a2ui/done)
-
-note right of Service
-Current usecase split
-- send: idempotent unary task response
-- stream: SupervisorOutputEvent 기반 SSE progress + chunks
-- tasks/review/*: separate review lifecycle endpoints
-end note
 @enduml
