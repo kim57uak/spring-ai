@@ -20,7 +20,7 @@ public class ProductA2uiMessageBuilder {
         List<Map<String, Object>> components = buildStandardComponents(model, template);
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(surfaceUpdate(surfaceId, components));
-        if (template.view() == A2uiTemplateView.CREATION_FORM) {
+        if (template.view() == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM) {
             messages.add(dataModelUpdate(surfaceId, "productCreate", List.of(
                     stringEntry("saleProductCode", valueOrBlank(model.creationProductCode())),
                     stringEntry("departureStartDay", valueOrBlank(model.creationDepartureStartDay())),
@@ -63,7 +63,7 @@ public class ProductA2uiMessageBuilder {
                 "alignment", "stretch"
         )));
 
-        if (template.view() == A2uiTemplateView.CREATION_FORM) {
+        if (template.view() == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM) {
             addCreationSummaryCard(components, model);
             addCreationFormCard(components, model);
             return components;
@@ -263,48 +263,48 @@ public class ProductA2uiMessageBuilder {
      */
     private void addCreationSummaryCard(List<Map<String, Object>> components, ProductPresentationModel model) {
         components.add(textComponent("creation_summary_code", valueOrBlank(model.creationProductCode()), "caption"));
-        components.add(textComponent("creation_summary_title", "상품 생성 입력", "h3"));
+        components.add(textComponent("package_sale_product_create_summary_title", "상품 생성 입력", "h3"));
         components.add(textComponent(
-                "creation_summary_desc",
+                "package_sale_product_create_summary_desc",
                 "상품코드, 출발 기간, 출발 요일을 확인한 뒤 상품 생성 버튼을 실행하세요.",
                 "body"
         ));
-        components.add(component("creation_summary_body", "Column", Map.of(
+        components.add(component("package_sale_product_create_summary_body", "Column", Map.of(
                 "children", explicit(List.of(
                         "creation_summary_code",
-                        "creation_summary_title",
-                        "creation_summary_desc"
+                        "package_sale_product_create_summary_title",
+                        "package_sale_product_create_summary_desc"
                 )),
                 "alignment", "stretch"
         )));
-        components.add(component("creation_summary_card", "Card", Map.of("child", "creation_summary_body")));
+        components.add(component("package_sale_product_create_summary_card", "Card", Map.of("child", "package_sale_product_create_summary_body")));
     }
 
     /**
      * 표준 A2UI 입력 컴포넌트만 사용해서 상품 생성 폼을 구성한다.
      */
     private void addCreationFormCard(List<Map<String, Object>> components, ProductPresentationModel model) {
-        components.add(textComponent("creation_form_title", "생성 파라미터", "h4"));
-        components.add(component("creation_sale_product_code", "TextField", Map.of(
+        components.add(textComponent("package_sale_product_create_form_title", "생성 파라미터", "h4"));
+        components.add(component("package_sale_product_create_sale_product_code", "TextField", Map.of(
                 "label", literal("상품 코드"),
                 "text", pathValue("/productCreate/saleProductCode"),
                 "textFieldType", "shortText"
         )));
-        components.add(component("creation_departure_start_day", "TextField", Map.of(
+        components.add(component("package_sale_product_create_departure_start_day", "TextField", Map.of(
                 "label", literal("출발 시작일"),
                 "text", pathValue("/productCreate/departureStartDay"),
                 "textFieldType", "shortText"
         )));
-        components.add(component("creation_departure_end_day", "TextField", Map.of(
+        components.add(component("package_sale_product_create_departure_end_day", "TextField", Map.of(
                 "label", literal("출발 종료일"),
                 "text", pathValue("/productCreate/departureEndDay"),
                 "textFieldType", "shortText"
         )));
-        components.add(component("creation_all_target", "CheckBox", Map.of(
+        components.add(component("package_sale_product_create_all_target", "CheckBox", Map.of(
                 "label", literal("전체 대상"),
                 "value", pathValue("/productCreate/allTarget")
         )));
-        components.add(component("creation_departure_days", "MultipleChoice", Map.of(
+        components.add(component("package_sale_product_create_departure_days", "MultipleChoice", Map.of(
                 "variant", "checkbox",
                 "selections", pathValue("/productCreate/departureDays"),
                 "options", List.of(
@@ -317,9 +317,9 @@ public class ProductA2uiMessageBuilder {
                         choiceOption("sun", "일")
                 )
         )));
-        components.add(textComponent("creation_submit_text", "상품 생성", "body"));
-        components.add(component("creation_submit", "Button", Map.of(
-                "child", "creation_submit_text",
+        components.add(textComponent("package_sale_product_create_submit_text", "상품 생성", "body"));
+        components.add(component("package_sale_product_create_submit", "Button", Map.of(
+                "child", "package_sale_product_create_submit_text",
                 "primary", true,
                 "action", Map.of(
                         "name", "submit_product_creation",
@@ -332,19 +332,19 @@ public class ProductA2uiMessageBuilder {
                         )
                 )
         )));
-        components.add(component("creation_form_body", "Column", Map.of(
+        components.add(component("package_sale_product_create_form_body", "Column", Map.of(
                 "children", explicit(List.of(
-                        "creation_form_title",
-                        "creation_sale_product_code",
-                        "creation_departure_start_day",
-                        "creation_departure_end_day",
-                        "creation_all_target",
-                        "creation_departure_days",
-                        "creation_submit"
+                        "package_sale_product_create_form_title",
+                        "package_sale_product_create_sale_product_code",
+                        "package_sale_product_create_departure_start_day",
+                        "package_sale_product_create_departure_end_day",
+                        "package_sale_product_create_all_target",
+                        "package_sale_product_create_departure_days",
+                        "package_sale_product_create_submit"
                 )),
                 "alignment", "stretch"
         )));
-        components.add(component("creation_form_card", "Card", Map.of("child", "creation_form_body")));
+        components.add(component("package_sale_product_create_form_card", "Card", Map.of("child", "package_sale_product_create_form_body")));
     }
 
     private Map<String, Object> beginRendering(String surfaceId, String root) {

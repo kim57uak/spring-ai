@@ -23,7 +23,7 @@ public class ProductA2uiComposePromptProvider implements A2uiComposePromptProvid
 
     @Override
     public String supportedTemplateKeys() {
-        return "summary, pricing, timeline, booking, creation_form";
+        return "summary, pricing, timeline, booking, package_sale_product_create_form";
     }
 
     @Override
@@ -38,7 +38,7 @@ public class ProductA2uiComposePromptProvider implements A2uiComposePromptProvid
                   when: 일정, 날짜, 출발/도착, 숙소, 미팅 시간 관련 요청
                 - key: booking
                   when: 예약 생성, 예약 진행, 신청 의도 관련 요청
-                - key: creation_form
+                - key: package_sale_product_create_form
                   when: 상품 생성, 상품 등록, 출발 요일/기간/상품코드 입력이 필요한 요청
                 """;
     }

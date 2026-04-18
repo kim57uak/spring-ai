@@ -13,7 +13,7 @@ public class CreationFormProductA2uiTemplate extends AbstractProductA2uiTemplate
 
     @Override
     public A2uiTemplateView view() {
-        return A2uiTemplateView.CREATION_FORM;
+        return A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM;
     }
 
     @Override
@@ -23,6 +23,6 @@ public class CreationFormProductA2uiTemplate extends AbstractProductA2uiTemplate
 
     @Override
     public List<String> rootChildren() {
-        return children("creation_summary_card", "creation_form_card");
+        return children("package_sale_product_create_summary_card", "package_sale_product_create_form_card");
     }
 }

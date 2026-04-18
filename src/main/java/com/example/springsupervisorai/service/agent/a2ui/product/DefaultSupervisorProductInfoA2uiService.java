@@ -51,11 +51,11 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
                 || selectedView == A2uiTemplateView.PRICING
                 || selectedView == A2uiTemplateView.TIMELINE
                 || selectedView == A2uiTemplateView.BOOKING
-                || selectedView == A2uiTemplateView.CREATION_FORM;
+                || selectedView == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM;
         if (!productOwnedView) {
             return false;
         }
-        if (selectedView == A2uiTemplateView.CREATION_FORM) {
+        if (selectedView == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM) {
             return hasSuccessfulProductResult(context) || hasProductRoutingPlan(context);
         }
         return hasSuccessfulProductResult(context);
@@ -68,7 +68,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
             String message
     ) {
         ProductA2uiTemplate template = templateRegistry.resolve(selectedView == null ? A2uiTemplateView.SUMMARY : selectedView);
-        if (template.view() == A2uiTemplateView.CREATION_FORM) {
+        if (template.view() == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM) {
             Optional<com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService.A2uiRenderResult> standalone =
                     buildStandaloneCreationForm(context, message, template);
             if (standalone.isPresent()) {

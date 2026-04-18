@@ -107,8 +107,8 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
     }
 
     private boolean isPreHitlOnlyView(A2uiTemplateView selectedView) {
-        return selectedView == A2uiTemplateView.CREATION_FORM
-                || selectedView == A2uiTemplateView.RESERVATION_FORM;
+        return selectedView == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM
+                || selectedView == A2uiTemplateView.PACKAGE_RESERVATION_FORM;
     }
 
     private ComposeA2uiDecision composeA2uiDecision(

@@ -33,7 +33,7 @@ public class DefaultSupervisorReservationA2uiService implements SupervisorA2uiDo
 
     @Override
     public boolean supports(SupervisorPlanningContext context, A2uiTemplateView selectedView) {
-        if (selectedView != A2uiTemplateView.RESERVATION_FORM) {
+        if (selectedView != A2uiTemplateView.PACKAGE_RESERVATION_FORM) {
             return false;
         }
         if (context == null) {

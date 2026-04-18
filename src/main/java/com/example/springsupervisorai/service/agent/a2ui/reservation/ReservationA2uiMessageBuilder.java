@@ -18,11 +18,11 @@ public class ReservationA2uiMessageBuilder {
     public List<Map<String, Object>> build(String surfaceId, ReservationPresentationModel model) {
         List<Map<String, Object>> components = new ArrayList<>();
         components.add(component("root", "Column", Map.of(
-                "children", explicit(List.of("reservation_summary_card", "reservation_form_card")),
+                "children", explicit(List.of("reservation_summary_card", "package_reservation_form_card")),
                 "alignment", "stretch"
         )));
         addSummaryCard(components, model);
-        addReservationFormCard(components);
+        addPackageReservationFormCard(components);
 
         return List.of(
                 surfaceUpdate(surfaceId, components),
@@ -52,36 +52,36 @@ public class ReservationA2uiMessageBuilder {
         components.add(component("reservation_summary_card", "Card", Map.of("child", "reservation_summary_body")));
     }
 
-    private void addReservationFormCard(List<Map<String, Object>> components) {
-        components.add(textComponent("reservation_form_title", "예약 파라미터", "h4"));
-        components.add(component("reservation_form_product_code", "TextField", Map.of(
+    private void addPackageReservationFormCard(List<Map<String, Object>> components) {
+        components.add(textComponent("package_reservation_form_title", "패키지 예약 파라미터", "h4"));
+        components.add(component("package_reservation_form_product_code", "TextField", Map.of(
                 "label", literal("상품 코드"),
                 "text", pathValue("/reservation/productCode"),
                 "textFieldType", "shortText"
         )));
-        components.add(component("reservation_form_booker", "TextField", Map.of(
+        components.add(component("package_reservation_form_booker", "TextField", Map.of(
                 "label", literal("예약자"),
                 "text", pathValue("/reservation/bookerName"),
                 "textFieldType", "shortText"
         )));
-        components.add(component("reservation_form_contact", "TextField", Map.of(
+        components.add(component("package_reservation_form_contact", "TextField", Map.of(
                 "label", literal("연락처"),
                 "text", pathValue("/reservation/contact"),
                 "textFieldType", "shortText"
         )));
-        components.add(component("reservation_form_head_count", "TextField", Map.of(
+        components.add(component("package_reservation_form_head_count", "TextField", Map.of(
                 "label", literal("인원수"),
                 "text", pathValue("/reservation/headCount"),
                 "textFieldType", "number"
         )));
-        components.add(component("reservation_form_birth_date", "TextField", Map.of(
+        components.add(component("package_reservation_form_birth_date", "TextField", Map.of(
                 "label", literal("생년월일"),
                 "text", pathValue("/reservation/birthDate"),
                 "textFieldType", "shortText"
         )));
-        components.add(textComponent("reservation_form_submit_text", "예약 생성", "body"));
-        components.add(component("reservation_form_submit", "Button", Map.of(
-                "child", "reservation_form_submit_text",
+        components.add(textComponent("package_reservation_form_submit_text", "패키지 예약 생성", "body"));
+        components.add(component("package_reservation_form_submit", "Button", Map.of(
+                "child", "package_reservation_form_submit_text",
                 "primary", true,
                 "action", Map.of(
                         "name", "submit_reservation",
@@ -94,19 +94,19 @@ public class ReservationA2uiMessageBuilder {
                         )
                 )
         )));
-        components.add(component("reservation_form_body", "Column", Map.of(
+        components.add(component("package_reservation_form_body", "Column", Map.of(
                 "children", explicit(List.of(
-                        "reservation_form_title",
-                        "reservation_form_product_code",
-                        "reservation_form_booker",
-                        "reservation_form_contact",
-                        "reservation_form_head_count",
-                        "reservation_form_birth_date",
-                        "reservation_form_submit"
+                        "package_reservation_form_title",
+                        "package_reservation_form_product_code",
+                        "package_reservation_form_booker",
+                        "package_reservation_form_contact",
+                        "package_reservation_form_head_count",
+                        "package_reservation_form_birth_date",
+                        "package_reservation_form_submit"
                 )),
                 "alignment", "stretch"
         )));
-        components.add(component("reservation_form_card", "Card", Map.of("child", "reservation_form_body")));
+        components.add(component("package_reservation_form_card", "Card", Map.of("child", "package_reservation_form_body")));
     }
 
     private Map<String, Object> surfaceUpdate(String surfaceId, List<Map<String, Object>> components) {
