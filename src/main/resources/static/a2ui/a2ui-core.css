@@ -55,20 +55,20 @@
   gap: 18px;
 }
 
-.a2ui-card[data-component-id="summary_card"] {
+.a2ui-card[data-component-id="package_summary_card"] {
   padding: 0;
   background:
     linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(16, 185, 129, 0.08)),
     linear-gradient(180deg, #ffffff, #f8fafc);
 }
 
-.a2ui-card[data-component-id="summary_card"] [data-component-id="summary_body"] {
+.a2ui-card[data-component-id="package_summary_card"] [data-component-id="package_summary_body"] {
   display: grid;
   gap: 12px;
   padding: 18px;
 }
 
-.a2ui-card[data-component-id="summary_card"] .a2ui-thumb {
+.a2ui-card[data-component-id="package_summary_card"] .a2ui-thumb {
   width: 100%;
   height: 220px;
   border-radius: 18px;
@@ -76,7 +76,7 @@
   box-shadow: none;
 }
 
-.a2ui-card[data-component-id="summary_card"] .a2ui-text-caption {
+.a2ui-card[data-component-id="package_summary_card"] .a2ui-text-caption {
   display: inline-flex;
   width: fit-content;
   padding: 7px 10px;
@@ -85,21 +85,21 @@
   border: 1px solid rgba(14, 165, 233, 0.18);
 }
 
-.a2ui-card[data-component-id="summary_card"] .a2ui-text-h3 {
+.a2ui-card[data-component-id="package_summary_card"] .a2ui-text-h3 {
   font-size: 24px;
   line-height: 1.3;
 }
 
-.a2ui-card[data-component-id="summary_card"] .a2ui-text-h4 {
+.a2ui-card[data-component-id="package_summary_card"] .a2ui-text-h4 {
   margin-top: 4px;
   font-size: 20px;
   color: #0f766e;
 }
 
-.a2ui-card[data-component-id="pricing_card"]::after,
-.a2ui-card[data-component-id="timeline_card"]::after,
-.a2ui-card[data-component-id="notice_card"]::after,
-.a2ui-card[data-component-id="reservation_card"]::after {
+.a2ui-card[data-component-id="package_pricing_card"]::after,
+.a2ui-card[data-component-id="package_timeline_card"]::after,
+.a2ui-card[data-component-id="package_notice_card"]::after,
+.a2ui-card[data-component-id="package_reservation_card"]::after {
   position: absolute;
   top: 14px;
   right: 16px;
@@ -109,19 +109,19 @@
   color: rgba(100, 116, 139, 0.72);
 }
 
-.a2ui-card[data-component-id="pricing_card"]::after {
+.a2ui-card[data-component-id="package_pricing_card"]::after {
   content: "Pricing";
 }
 
-.a2ui-card[data-component-id="timeline_card"]::after {
+.a2ui-card[data-component-id="package_timeline_card"]::after {
   content: "Timeline";
 }
 
-.a2ui-card[data-component-id="notice_card"]::after {
+.a2ui-card[data-component-id="package_notice_card"]::after {
   content: "Policy";
 }
 
-.a2ui-card[data-component-id="reservation_card"]::after {
+.a2ui-card[data-component-id="package_reservation_card"]::after {
   content: "Booking";
 }
 
@@ -495,12 +495,12 @@
     padding: 15px;
   }
 
-  .a2ui-card[data-component-id="summary_card"] .a2ui-thumb {
+  .a2ui-card[data-component-id="package_summary_card"] .a2ui-thumb {
     height: 180px;
     border-radius: 14px;
   }
 
-  .a2ui-card[data-component-id="summary_card"] .a2ui-text-h3 {
+  .a2ui-card[data-component-id="package_summary_card"] .a2ui-text-h3 {
     font-size: 21px;
   }
 
@@ -517,7 +517,7 @@
 }
 
 @media (max-width: 480px) {
-  .a2ui-card[data-component-id="summary_card"] .a2ui-thumb {
+  .a2ui-card[data-component-id="package_summary_card"] .a2ui-thumb {
     height: 144px;
   }
 

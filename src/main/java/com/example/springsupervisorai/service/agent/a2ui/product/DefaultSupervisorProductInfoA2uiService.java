@@ -47,10 +47,10 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
         if (selectedView == null) {
             return false;
         }
-        boolean productOwnedView = selectedView == A2uiTemplateView.SUMMARY
-                || selectedView == A2uiTemplateView.PRICING
-                || selectedView == A2uiTemplateView.TIMELINE
-                || selectedView == A2uiTemplateView.BOOKING
+        boolean productOwnedView = selectedView == A2uiTemplateView.PACKAGE_SUMMARY
+                || selectedView == A2uiTemplateView.PACKAGE_PRICING
+                || selectedView == A2uiTemplateView.PACKAGE_TIMELINE
+                || selectedView == A2uiTemplateView.PACKAGE_BOOKING
                 || selectedView == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM;
         if (!productOwnedView) {
             return false;
@@ -67,7 +67,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
             A2uiTemplateView selectedView,
             String message
     ) {
-        ProductA2uiTemplate template = templateRegistry.resolve(selectedView == null ? A2uiTemplateView.SUMMARY : selectedView);
+        ProductA2uiTemplate template = templateRegistry.resolve(selectedView == null ? A2uiTemplateView.PACKAGE_SUMMARY : selectedView);
         if (template.view() == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM) {
             Optional<com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService.A2uiRenderResult> standalone =
                     buildStandaloneCreationForm(context, message, template);
