@@ -44,7 +44,7 @@ class HeuristicPlanningServiceTest {
         });
         when(llmRuntime.complete(anyString(), anyString(), anyString())).thenReturn(
                 """
-                {"complete":false,"plans":[{"server":"reservation","tool":"createReservation","reason":"예약 생성 요청","arguments":{"request":{"saleProductCode":"AAP331260523TG1","bookerName":"김병두","contact":"01038569626","headCount":"1","birthDate":"19740308"}}}]}
+                {"complete":false,"plans":[{"server":"reservation","tool":"createReservation","reason":"예약 생성 요청","arguments":{"request":{"saleProductCode":"AAP331260523TG1","bookerName":"김병두","headCount":"1"}}}]}
                 """
         );
 
@@ -60,7 +60,7 @@ class HeuristicPlanningServiceTest {
 
         PlanningContext context = new PlanningContext(
                 "session-1",
-                "예약생성해죠 판매상품코드 AAP331260523TG1 예약자 김병두 연락처 01038569626 인원수 1명 생년월일 19740308",
+                "예약생성해죠 판매상품코드 AAP331260523TG1 예약자 김병두 인원수 1명",
                 "openai"
         );
         context.setScope(AgentScope.unrestricted());

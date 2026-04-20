@@ -48,8 +48,12 @@ public class ComposePromptBuilder {
             SupervisorPlanningContext context,
             ComposeOutcomeAnalyzer.ComposeOutcomeSummary outcomeSummary
     ) {
-        return promptRenderService.render(required(promptProperties.getComposeTemplate(), "compose-template"),
-                composePromptVariables(context, outcomeSummary));
+        String rendered = promptRenderService.render(
+                required(promptProperties.getComposeTemplate(), "compose-template"),
+                composePromptVariables(context, outcomeSummary)
+        );
+        logRenderedPrompt("compose", context, rendered);
+        return rendered;
     }
 
     /**
@@ -64,7 +68,12 @@ public class ComposePromptBuilder {
         variables.put("composeA2uiSystem", required(promptProperties.getComposeA2uiSystem(), "compose-a2ui-system"));
         variables.put("a2uiTemplateKeys", promptProvider.supportedTemplateKeys());
         variables.put("a2uiTemplateCatalog", promptProvider.templateCatalogPrompt());
-        return promptRenderService.render(required(promptProperties.getComposeA2uiTemplate(), "compose-a2ui-template"), variables);
+        String rendered = promptRenderService.render(
+                required(promptProperties.getComposeA2uiTemplate(), "compose-a2ui-template"),
+                variables
+        );
+        logRenderedPrompt("compose-a2ui", context, rendered);
+        return rendered;
     }
 
     /**
@@ -126,8 +135,6 @@ public class ComposePromptBuilder {
                     .append(", status=").append(result.status())
                     .append(", errorCode=").append(result.errorCode())
                     .append(", errorMessage=").append(result.errorMessage())
-                    .append(", normalizedOutcome=").append(resultOutcome.assessment().outcome())
-                    .append(", normalizedReason=").append(resultOutcome.assessment().reason())
                     .append("\n")
                     .append(safe(result.payload()))
                     .append("\n\n");
@@ -181,5 +188,9 @@ public class ComposePromptBuilder {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private void logRenderedPrompt(String promptType, SupervisorPlanningContext context, String rendered) {
+        logger.info("Supervisor {} prompt sessionId={}\n{}", promptType, safe(context == null ? "" : context.getSessionId()), safe(rendered));
     }
 }

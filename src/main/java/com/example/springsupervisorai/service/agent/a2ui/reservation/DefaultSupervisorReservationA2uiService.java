@@ -87,7 +87,7 @@ public class DefaultSupervisorReservationA2uiService implements SupervisorA2uiDo
             return extracted.get();
         }
         if (hasReservationRoutingPlan(context)) {
-            return new ReservationPresentationModel("", "", "", "", "1", "");
+            return new ReservationPresentationModel("", "", "", "1");
         }
         return null;
     }

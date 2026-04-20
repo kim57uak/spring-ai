@@ -33,7 +33,7 @@ public class ReservationPayloadExtractor {
         if (seededProductCode.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(new ReservationPresentationModel(seededProductCode, "", "", "", "1", ""));
+        return Optional.of(new ReservationPresentationModel(seededProductCode, "", "", "1"));
     }
 
     private ReservationPresentationModel fromPayload(String payload) {
@@ -56,17 +56,13 @@ public class ReservationPayloadExtractor {
             String productCode = firstText(node, "saleProdCd", "saleProductCode", "productCode");
             String productName = firstText(node, "saleProdNm", "saleProductName", "productName");
             String bookerName = firstText(node, "bookerName", "reservationName", "customerName");
-            String contact = firstText(node, "contact", "phoneNumber", "mobile");
             String headCount = firstText(node, "headCount", "personCount", "adultCount");
-            String birthDate = firstText(node, "birthDate", "birthday");
             if (!productCode.isBlank()) {
                 return new ReservationPresentationModel(
                         productCode,
                         productName,
                         bookerName,
-                        contact,
-                        headCount.isBlank() ? "1" : headCount,
-                        birthDate
+                        headCount.isBlank() ? "1" : headCount
                 );
             }
         }
