@@ -24,6 +24,13 @@ public final class DownstreamResultInterpreter {
     private static final int MAX_JSON_SCAN_DEPTH = 5;
     private static final Set<String> SUCCESS_STATUS = Set.of("COMPLETED", "SUCCESS");
     private static final Set<String> FAILURE_STATUS = Set.of("FAILED", "ERROR", "CANCELED", "CANCELLED", "TIMEOUT", "REJECTED");
+    private static final Set<String> FAILURE_TEXT_MARKERS = Set.of(
+            "[error]",
+            "[missing_required_params]",
+            "[policy_skipped]",
+            "도구 사용 결과: 실패",
+            "실행 결과: 실패"
+    );
 
     private DownstreamResultInterpreter() {
     }
@@ -74,10 +81,7 @@ public final class DownstreamResultInterpreter {
         if (text.isBlank()) {
             return false;
         }
-        String lower = text.toLowerCase(Locale.ROOT);
-        if (lower.contains("[error]")
-                || lower.contains("[missing_required_params]")
-                || lower.contains("[policy_skipped]")) {
+        if (containsFailureMarker(text)) {
             return true;
         }
         try {
@@ -99,15 +103,9 @@ public final class DownstreamResultInterpreter {
         if (text.isBlank()) {
             return "empty_payload";
         }
-        String lower = text.toLowerCase(Locale.ROOT);
-        if (lower.contains("[error]")) {
-            return "error_token";
-        }
-        if (lower.contains("[missing_required_params]")) {
-            return "missing_required_params";
-        }
-        if (lower.contains("[policy_skipped]")) {
-            return "policy_skipped";
+        String markerReason = failureMarkerReason(text);
+        if (!markerReason.isBlank()) {
+            return markerReason;
         }
         try {
             JsonNode node = OBJECT_MAPPER.readTree(text);
@@ -123,10 +121,7 @@ public final class DownstreamResultInterpreter {
             return false;
         }
         if (node.isTextual()) {
-            String text = node.asText("").toLowerCase(Locale.ROOT);
-            return text.contains("[error]")
-                    || text.contains("[missing_required_params]")
-                    || text.contains("[policy_skipped]");
+            return containsFailureMarker(node.asText(""));
         }
         if (node.isObject()) {
             String status = normalizeStatus(node.path("status").asText(""));
@@ -163,6 +158,9 @@ public final class DownstreamResultInterpreter {
     private static String jsonFailureReason(JsonNode node, int depth) {
         if (node == null || node.isNull() || depth > MAX_JSON_SCAN_DEPTH) {
             return "";
+        }
+        if (node.isTextual()) {
+            return failureMarkerReason(node.asText(""));
         }
         if (node.isObject()) {
             String status = normalizeStatus(node.path("status").asText(""));
@@ -202,6 +200,42 @@ public final class DownstreamResultInterpreter {
 
     private static String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static boolean containsFailureMarker(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        for (String marker : FAILURE_TEXT_MARKERS) {
+            if (lower.contains(marker.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String failureMarkerReason(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        if (lower.contains("[error]")) {
+            return "error_token";
+        }
+        if (lower.contains("[missing_required_params]")) {
+            return "missing_required_params";
+        }
+        if (lower.contains("[policy_skipped]")) {
+            return "policy_skipped";
+        }
+        if (lower.contains("도구 사용 결과: 실패")) {
+            return "tool_result_failed_marker";
+        }
+        if (lower.contains("실행 결과: 실패")) {
+            return "execution_result_failed_marker";
+        }
+        return "";
     }
 
     /**

@@ -200,14 +200,13 @@ public class SupervisorA2ARequestValidator {
         if (productCode.isBlank()) {
             return "";
         }
+        String bookerName = contextNode.path("bookerName").asText("").trim();
+        String headCount = contextNode.path("headCount").asText("").trim();
         return String.join("\n",
                 A2UI_SUBMIT_ACTION_MARKER + " submit_reservation",
-                "예약생성해줘",
-                "상품코드: " + productCode,
-                "예약자: " + contextNode.path("bookerName").asText("").trim(),
-                "연락처: " + contextNode.path("contact").asText("").trim(),
-                "인원수: " + contextNode.path("headCount").asText("").trim(),
-                "생년월일: " + contextNode.path("birthDate").asText("").trim()
+                productCode + " 상품으로 예약 생성 부탁드립니다.",
+                "예약자는 " + bookerName + "님입니다.",
+                "인원은 " + headCount + "명입니다."
         );
     }
 
@@ -219,15 +218,15 @@ public class SupervisorA2ARequestValidator {
         if (saleProductCode.isBlank()) {
             return "";
         }
+        String departureStartDay = contextNode.path("departureStartDay").asText("").trim();
+        String departureEndDay = contextNode.path("departureEndDay").asText("").trim();
+        String allTarget = ynText(contextNode.path("allTarget"));
         String departureDays = flattenDepartureDays(contextNode.path("departureDays"));
         return String.join("\n",
                 A2UI_SUBMIT_ACTION_MARKER + " submit_product_creation",
-                "상품생성해줘",
-                "상품코드: " + saleProductCode,
-                "출발시작일: " + contextNode.path("departureStartDay").asText("").trim(),
-                "출발종료일: " + contextNode.path("departureEndDay").asText("").trim(),
-                "전체대상: " + ynText(contextNode.path("allTarget")),
-                "출발요일: " + departureDays
+                saleProductCode + " 상품 생성 부탁드립니다.",
+                "출발 기간은 " + departureStartDay + "부터 " + departureEndDay + "까지입니다.",
+                "전체 대상 여부는 " + allTarget + "이고, 출발 요일은 " + departureDays + "입니다."
         );
     }
 

@@ -31,9 +31,7 @@ public class ProductA2uiMessageBuilder {
         } else {
             messages.add(dataModelUpdate(surfaceId, "reservation", List.of(
                     stringEntry("bookerName", ""),
-                    stringEntry("contact", ""),
-                    stringEntry("headCount", "1"),
-                    stringEntry("birthDate", "")
+                    stringEntry("headCount", "1")
             )));
         }
         messages.add(beginRendering(surfaceId, "root"));
@@ -214,20 +212,10 @@ public class ProductA2uiMessageBuilder {
                 "text", Map.of("path", "/reservation/bookerName", "literalString", ""),
                 "textFieldType", "shortText"
         )));
-        components.add(component("package_reservation_contact", "TextField", Map.of(
-                "label", literal("연락처"),
-                "text", Map.of("path", "/reservation/contact", "literalString", ""),
-                "textFieldType", "shortText"
-        )));
         components.add(component("package_reservation_head_count", "TextField", Map.of(
                 "label", literal("인원수"),
                 "text", Map.of("path", "/reservation/headCount", "literalString", "1"),
                 "textFieldType", "number"
-        )));
-        components.add(component("package_reservation_birth_date", "TextField", Map.of(
-                "label", literal("생년월일"),
-                "text", Map.of("path", "/reservation/birthDate", "literalString", ""),
-                "textFieldType", "shortText"
         )));
         components.add(textComponent("package_reservation_submit_text", "예약 생성", "body"));
         components.add(component("package_reservation_submit", "Button", Map.of(
@@ -238,9 +226,7 @@ public class ProductA2uiMessageBuilder {
                         "context", List.of(
                                 contextEntry("productCode", literal(valueOrBlank(model.productCode()))),
                                 contextEntry("bookerName", pathValue("/reservation/bookerName")),
-                                contextEntry("contact", pathValue("/reservation/contact")),
-                                contextEntry("headCount", pathValue("/reservation/headCount")),
-                                contextEntry("birthDate", pathValue("/reservation/birthDate"))
+                                contextEntry("headCount", pathValue("/reservation/headCount"))
                         )
                 )
         )));
@@ -248,9 +234,7 @@ public class ProductA2uiMessageBuilder {
                 "children", explicit(List.of(
                         "package_reservation_title",
                         "package_reservation_booker",
-                        "package_reservation_contact",
                         "package_reservation_head_count",
-                        "package_reservation_birth_date",
                         "package_reservation_submit"
                 )),
                 "alignment", "stretch"

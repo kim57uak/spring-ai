@@ -7,8 +7,6 @@ public record ReservationPresentationModel(
         String productCode,
         String productName,
         String bookerName,
-        String contact,
-        String headCount,
-        String birthDate
+        String headCount
 ) {
 }

@@ -29,9 +29,7 @@ public class ReservationA2uiMessageBuilder {
                 dataModelUpdate(surfaceId, "reservation", List.of(
                         stringEntry("productCode", valueOrBlank(model.productCode())),
                         stringEntry("bookerName", valueOrBlank(model.bookerName())),
-                        stringEntry("contact", valueOrBlank(model.contact())),
-                        stringEntry("headCount", valueOrBlank(model.headCount()).isBlank() ? "1" : valueOrBlank(model.headCount())),
-                        stringEntry("birthDate", valueOrBlank(model.birthDate()))
+                        stringEntry("headCount", valueOrBlank(model.headCount()).isBlank() ? "1" : valueOrBlank(model.headCount()))
                 )),
                 beginRendering(surfaceId, "root")
         );
@@ -64,20 +62,10 @@ public class ReservationA2uiMessageBuilder {
                 "text", pathValue("/reservation/bookerName"),
                 "textFieldType", "shortText"
         )));
-        components.add(component("package_reservation_form_contact", "TextField", Map.of(
-                "label", literal("연락처"),
-                "text", pathValue("/reservation/contact"),
-                "textFieldType", "shortText"
-        )));
         components.add(component("package_reservation_form_head_count", "TextField", Map.of(
                 "label", literal("인원수"),
                 "text", pathValue("/reservation/headCount"),
                 "textFieldType", "number"
-        )));
-        components.add(component("package_reservation_form_birth_date", "TextField", Map.of(
-                "label", literal("생년월일"),
-                "text", pathValue("/reservation/birthDate"),
-                "textFieldType", "shortText"
         )));
         components.add(textComponent("package_reservation_form_submit_text", "패키지 예약 생성", "body"));
         components.add(component("package_reservation_form_submit", "Button", Map.of(
@@ -88,9 +76,7 @@ public class ReservationA2uiMessageBuilder {
                         "context", List.of(
                                 contextEntry("productCode", pathValue("/reservation/productCode")),
                                 contextEntry("bookerName", pathValue("/reservation/bookerName")),
-                                contextEntry("contact", pathValue("/reservation/contact")),
-                                contextEntry("headCount", pathValue("/reservation/headCount")),
-                                contextEntry("birthDate", pathValue("/reservation/birthDate"))
+                                contextEntry("headCount", pathValue("/reservation/headCount"))
                         )
                 )
         )));
@@ -99,9 +85,7 @@ public class ReservationA2uiMessageBuilder {
                         "package_reservation_form_title",
                         "package_reservation_form_product_code",
                         "package_reservation_form_booker",
-                        "package_reservation_form_contact",
                         "package_reservation_form_head_count",
-                        "package_reservation_form_birth_date",
                         "package_reservation_form_submit"
                 )),
                 "alignment", "stretch"

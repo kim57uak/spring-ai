@@ -17,7 +17,7 @@ class A2ARequestMapperTest {
 
     @Test
     void sendMessageShouldPreserveOriginalUserMessageWhenPlannerAddsShortHint() {
-        String original = "예약을 생성해주세요. 판매상품코드: AAP331260523TG1, 예약자: 김병두, 인원 수: 1명, 연락처: 01038569626, 생년월일: 19740308";
+        String original = "예약을 생성해주세요. 판매상품코드: AAP331260523TG1, 예약자: 김병두, 인원 수: 1명";
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", original, "openai");
         RoutingPlan plan = new RoutingPlan(
                 "reservation",
