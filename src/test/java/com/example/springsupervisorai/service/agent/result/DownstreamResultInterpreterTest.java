@@ -96,4 +96,23 @@ class DownstreamResultInterpreterTest {
         assertThat(assessment.outcome()).isEqualTo(DownstreamResultInterpreter.Outcome.FAILED);
         assertThat(assessment.reason()).contains("policy_skipped");
     }
+
+    @Test
+    void assessReturnsFailedWhenNestedResponseContainsToolFailureMarker() {
+        DownstreamCallResult result = new DownstreamCallResult(
+                "reservation",
+                "t5",
+                "COMPLETED",
+                """
+                {"id":"task-1","status":"COMPLETED","response":"도구 사용 결과: 실패\\n예약 생성 요청이 실패하였습니다."}
+                """.trim(),
+                "",
+                ""
+        );
+
+        var assessment = DownstreamResultInterpreter.assess(result);
+
+        assertThat(assessment.outcome()).isEqualTo(DownstreamResultInterpreter.Outcome.FAILED);
+        assertThat(assessment.reason()).contains("tool_result_failed_marker");
+    }
 }

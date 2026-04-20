@@ -50,9 +50,7 @@ class SupervisorA2ARequestValidatorTest {
                 .set("context", objectMapper.createObjectNode()
                         .put("productCode", "AAP331260523TG1")
                         .put("bookerName", "홍길동")
-                        .put("contact", "010-1111-2222")
-                        .put("headCount", "2")
-                        .put("birthDate", "19900101"));
+                        .put("headCount", "2"));
         ObjectNode data = objectMapper.createObjectNode();
         data.set("userAction", action);
         ObjectNode dataPart = objectMapper.createObjectNode();
@@ -74,9 +72,9 @@ class SupervisorA2ARequestValidatorTest {
 
         assertThat(result.isError()).isFalse();
         assertThat(result.params().messageText()).contains("A2UI_SUBMIT_ACTION: submit_reservation");
-        assertThat(result.params().messageText()).contains("예약생성해줘");
-        assertThat(result.params().messageText()).contains("상품코드: AAP331260523TG1");
-        assertThat(result.params().messageText()).contains("예약자: 홍길동");
+        assertThat(result.params().messageText()).contains("AAP331260523TG1 상품으로 예약 생성 부탁드립니다.");
+        assertThat(result.params().messageText()).contains("예약자는 홍길동님입니다.");
+        assertThat(result.params().messageText()).contains("인원은 2명입니다.");
     }
 
     @Test
@@ -119,9 +117,8 @@ class SupervisorA2ARequestValidatorTest {
 
         assertThat(result.isError()).isFalse();
         assertThat(result.params().messageText()).contains("A2UI_SUBMIT_ACTION: submit_product_creation");
-        assertThat(result.params().messageText()).contains("상품생성해줘");
-        assertThat(result.params().messageText()).contains("상품코드: AAP331260523TG1");
-        assertThat(result.params().messageText()).contains("출발시작일: 20261201");
-        assertThat(result.params().messageText()).contains("출발요일: mon, tue, wed, thu, fri, sat, sun");
+        assertThat(result.params().messageText()).contains("AAP331260523TG1 상품 생성 부탁드립니다.");
+        assertThat(result.params().messageText()).contains("출발 기간은 20261201부터 20261202까지입니다.");
+        assertThat(result.params().messageText()).contains("전체 대상 여부는 Y이고, 출발 요일은 mon, tue, wed, thu, fri, sat, sun입니다.");
     }
 }

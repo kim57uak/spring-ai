@@ -88,7 +88,7 @@ class LlmSupervisorResponseComposeServiceTest {
     }
 
     @Test
-    void streamComposeUsesLlmWhenSuccessExistsAndIncludesNormalizedFieldsInPrompt() {
+    void streamComposeUsesLlmWhenSuccessExistsAndPromptContainsOnlyRawDownstreamMetadata() {
         SupervisorLlmRuntime llmRuntime = mock(SupervisorLlmRuntime.class);
         when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("정상 응답"));
 
@@ -111,15 +111,14 @@ class LlmSupervisorResponseComposeServiceTest {
         ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
         verify(llmRuntime).stream(promptCaptor.capture(), eq("openai"), eq("s1"));
         String prompt = promptCaptor.getValue();
-        assertThat(prompt).contains("normalizedOutcome=SUCCESS");
-        assertThat(prompt).contains("successCount=1");
+        assertThat(prompt).contains("- agent=product, status=COMPLETED, errorCode=, errorMessage=");
+        assertThat(prompt).doesNotContain("normalizedOutcome=");
+        assertThat(prompt).doesNotContain("normalizedReason=");
     }
 
     @Test
-    void streamComposeKeepsMixedOutcomeAsMixedAndDoesNotBypassLlm() {
+    void streamComposeBypassesLlmWhenMixedOutcomeContainsFailure() {
         SupervisorLlmRuntime llmRuntime = mock(SupervisorLlmRuntime.class);
-        when(llmRuntime.stream(anyString(), eq("openai"), eq("s1"))).thenReturn(Flux.just("부분 성공 응답"));
-
         LlmSupervisorResponseComposeService service = newService(llmRuntime, new A2aSupervisorRoutingProperties(), emptyA2uiService());
         SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "복합 요청", "openai");
         context.addResult(new DownstreamCallResult(
@@ -142,13 +141,56 @@ class LlmSupervisorResponseComposeServiceTest {
         List<String> chunks = service.streamCompose(context).collectList().block();
         String merged = String.join("", chunks == null ? List.of() : chunks);
 
-        assertThat(merged).isEqualTo("부분 성공 응답");
-        ArgumentCaptor<String> promptCaptor = ArgumentCaptor.forClass(String.class);
-        verify(llmRuntime).stream(promptCaptor.capture(), eq("openai"), eq("s1"));
-        String prompt = promptCaptor.getValue();
-        assertThat(prompt).contains("overallOutcome=MIXED");
-        assertThat(prompt).contains("successCount=1");
-        assertThat(prompt).contains("failedCount=1");
+        assertThat(merged).contains("요청이 일부만 처리되었습니다.");
+        assertThat(merged).contains("product: SUCCESS");
+        assertThat(merged).contains("reservation: FAILED");
+        verifyNoInteractions(llmRuntime);
+    }
+
+    @Test
+    void streamComposeBypassesLlmForReservationFailurePayload() {
+        SupervisorLlmRuntime llmRuntime = mock(SupervisorLlmRuntime.class);
+        LlmSupervisorResponseComposeService service = newService(llmRuntime, new A2aSupervisorRoutingProperties(), emptyA2uiService());
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "예약 생성", "openai");
+        context.addResult(new DownstreamCallResult(
+                "reservation",
+                "t3",
+                "COMPLETED",
+                "[ERROR][RESERVATION_FAILED] Failed to create reservation: 400 BAD_REQUEST {\"errorCode\":\"EBCPKG000054\",\"errorMessage\":\"예약 정보를 확인 할 수 없습니다. 입력 정보를 확인 해 주십시오.\"}",
+                "",
+                ""
+        ));
+
+        List<String> chunks = service.streamCompose(context).collectList().block();
+        String merged = String.join("", chunks == null ? List.of() : chunks);
+
+        assertThat(merged).contains("요청을 완료하지 못했습니다.");
+        assertThat(merged).contains("reservation: FAILED");
+        verifyNoInteractions(llmRuntime);
+    }
+
+    @Test
+    void streamComposeBypassesLlmWhenCompletedEnvelopeContainsNestedFailureResponse() {
+        SupervisorLlmRuntime llmRuntime = mock(SupervisorLlmRuntime.class);
+        LlmSupervisorResponseComposeService service = newService(llmRuntime, new A2aSupervisorRoutingProperties(), emptyA2uiService());
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "예약 생성", "openai");
+        context.addResult(new DownstreamCallResult(
+                "reservation",
+                "t4",
+                "COMPLETED",
+                """
+                {"id":"task-769dd630","status":"COMPLETED","response":"도구 사용 결과: 실패\\n예약 생성 요청이 실패하였습니다. 서버에서 예상치 못한 오류가 발생하였습니다."}
+                """.trim(),
+                "",
+                ""
+        ));
+
+        List<String> chunks = service.streamCompose(context).collectList().block();
+        String merged = String.join("", chunks == null ? List.of() : chunks);
+
+        assertThat(merged).contains("요청을 완료하지 못했습니다.");
+        assertThat(merged).contains("reservation: FAILED");
+        verifyNoInteractions(llmRuntime);
     }
 
     @Test

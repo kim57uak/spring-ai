@@ -68,6 +68,10 @@ public class ComposeOutcomeAnalyzer {
             int unknownCount,
             List<ResultOutcome> resultOutcomes
     ) {
+        public boolean hasAnyFailure() {
+            return failedCount > 0;
+        }
+
         public boolean hasFailureWithoutSuccess() {
             return failedCount > 0 && successCount == 0;
         }

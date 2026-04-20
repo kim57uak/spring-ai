@@ -68,8 +68,8 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
     @Override
     public Flux<SupervisorOutputEvent> streamComposeEvents(SupervisorPlanningContext context) {
         ComposeOutcomeSummary outcomeSummary = outcomeAnalyzer.summarize(context);
-        if (outcomeSummary.hasFailureWithoutSuccess()) {
-            logger.warn("Supervisor compose bypassed LLM due to downstream failures sessionId={}, failedCount={}, successCount={}, unknownCount={}",
+        if (outcomeSummary.hasAnyFailure()) {
+            logger.warn("Supervisor compose bypassed LLM due to downstream failure signals sessionId={}, failedCount={}, successCount={}, unknownCount={}",
                     context.getSessionId(), outcomeSummary.failedCount(), outcomeSummary.successCount(), outcomeSummary.unknownCount());
             return Flux.just(SupervisorOutputEvent.error(buildFailureSummary(outcomeSummary)));
         }
@@ -177,11 +177,15 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
     }
 
     /**
-     * 성공 결과가 전혀 없고 실패가 존재하면, LLM 합성 대신 결정적 실패 요약을 반환한다.
+     * 실패 신호가 하나라도 존재하면, LLM 합성 대신 결정적 요약을 반환한다.
      */
     private String buildFailureSummary(ComposeOutcomeSummary outcomeSummary) {
         StringBuilder builder = new StringBuilder();
-        builder.append("요청을 완료하지 못했습니다.\n");
+        if (outcomeSummary.successCount() > 0) {
+            builder.append("요청이 일부만 처리되었습니다.\n");
+        } else {
+            builder.append("요청을 완료하지 못했습니다.\n");
+        }
         builder.append("하위 에이전트 처리 결과:\n");
         for (ResultOutcome resultOutcome : outcomeSummary.resultOutcomes()) {
             DownstreamCallResult result = resultOutcome.result();
@@ -192,7 +196,11 @@ public class LlmSupervisorResponseComposeService implements SupervisorResponseCo
             }
             builder.append("\n");
         }
-        builder.append("실패 원인을 확인한 뒤 다시 시도해 주세요.");
+        if (outcomeSummary.successCount() > 0) {
+            builder.append("실패한 작업을 확인한 뒤 필요한 값이나 요청 내용을 보완해 다시 시도해 주세요.");
+        } else {
+            builder.append("실패 원인을 확인한 뒤 다시 시도해 주세요.");
+        }
         return builder.toString();
     }
 
