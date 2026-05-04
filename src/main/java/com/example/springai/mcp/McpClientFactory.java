@@ -20,12 +20,14 @@ public class McpClientFactory {
     private final ObjectMapper objectMapper;
     private final McpProperties mcpProperties;
     private final ProcessManager processManager;
+    private final McpClientSessionManager sessionManager;
     private final Map<String, McpClient> clients = new ConcurrentHashMap<>();
     
-    public McpClientFactory(ObjectMapper objectMapper, McpProperties mcpProperties, ProcessManager processManager) {
+    public McpClientFactory(ObjectMapper objectMapper, McpProperties mcpProperties, ProcessManager processManager, McpClientSessionManager sessionManager) {
         this.objectMapper = objectMapper;
         this.mcpProperties = mcpProperties;
         this.processManager = processManager;
+        this.sessionManager = sessionManager;
     }
     
     /**
@@ -36,8 +38,7 @@ public class McpClientFactory {
     }
     
     /**
-     * 프로세스를 확보한 뒤 stdio 기반 클라이언트를 생성한다.
-     * 생성 중 오류는 도메인 예외로 변환한다.
+     * 프로세스 또는 HTTP 기반 클라이언트를 생성한다.
      */
     private McpClient createNewClient(String serverName) {
         try {
@@ -45,9 +46,15 @@ public class McpClientFactory {
             if (config == null) {
                 throw new McpClientCreationException(serverName, "Missing MCP server config");
             }
-            if ("sse".equalsIgnoreCase(config.getTransport())) {
-                return new SseMcpClient(config, objectMapper);
+
+            // HTTP 기반 (SSE/Streamable) 처리
+            String protocol = config.getProtocol();
+            if ("sse".equalsIgnoreCase(protocol) || "streamable".equalsIgnoreCase(protocol) || "http".equalsIgnoreCase(protocol)) {
+                io.modelcontextprotocol.client.McpAsyncClient officialClient = sessionManager.acquire(config).block();
+                return new SpringAiMcpClient(officialClient, objectMapper, serverName, config.getTimeoutMs());
             }
+
+            // Stdio 기반 처리
             Process process = processManager.getOrCreateProcess(serverName);
             return new StdioMcpClient(process, objectMapper, Math.max(1_000, config.getTimeoutMs()));
         } catch (RuntimeException e) {

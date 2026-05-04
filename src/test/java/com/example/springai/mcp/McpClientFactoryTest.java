@@ -32,9 +32,9 @@ class McpClientFactoryTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         properties = new McpProperties();
-        McpProcessLauncher launcher = new McpProcessLauncher(properties);
-        processManager = new ProcessManager(properties, launcher);
-        factory = new McpClientFactory(objectMapper, properties, processManager);
+        McpTransportFactory transportFactory = new McpTransportFactory();
+        McpClientSessionManager sessionManager = new McpClientSessionManager(transportFactory);
+        factory = new McpClientFactory(objectMapper, properties, processManager, sessionManager);
     }
 
     @AfterEach
