@@ -25,7 +25,7 @@ host:
         endpoint: ${MYGENIE_A2A_ENDPOINT:http://localhost:8001/a2a}
         method: message/send
         timeout-ms: 1200000
-    # downstream 호출 재시도 정책
+    # downstream 호출 재시도 정책 (A2aSupervisorRoutingProperties와 바인딩됨)
     retry:
       # 추가 재시도 횟수 (총 시도 횟수 = max-retries + 1)
       max-retries: 0
@@ -33,14 +33,67 @@ host:
       initial-backoff-ms: 500
       # 지수 backoff 최대 상한(ms)
       max-backoff-ms: 3000
-    # agent별 연속 실패 회로 차단 정책
+
+    # agent별 연속 실패 회로 차단 정책 (A2aSupervisorRoutingProperties와 바인딩됨)
     circuit-breaker:
       # 회로 차단기 사용 여부
       enabled: true
-      # open 전까지 허용할 연속 실패 횟수
-      failure-threshold: 2
-      # 회로 open 유지 시간(ms)
+      # 회로 open 전까지 허용할 연속 실패 횟수
+      failure-threshold: 3
+      # 회로 open 유지 시간 (ms)
       open-duration-ms: 30000
+
+    # [참고] 레지리언스4j 통합 시 사용할 구조 (현재는 DuplicateKeyException 방지를 위해 주석 처리)
+    # retry-r4j:
+    #   a2aService:
+    #     maxAttempts: 3
+    #     waitDuration: 100
+    #     enableExponentialBackoff: true
+    #     exponentialBackoffMultiplier: 2
+    #     retryExceptions:
+    #       - org.springframework.web.client.ResourceAccessException
+    #       - java.io.IOException
+    #       - java.util.concurrent.TimeoutException
+    #       - com.example.springsupervisorai.exception.A2ACommunicationException
+    #   hitlService:
+    #     maxAttempts: 3
+    #     waitDuration: 200
+    #     enableExponentialBackoff: true
+    #     exponentialBackoffMultiplier: 1.5
+    #     retryExceptions:
+    #       - org.springframework.web.client.ResourceAccessException
+    #       - java.io.IOException
+    #       - java.util.concurrent.TimeoutException
+    #       - com.example.springsupervisorai.exception.HitlProcessingException
+
+    # circuit-breaker-r4j:
+    #   a2aService:
+    #     enabled: true
+    #     slidingWindowSize: 10
+    #     minimumNumberOfCalls: 5
+    #     failureRateThreshold: 50
+    #     permittedNumberOfCallsInHalfOpenState: 3
+    #     automaticTransitionFromOpenToHalfOpenEnabled: true
+    #     waitDurationInOpenState: 30000
+    #     recordExceptions:
+    #       - org.springframework.web.client.ResourceAccessException
+    #       - java.io.IOException
+    #       - java.util.concurrent.TimeoutException
+    #       - com.example.springsupervisorai.exception.A2ACommunicationException
+    #   hitlService:
+    #     enabled: true
+    #     slidingWindowSize: 15
+    #     minimumNumberOfCalls: 5
+    #     failureRateThreshold: 40
+    #     permittedNumberOfCallsInHalfOpenState: 3
+    #     automaticTransitionFromOpenToHalfOpenEnabled: true
+    #     waitDurationInOpenState: 15000
+    #     recordExceptions:
+    #       - org.springframework.web.client.ResourceAccessException
+    #       - java.io.IOException
+    #       - java.util.concurrent.TimeoutException
+    #       - com.example.springsupervisorai.exception.HitlProcessingException
+
     # invoke 배치 실행 동시성 정책
     execution:
       # invoke 배치에서 동시에 실행할 최대 plan 개수 (1이면 순차)

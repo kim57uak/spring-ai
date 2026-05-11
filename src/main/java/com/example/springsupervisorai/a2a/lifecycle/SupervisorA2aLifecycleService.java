@@ -100,4 +100,14 @@ public class SupervisorA2aLifecycleService {
     public void markFailed(String taskId, String code, String message) {
         taskStore.markFailed(taskId, code, message);
     }
+
+    /**
+     * task의 요청 메시지를 갱신한다.
+     *
+     * @param taskId task id
+     * @param newMessage 새로운 요청 메시지
+     */
+    public void updateTaskMessage(String taskId, String newMessage) {
+        taskStore.updateTaskMessage(taskId, newMessage);
+    }
 }

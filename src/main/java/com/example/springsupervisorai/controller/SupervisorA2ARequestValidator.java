@@ -27,7 +27,7 @@ public class SupervisorA2ARequestValidator {
 
     private static final int DEFAULT_LIST_LIMIT = 20;
     private static final int MAX_LIST_LIMIT = 200;
-    private static final java.util.Set<String> ALLOWED_REVIEW_DECISIONS = java.util.Set.of("APPROVE", "CANCEL");
+    private static final java.util.Set<String> ALLOWED_REVIEW_DECISIONS = java.util.Set.of("APPROVE", "CANCEL", "REVISE");
 
     /**
      * JSON-RPC 공통 precheck를 수행한다.
@@ -361,13 +361,14 @@ public class SupervisorA2ARequestValidator {
         }
         String normalized = params.decision() == null ? "" : params.decision().trim().toUpperCase(java.util.Locale.ROOT);
         if (!ALLOWED_REVIEW_DECISIONS.contains(normalized)) {
-            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "decision must be APPROVE or CANCEL"));
+            return ValidationResult.error(JsonRpcResponse.error(request.id(), INVALID_PARAMS, "decision must be APPROVE, CANCEL or REVISE"));
         }
         return ValidationResult.ok(new TaskReviewDecisionParams(
                 params.id(),
                 normalized,
                 params.reason(),
-                params.decisionId()
+                params.decisionId(),
+                params.revisedMessage()
         ));
     }
 

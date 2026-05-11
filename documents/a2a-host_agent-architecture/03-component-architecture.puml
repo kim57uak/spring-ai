@@ -1,5 +1,5 @@
 @startuml
-title 03. Supervisor Host Agent Component Architecture (Current Source, 2026-04-18)
+title 03. Supervisor Host Agent Component Architecture (Current Source, 2026-05-11)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -19,6 +19,7 @@ package "application services" {
   [SupervisorTaskFacade] as TaskFacade
   [SupervisorAgentOrchestrator] as Orchestrator
   [SupervisorGraphExecutionService] as GraphExecutionService
+  [SupervisorGraphInputBuilder] as GraphInputBuilder
   [SupervisorExecutionPersistenceService] as PersistenceService
   [SupervisorExecutionResultCollector] as ResultCollector
   [SupervisorExecutionStateLoader] as StateLoader
@@ -27,6 +28,7 @@ package "application services" {
   [SupervisorExceptionTranslator] as ExceptionTranslator
   [SupervisorProgressPublisher] as ProgressPublisher
   [SupervisorOutputEventSupport] as OutputEventSupport
+  [SupervisorHandoffProgressSupport] as HandoffProgressSupport
 }
 
 package "supervisor ports" {
@@ -58,6 +60,7 @@ package "implementations" {
   [LlmSupervisorResponseComposeService] as ComposeImpl
   [LangGraphSupervisorStateGraphFactory] as GraphFactoryImpl
   [DefaultSupervisorSwarmCoordinator] as SwarmCoordinatorImpl
+  [SupervisorPlanRunner] as PlanRunner
   [CompositeSupervisorA2uiService] as CompositeA2uiService
   [DefaultSupervisorProductInfoA2uiService] as ProductA2uiService
   [DefaultSupervisorReservationA2uiService] as ReservationA2uiService
@@ -78,6 +81,7 @@ package "runtime / integration" {
   [A2AJsonRpcClient] as JsonRpcClient
   [SupervisorA2aLifecycleService] as LifecycleService
   [SupervisorRequestIdempotencyService] as IdempotencyService
+  [SupervisorPromptRenderService] as PromptRenderService
   [application.yml /\na2a-supervisor-hitl.yml] as Config
   [Downstream A2A Agents] as DownstreamAgents
 }
@@ -106,6 +110,10 @@ HitlGateService --> TaskFacade
 ExecutionService --> Orchestrator
 ExecutionService --> TaskFacade
 ExecutionService --> ResultCollector
+
+GraphExecutionService --> GraphInputBuilder
+Orchestrator --> HandoffProgressSupport
+SummaryEmitter --> HandoffProgressSupport
 
 ReviewAppService --> HitlGateService
 ReviewAppService --> ExecutionService

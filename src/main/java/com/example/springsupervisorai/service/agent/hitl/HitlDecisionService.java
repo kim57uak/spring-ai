@@ -42,5 +42,5 @@ public interface HitlDecisionService {
      * @param decisionId 결정 idempotency id
      * @return 반영된 티켓(optional)
      */
-    Optional<HitlReviewTicket> decide(String taskId, String sessionId, HitlDecisionType decision, String reason, String decisionId);
+    Optional<HitlReviewTicket> decide(String taskId, String sessionId, HitlDecisionType decision, String reason, String decisionId, String revisedMessage);
 }

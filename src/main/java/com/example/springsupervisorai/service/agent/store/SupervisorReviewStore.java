@@ -35,5 +35,13 @@ public interface SupervisorReviewStore {
      * @param decisionId 결정 idempotency id
      * @return 결정 반영 후 티켓(optional)
      */
-    Optional<HitlReviewTicket> decide(String taskId, HitlDecisionType decision, String reason, String decisionId);
+    Optional<HitlReviewTicket> decide(String taskId, HitlDecisionType decision, String reason, String decisionId, String revisedMessage);
+
+    /**
+     * REVISE 시 HITL 티켓을 갱신한다.
+     *
+     * @param ticket 갱신할 HITL 티켓
+     * @return 갱신된 HITL 티켓
+     */
+    HitlReviewTicket update(HitlReviewTicket ticket);
 }

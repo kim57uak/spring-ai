@@ -1,4 +1,4 @@
-# Local Codex Usage (Project-Only Skills)
+# Local Codex Usage (Global Skills Enabled)
 
 This project is configured to run Codex with a project-local `CODEX_HOME`.
 
@@ -19,8 +19,8 @@ Optional examples:
 ## What this does
 
 - Sets `CODEX_HOME` to `./.codex-home`
-- Loads skills from `./.skills` only (via `./.codex-home/skills` symlink)
+- Loads skills from `~/.codex/skills` via `./.codex-home/skills` symlink
 - Uses project config from `./.codex/config.toml`
 - Uses project agent instructions from `./.codex/AGENTS.md`
 
-This avoids using global `~/.codex/skills` for this project workflow.
+This keeps Codex state local to the project while reusing your global skills.

@@ -20,31 +20,29 @@ host:
       max-retries: 1
       initial-backoff-ms: 500
       max-backoff-ms: 3000
+    circuit-breaker:
+      enabled: true
+      failure-threshold: 3
+      open-duration-ms: 30000
+    execution:
+      max-concurrency: 1
+    history:
+      max-turns: 5
     hitl:
-      enabled: true
-      decision-scope: approve-cancel
-      mandatory-data-mutation: true
-      timeout-ms: 300000
-    swarm:
-      enabled: true
-      state-versioning: optimistic-lock
-      event-log-enabled: true
+      reason-messages:
+        reservation_creation_request: "예약 생성 요청으로 판단되어 사용자 승인이 필요합니다."
+        data_mutation_detected: "데이터 변경 요청으로 판단되어 사용자 승인이 필요합니다."
+        default: "요청 처리 전 사용자가 검토해야 하는 상황으로 판단되었습니다."
+    a2ui:
+      enabled: false
     handoff:
       enabled: false
       max-hops: 3
       block-same-agent-within-steps: 2
       max-per-minute: 10
       allow-methods:
-        - SendMessage
         - message/send
-        - SendStreamingMessage
         - message/stream
-    progress:
-      use-common-module: true  # SupervisorProgressSupport
-      emit-trace-stage:
-        - handoff
-        - handoff-skipped
-        - handoff-applied
 ```
 
 ## Rules

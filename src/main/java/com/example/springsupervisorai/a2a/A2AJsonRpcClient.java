@@ -3,12 +3,15 @@ package com.example.springsupervisorai.a2a;
 import com.example.springsupervisorai.a2a.dto.JsonRpcRequest;
 import com.example.springsupervisorai.exception.DownstreamA2AException;
 import com.example.springsupervisorai.service.agent.invoke.A2AClientRegistry;
+import com.example.springsupervisorai.service.resilience.CircuitBreakerUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -28,19 +31,23 @@ public class A2AJsonRpcClient {
 
     public JsonNode call(A2AClientRegistry.A2ARouteTarget target, JsonRpcRequest request, String sessionId) {
         try {
-            return webClientBuilder.build()
-                    .post()
-                    .uri(target.endpoint())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .header(A2A_SESSION_HEADER, safeSessionId(sessionId))
-                    .bodyValue(request)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .timeout(target.timeout())
-                    .onErrorMap(ex -> new DownstreamA2AException("Downstream A2A call failed: " + target.agentKey(), ex))
-                    .blockOptional()
-                    .orElseThrow(() -> new DownstreamA2AException("Empty downstream response: " + target.agentKey()));
+            return CircuitBreakerUtils.executeA2A((Supplier<JsonNode>) () -> {
+                return webClientBuilder.build()
+                        .post()
+                        .uri(target.endpoint())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .accept(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .header(A2A_SESSION_HEADER, safeSessionId(sessionId))
+                        .bodyValue(request)
+                        .retrieve()
+                        .bodyToMono(com.fasterxml.jackson.databind.JsonNode.class)
+                        .timeout(target.timeout())
+                        .onErrorMap(ex -> new DownstreamA2AException("Downstream A2A call failed: " + target.agentKey(), ex))
+                        .blockOptional()
+                        .orElseThrow(() -> new DownstreamA2AException("Empty downstream response: " + target.agentKey()));
+            });
+        } catch (CircuitBreakerUtils.CircuitBreakerOpenException ex) {
+            throw new DownstreamA2AException("Downstream A2A circuit breaker is open for: " + target.agentKey(), ex);
         } catch (DownstreamA2AException ex) {
             throw ex;
         } catch (RuntimeException ex) {

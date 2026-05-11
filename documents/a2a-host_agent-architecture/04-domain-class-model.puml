@@ -1,5 +1,5 @@
 @startuml
-title 04. Supervisor Host Agent Domain Model (Current Source, 2026-04-18)
+title 04. Supervisor Host Agent Domain Model (Current Source, 2026-05-11)
 
 skinparam shadowing false
 skinparam classAttributeIconSize 0
@@ -115,6 +115,14 @@ class HandoffPolicyContext {
 class SupervisorOutputEvent {
   +type: SupervisorOutputEventType
   +content: String
+  +progressEvent: SupervisorProgressEvent
+}
+
+class SupervisorProgressEvent {
+  +stage: String
+  +progress: int
+  +message: String
+  +metadata: Map<String, Object>
 }
 
 class SupervisorGraphState {
@@ -146,6 +154,24 @@ class A2aTaskSnapshot {
   +errorMessage: String
 }
 
+class SupervisorGraphSnapshot {
+  +taskId: String
+  +sessionId: String
+  +userMessage: String
+  +model: String
+  +history: List<String>
+  +checkpointId: String
+  +currentNode: String
+  +routingPlans: List<RoutingPlan>
+  +routingIndex: int
+  +results: List<DownstreamCallResult>
+  +lastInvokeBatchResults: List<DownstreamCallResult>
+  +handoffValidations: List<HandoffValidationResult>
+  +handoffEnabled: boolean
+  +swarmSharedFacts: Map<String, Object>
+  +swarmStateVersion: long
+}
+
 enum A2aTaskStatus {
   SUBMITTED
   RUNNING
@@ -153,6 +179,36 @@ enum A2aTaskStatus {
   COMPLETED
   FAILED
   CANCELED
+}
+
+enum SupervisorErrorCode {
+  COMPOSE_ERROR
+  ORCHESTRATION_ERROR
+  DOWNSTREAM_UNAVAILABLE
+  CIRCUIT_OPEN
+  EMPTY_RESPONSE
+  DOWNSTREAM_ERROR
+  INTERNAL_ERROR
+  CANCELED
+}
+
+enum SupervisorInvocationStatus {
+  COMPLETED
+  FAILED
+}
+
+enum SupervisorRuntimeState {
+  REQUEST_VALIDATED
+  HISTORY_LOADED
+  PLANNED
+  ROUTING_SELECTED
+  A2A_CALLING
+  HANDOFF_EVALUATING
+  HANDOFF_APPLIED
+  HANDOFF_SKIPPED
+  A2A_RESULT_MERGED
+  COMPOSING
+  COMPLETED
 }
 
 interface SupervisorPlanningService {

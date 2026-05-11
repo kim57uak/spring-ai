@@ -176,7 +176,7 @@ public class McpToolExecutionService implements ToolExecutionService {
                 payload = client.callTool(resolvedTool, params);
                 normalizedPayload = normalizePayload(payload);
             }
-            boolean success = !isErrorPayload(normalizedPayload);
+            boolean success = !isErrorPayload(payload);
             logger.info("MCP tool result sessionId={}, server={}, tool={}, payloadLength={}, preview={}",
                     sessionId,
                     serverName,
@@ -1001,14 +1001,50 @@ public class McpToolExecutionService implements ToolExecutionService {
         return payload.contains("[ERROR][REQUEST_FAILED]");
     }
 
-    private boolean isErrorPayload(String payload) {
-        if (payload == null || payload.isBlank()) {
+    private boolean isErrorPayload(String rawPayload) {
+        if (rawPayload == null || rawPayload.isBlank()) {
             return true;
         }
-        String normalized = payload.trim();
+        
+        try {
+            JsonNode root = objectMapper.readTree(rawPayload);
+            // 1. 공식 SDK의 isError 필드가 true이면 무조건 에러
+            if (root.path("isError").asBoolean(false)) {
+                return true;
+            }
+            
+            // 2. content 내의 text들에 에러 패턴이 있는지 확인
+            JsonNode content = root.path("content");
+            if (content.isArray()) {
+                for (JsonNode item : content) {
+                    String text = item.path("text").asText("");
+                    if (hasErrorPattern(text)) {
+                        return true;
+                    }
+                }
+            }
+            
+            // 3. 만약 JSON 구조가 아니거나 text 외의 영역에 에러 패턴이 있는 경우 대비
+            if (hasErrorPattern(rawPayload)) {
+                return true;
+            }
+            
+        } catch (Exception e) {
+            // JSON 파싱 실패 시 일반 텍스트 에러 패턴 검사
+            if (hasErrorPattern(rawPayload)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    private boolean hasErrorPattern(String text) {
+        if (text == null || text.isBlank()) return false;
+        String normalized = text.trim();
         return normalized.startsWith("[ERROR]")
                 || normalized.contains("Tool call failed")
-                || normalized.contains("request\" is null")
+                || normalized.contains("\"weatherForecastRequest\" is null")
                 || normalized.contains("Retries exhausted");
     }
 

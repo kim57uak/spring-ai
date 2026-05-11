@@ -41,6 +41,9 @@ out/
 .env
 *.log
 logs/
+.codex-home/
+.codex/
+.skills/
 
 ### API Keys ###
 **/application-local.yml

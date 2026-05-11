@@ -106,4 +106,21 @@ final class A2aTaskSnapshotTransitions {
                 reason == null || reason.isBlank() ? "Canceled by request" : reason
         );
     }
+
+    /**
+     * 요청 메시지를 갱신한다.
+     */
+    static A2aTaskSnapshot updateTaskMessage(A2aTaskSnapshot current, String newMessage, Instant now) {
+        return new A2aTaskSnapshot(
+                current.taskId(),
+                current.sessionId(),
+                current.status(),
+                current.createdAt(),
+                now,
+                newMessage == null ? "" : newMessage,
+                current.responsePayload(),
+                current.errorCode(),
+                current.errorMessage()
+        );
+    }
 }

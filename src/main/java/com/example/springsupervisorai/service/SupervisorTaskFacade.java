@@ -58,4 +58,14 @@ public class SupervisorTaskFacade {
     public void markFailed(String taskId, String code, String message) {
         lifecycleService.markFailed(taskId, code, message);
     }
+
+    /**
+     * task의 요청 메시지를 갱신한다.
+     *
+     * @param taskId task id
+     * @param newMessage 새로운 요청 메시지
+     */
+    public void updateTaskMessage(String taskId, String newMessage) {
+        lifecycleService.updateTaskMessage(taskId, newMessage);
+    }
 }

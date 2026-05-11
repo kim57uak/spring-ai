@@ -52,14 +52,16 @@ public class A2ARequestMapper {
                             readString(plan.arguments(), "id"),
                             readString(plan.arguments(), "decision"),
                             readString(plan.arguments(), "reason"),
-                            readString(plan.arguments(), "decisionId")
+                            readString(plan.arguments(), "decisionId"),
+                            readString(plan.arguments(), "revisedMessage")
                     );
             case DECIDE_TASK_REVIEW_STREAM, TASKS_REVIEW_DECIDE_STREAM ->
                     new TaskReviewDecisionParams(
                             readString(plan.arguments(), "id"),
                             readString(plan.arguments(), "decision"),
                             readString(plan.arguments(), "reason"),
-                            readString(plan.arguments(), "decisionId")
+                            readString(plan.arguments(), "decisionId"),
+                            readString(plan.arguments(), "revisedMessage")
                     );
             case SEND_MESSAGE -> buildSendMessageParams(plan, context);
             case SEND_STREAMING_MESSAGE -> buildSendMessageParams(plan, context);

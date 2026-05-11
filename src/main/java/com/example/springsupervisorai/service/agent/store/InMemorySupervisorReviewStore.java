@@ -34,6 +34,15 @@ public class InMemorySupervisorReviewStore implements SupervisorReviewStore {
      * {@inheritDoc}
      */
     @Override
+    public HitlReviewTicket update(HitlReviewTicket ticket) {
+        reviews.put(ticket.taskId(), ticket);
+        return ticket;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public Optional<HitlReviewTicket> get(String taskId) {
         return Optional.ofNullable(reviews.get(taskId));
     }
@@ -44,7 +53,7 @@ public class InMemorySupervisorReviewStore implements SupervisorReviewStore {
      * 원자적 `compute`로 WAITING -> APPROVED/CANCELED 전이를 보장한다.
      */
     @Override
-    public Optional<HitlReviewTicket> decide(String taskId, HitlDecisionType decision, String reason, String decisionId) {
+    public Optional<HitlReviewTicket> decide(String taskId, HitlDecisionType decision, String reason, String decisionId, String revisedMessage) {
         AtomicReference<HitlReviewTicket> updatedRef = new AtomicReference<>();
         reviews.compute(taskId, (key, current) -> {
             if (current == null) {
@@ -56,8 +65,10 @@ public class InMemorySupervisorReviewStore implements SupervisorReviewStore {
             }
             HitlReviewStatus status = decision == HitlDecisionType.APPROVE
                     ? HitlReviewStatus.APPROVED
-                    : HitlReviewStatus.CANCELED;
-            HitlReviewTicket updated = new HitlReviewTicket(
+                    : decision == HitlDecisionType.CANCEL
+                        ? HitlReviewStatus.CANCELED
+                        : HitlReviewStatus.REVISED;
+            HitlReviewTicket updated = HitlReviewTicket.create(
                     current.taskId(),
                     current.sessionId(),
                     current.message(),
@@ -69,7 +80,8 @@ public class InMemorySupervisorReviewStore implements SupervisorReviewStore {
                     current.requestedAt(),
                     current.expiresAt(),
                     Instant.now(),
-                    decisionId == null ? "" : decisionId
+                    decisionId == null ? "" : decisionId,
+                    decision == HitlDecisionType.REVISE ? revisedMessage : current.revisedMessage()
             );
             updatedRef.set(updated);
             return updated;

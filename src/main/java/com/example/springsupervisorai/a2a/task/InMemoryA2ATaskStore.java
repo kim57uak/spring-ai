@@ -135,6 +135,18 @@ public class InMemoryA2ATaskStore implements A2ATaskStore {
     }
 
     /**
+     * task의 요청 메시지를 갱신한다.
+     *
+     * @param taskId task 식별자
+     * @param newMessage 새로운 요청 메시지
+     * @return 갱신된 스냅샷(미존재 시 empty)
+     */
+    @Override
+    public Optional<A2aTaskSnapshot> updateTaskMessage(String taskId, String newMessage) {
+        return update(taskId, old -> A2aTaskSnapshotTransitions.updateTaskMessage(old, newMessage, Instant.now()));
+    }
+
+    /**
      * 원자적 상태 전이 업데이트.
      * <p>
      * 기존 get->put 패턴의 경쟁 상태를 줄이기 위해 ConcurrentMap.compute를 사용한다.

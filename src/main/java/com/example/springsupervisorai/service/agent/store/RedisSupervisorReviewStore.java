@@ -56,7 +56,7 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
     }
 
     @Override
-    public Optional<HitlReviewTicket> decide(String taskId, HitlDecisionType decision, String reason, String decisionId) {
+    public Optional<HitlReviewTicket> decide(String taskId, HitlDecisionType decision, String reason, String decisionId, String revisedMessage) {
         String key = key(taskId);
         HitlReviewTicket decided = redisTemplate.execute(new SessionCallback<>() {
             @Override
@@ -82,7 +82,7 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
                 HitlReviewStatus status = decision == HitlDecisionType.APPROVE
                         ? HitlReviewStatus.APPROVED
                         : HitlReviewStatus.CANCELED;
-                HitlReviewTicket updated = new HitlReviewTicket(
+                HitlReviewTicket updated = HitlReviewTicket.create(
                         current.get().taskId(),
                         current.get().sessionId(),
                         current.get().message(),
@@ -94,7 +94,8 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
                         current.get().requestedAt(),
                         current.get().expiresAt(),
                         Instant.now(),
-                        decisionId == null ? "" : decisionId
+                        decisionId == null ? "" : decisionId,
+                        decision == HitlDecisionType.REVISE ? revisedMessage : current.get().revisedMessage()
                 );
                 operations.multi();
                 operations.opsForValue().set(key, serialize(updated), TTL);
@@ -123,6 +124,12 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
             logger.error("Failed to serialize review ticket taskId={}", ticket.taskId(), ex);
             throw new IllegalStateException("Review ticket serialization failed", ex);
         }
+    }
+
+    @Override
+    public HitlReviewTicket update(HitlReviewTicket ticket) {
+        save(ticket);
+        return ticket;
     }
 
     private Optional<HitlReviewTicket> deserialize(String raw, String taskId) {

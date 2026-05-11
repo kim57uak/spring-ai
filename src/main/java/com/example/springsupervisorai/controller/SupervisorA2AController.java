@@ -152,7 +152,8 @@ public class SupervisorA2AController {
                     params.id(),
                     params.decision(),
                     params.reason(),
-                    params.decisionId()
+                    params.decisionId(),
+                    params.revisedMessage()
             );
         } else {
             SupervisorA2ARequestValidator.ValidationResult<SupervisorA2ARequestValidator.ResolvedSendParams> validation =
@@ -353,7 +354,8 @@ public class SupervisorA2AController {
                         params.id(),
                         params.decision(),
                         params.reason(),
-                        params.decisionId()
+                        params.decisionId(),
+                        params.revisedMessage()
                 )
                 .map(result -> JsonRpcResponse.success(request.id(), result))
                 .orElseGet(() -> JsonRpcResponse.error(request.id(), RESOURCE_NOT_FOUND, "Review or task not found"));

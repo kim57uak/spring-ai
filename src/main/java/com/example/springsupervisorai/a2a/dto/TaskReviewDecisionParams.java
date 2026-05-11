@@ -12,6 +12,7 @@ public record TaskReviewDecisionParams(
         String id,
         String decision,
         String reason,
-        String decisionId
+        String decisionId,
+        String revisedMessage
 ) {
 }

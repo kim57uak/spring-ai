@@ -148,6 +148,14 @@ public class RedisA2ATaskStore implements A2ATaskStore {
     }
 
     /**
+     * task의 요청 메시지를 갱신한다.
+     */
+    @Override
+    public Optional<A2aTaskSnapshot> updateTaskMessage(String taskId, String newMessage) {
+        return update(taskId, old -> A2aTaskSnapshotTransitions.updateTaskMessage(old, newMessage, Instant.now()));
+    }
+
+    /**
      * 현재 스냅샷을 조회한 뒤 updater를 적용하고 재저장한다.
      */
     private Optional<A2aTaskSnapshot> update(String taskId, Function<A2aTaskSnapshot, A2aTaskSnapshot> updater) {
