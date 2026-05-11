@@ -12,6 +12,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -26,9 +27,17 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+
+@TestPropertySource(properties = {
+        "spring.redis.enabled=false"
+})
 @SpringBootTest(
         classes = SupervisorTestApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -46,6 +55,12 @@ class SupervisorA2aIntegrationTest {
 
     @MockitoBean
     private SupervisorLlmRuntime supervisorLlmRuntime;
+
+    @MockitoBean
+    private RedissonClient redissonClient;
+
+    @MockitoBean
+    private RLock lock;
 
     private final WebClient webClient = WebClient.builder().build();
 
@@ -136,6 +151,81 @@ class SupervisorA2aIntegrationTest {
         assertThat(response.path("error").isObject()).isTrue();
         assertThat(response.path("error").path("code").asInt()).isEqualTo(-32602);
         assertThat(response.path("error").path("message").asText()).contains("limit must be between 1 and 200");
+    }
+
+    @Test
+    void tasksReviewDecideStreamShouldHandleReviseDecision() {
+        // given
+        JsonNode sendResponse = postJsonRpc(Map.of(
+                "jsonrpc", "2.0",
+                "id", "sup-send-1",
+                "method", "message/send",
+                "params", Map.of("messageText", "상품 가격 알려줘", "model", "openai")
+        ));
+        String taskId = sendResponse.path("result").path("id").asText();
+
+        // when
+        String sseBody = webClient.post()
+                .uri(baseUrl())
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(Map.of(
+                        "jsonrpc", "2.0",
+                        "id", "sup-review-decide-1",
+                        "method", "tasks/review/decide/stream",
+                        "params", Map.of(
+                                "id", taskId,
+                                "decision", "REVISE",
+                                "reason", "Revised by user",
+                                "decisionId", "dec-1",
+                                "revisedMessage", "상품 가격과 재고 알려줘"
+                        )
+                ))
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+
+        // then
+        assertThat(sseBody).isNotNull();
+        assertThat(sseBody).contains("event: chunk");
+        assertThat(sseBody).contains("revised response");
+    }
+
+    @Test
+    void tasksReviewDecideStreamShouldHandleReviseDecisionWithEmptyMessage() {
+        // given
+        JsonNode sendResponse = postJsonRpc(Map.of(
+                "jsonrpc", "2.0",
+                "id", "sup-send-1",
+                "method", "message/send",
+                "params", Map.of("messageText", "상품 가격 알려줘", "model", "openai")
+        ));
+        String taskId = sendResponse.path("result").path("id").asText();
+
+        // when
+        String sseBody = webClient.post()
+                .uri(baseUrl())
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(Map.of(
+                        "jsonrpc", "2.0",
+                        "id", "sup-review-decide-2",
+                        "method", "tasks/review/decide/stream",
+                        "params", Map.of(
+                                "id", taskId,
+                                "decision", "REVISE",
+                                "reason", "Revised by user",
+                                "decisionId", "dec-2",
+                                "revisedMessage", ""
+                        )
+                ))
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+
+        // then
+        assertThat(sseBody).isNotNull();
+        assertThat(sseBody).contains("event: chunk");
     }
 
     private JsonNode postJsonRpc(Map<String, Object> payload) {

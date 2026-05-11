@@ -22,13 +22,20 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.redisson:redisson-spring-boot-starter:3.24.3' // Redisson 추가
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
     implementation 'org.springframework.ai:spring-ai-starter-mcp-client-webflux'
     implementation 'org.bsc.langgraph4j:langgraph4j-core'
     implementation 'org.a2aproject.sdk:a2a-java-sdk-spec'
     implementation 'com.github.ben-manes.caffeine:caffeine'
     implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+
+    // AspectJ와 기본적인 서킷 브레이커 구현을 위한 의존성
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'org.aspectj:aspectjweaver:1.9.19'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test'
+    testImplementation 'org.redisson:redisson:3.24.3' // Redisson 테스트 추가
     testImplementation 'org.awaitility:awaitility:4.2.0'
     testImplementation 'org.mockito:mockito-core'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'

@@ -10,7 +10,8 @@ import java.util.Optional;
  */
 public enum HitlDecisionType {
     APPROVE,
-    CANCEL;
+    CANCEL,
+    REVISE; // 신규 추가
 
     /**
      * 문자열 입력을 결정 타입으로 변환한다.

@@ -122,7 +122,7 @@ public class SupervisorAgentService {
             return buildWaitingReviewResponse(requestId, sessionId, message, model, policyResult);
         }
 
-        A2aTaskSnapshot task = executionService.executeSync(new SupervisorExecutionRequest(sessionId, message, model));
+        A2aTaskSnapshot task = executionService.executeSync(new SupervisorExecutionRequest(sessionId, message, model != null ? model : "claude-3"));
         return JsonRpcResponse.success(requestId, responseMapper.toTaskView(task));
     }
 
@@ -235,9 +235,10 @@ public class SupervisorAgentService {
             String taskId,
             String decision,
             String reason,
-            String decisionId
+            String decisionId,
+            String revisedMessage
     ) {
-        return reviewApplicationService.decideReview(sessionId, taskId, decision, reason, decisionId);
+        return reviewApplicationService.decideReview(sessionId, taskId, decision, reason, decisionId, revisedMessage);
     }
 
     /**
@@ -255,9 +256,10 @@ public class SupervisorAgentService {
             String taskId,
             String decision,
             String reason,
-            String decisionId
+            String decisionId,
+            String revisedMessage
     ) {
-        return reviewApplicationService.decideReviewStream(sessionId, taskId, decision, reason, decisionId);
+        return reviewApplicationService.decideReviewStream(sessionId, taskId, decision, reason, decisionId, revisedMessage);
     }
 
     /**
@@ -302,7 +304,7 @@ public class SupervisorAgentService {
     private Flux<SupervisorOutputEvent> streamWhenHitlPassed(String sessionId, String message, String model) {
         return Flux.concat(
                 streamProgressService.hitlPassedEvents(),
-                executionService.executeStreamEvents(new SupervisorExecutionRequest(sessionId, message, model))
+                executionService.executeStreamEvents(new SupervisorExecutionRequest(sessionId, message, model != null ? model : "claude-3"))
         );
     }
 }

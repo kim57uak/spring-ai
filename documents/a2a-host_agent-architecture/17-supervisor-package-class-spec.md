@@ -1,6 +1,6 @@
 # 17. Supervisor Package / Class Specification
 
-Last synchronized with source: 2026-04-18  
+Last synchronized with source: 2026-05-11  
 Source baseline: `src/main/java/com/example/springsupervisorai`
 
 ## Current Package Structure

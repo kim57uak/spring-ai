@@ -27,4 +27,13 @@ public interface A2ATaskStore {
     Optional<A2aTaskSnapshot> markFailed(String taskId, String errorCode, String errorMessage);
 
     Optional<A2aTaskSnapshot> cancel(String taskId, String reason);
+
+    /**
+     * task의 요청 메시지를 갱신한다.
+     *
+     * @param taskId task id
+     * @param newMessage 새로운 요청 메시지
+     * @return 갱신된 스냅샷(optional)
+     */
+    Optional<A2aTaskSnapshot> updateTaskMessage(String taskId, String newMessage);
 }

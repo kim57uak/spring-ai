@@ -128,7 +128,7 @@ class SupervisorA2AControllerStreamingTest {
 
         HttpSession session = mock(HttpSession.class);
         when(session.getId()).thenReturn("session-1");
-        when(supervisorAgentService.decideReviewStream("session-1", "sup-task-1", "APPROVE", "approved_from_ui", "dec-1"))
+        when(supervisorAgentService.decideReviewStream("session-1", "sup-task-1", "APPROVE", "approved_from_ui", "dec-1", null))
                 .thenReturn(Flux.just(
                         SupervisorOutputEvent.progress(SupervisorProgressSupport.event("hitl", 12, "승인이 완료되었습니다.", Map.of())),
                         SupervisorOutputEvent.text("후속 실행 결과")
@@ -156,6 +156,6 @@ class SupervisorA2AControllerStreamingTest {
         assertThat(joined).contains("승인이 완료되었습니다");
         assertThat(joined).contains("후속 실행 결과");
         assertThat(joined).contains("event: done");
-        verify(supervisorAgentService).decideReviewStream("session-1", "sup-task-1", "APPROVE", "approved_from_ui", "dec-1");
+        verify(supervisorAgentService).decideReviewStream("session-1", "sup-task-1", "APPROVE", "approved_from_ui", "dec-1", null);
     }
 }

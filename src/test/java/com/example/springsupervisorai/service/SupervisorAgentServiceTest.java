@@ -180,7 +180,7 @@ class SupervisorAgentServiceTest {
                 preHitlA2uiService
         );
 
-        HitlReviewTicket canceledTicket = new HitlReviewTicket(
+        HitlReviewTicket canceledTicket = HitlReviewTicket.create(
                 "sup-task-cancel-1",
                 "session-1",
                 "예약 생성해줘",
@@ -192,7 +192,8 @@ class SupervisorAgentServiceTest {
                 Instant.now(),
                 Instant.now().plusSeconds(300),
                 Instant.now(),
-                "dec-1"
+                "dec-1",
+                null
         );
         A2aTaskSnapshot canceled = new A2aTaskSnapshot(
                 "sup-task-cancel-1",
@@ -216,7 +217,7 @@ class SupervisorAgentServiceTest {
                 "operator cancel"
         );
 
-        when(reviewApplicationService.decideReview("session-1", "sup-task-cancel-1", "CANCEL", "operator cancel", "dec-1"))
+        when(reviewApplicationService.decideReview("session-1", "sup-task-cancel-1", "CANCEL", "operator cancel", "dec-1", null))
                 .thenReturn(Optional.of(java.util.Map.of(
                         "task", canceledView,
                         "review", new TaskReviewView(
@@ -231,11 +232,12 @@ class SupervisorAgentServiceTest {
                 "sup-task-cancel-1",
                 "CANCEL",
                 "operator cancel",
-                "dec-1"
+                "dec-1",
+                null
         );
 
         assertThat(result).isPresent();
-        verify(reviewApplicationService).decideReview("session-1", "sup-task-cancel-1", "CANCEL", "operator cancel", "dec-1");
+        verify(reviewApplicationService).decideReview("session-1", "sup-task-cancel-1", "CANCEL", "operator cancel", "dec-1", null);
     }
 
     @Test
@@ -261,7 +263,7 @@ class SupervisorAgentServiceTest {
                 preHitlA2uiService
         );
 
-        HitlReviewTicket approvedTicket = new HitlReviewTicket(
+        HitlReviewTicket approvedTicket = HitlReviewTicket.create(
                 "sup-task-approve-1",
                 "session-1",
                 "상품 추천해줘",
@@ -273,7 +275,8 @@ class SupervisorAgentServiceTest {
                 Instant.now(),
                 Instant.now().plusSeconds(300),
                 Instant.now(),
-                "dec-2"
+                "dec-2",
+                null
         );
         A2aTaskSnapshot completed = new A2aTaskSnapshot(
                 "sup-task-approve-1",
@@ -297,7 +300,7 @@ class SupervisorAgentServiceTest {
                 ""
         );
 
-        when(reviewApplicationService.decideReview("session-1", "sup-task-approve-1", "APPROVE", "approved", "dec-2"))
+        when(reviewApplicationService.decideReview("session-1", "sup-task-approve-1", "APPROVE", "approved", "dec-2", null))
                 .thenReturn(Optional.of(java.util.Map.of(
                         "task", completedView,
                         "review", new TaskReviewView(
@@ -312,11 +315,12 @@ class SupervisorAgentServiceTest {
                 "sup-task-approve-1",
                 "APPROVE",
                 "approved",
-                "dec-2"
+                "dec-2",
+                null
         );
 
         assertThat(result).isPresent();
-        verify(reviewApplicationService).decideReview("session-1", "sup-task-approve-1", "APPROVE", "approved", "dec-2");
+        verify(reviewApplicationService).decideReview("session-1", "sup-task-approve-1", "APPROVE", "approved", "dec-2", null);
     }
 
     @Test
@@ -342,7 +346,7 @@ class SupervisorAgentServiceTest {
                 preHitlA2uiService
         );
 
-        when(reviewApplicationService.decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2"))
+        when(reviewApplicationService.decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2", null))
                 .thenReturn(Flux.just(
                         SupervisorOutputEvent.progress(SupervisorProgressSupport.event("hitl", 12, "승인이 완료되었습니다.", java.util.Map.of())),
                         SupervisorOutputEvent.text("done")
@@ -353,12 +357,13 @@ class SupervisorAgentServiceTest {
                 "sup-task-approve-2",
                 "APPROVE",
                 "approved_from_ui",
-                "dec-2"
+                "dec-2",
+                null
         ).collectList().block();
 
         assertThat(events).isNotNull();
         assertThat(events).hasSize(2);
-        verify(reviewApplicationService).decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2");
+        verify(reviewApplicationService).decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2", null);
     }
 
     @Test

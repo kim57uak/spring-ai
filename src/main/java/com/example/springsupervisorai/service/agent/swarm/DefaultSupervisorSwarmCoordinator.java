@@ -7,9 +7,13 @@ import com.example.springsupervisorai.model.RoutingPlan;
 import com.example.springsupervisorai.model.SupervisorInvocationStatus;
 import com.example.springsupervisorai.model.SwarmState;
 import com.example.springsupervisorai.service.agent.store.SupervisorSwarmStateStore;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.TimeUnit;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -58,14 +62,17 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
     private static final long RETRY_BACKOFF_BASE_MS = 10L;
 
     private final SupervisorSwarmStateStore swarmStateStore;
+    private final RedissonClient redissonClient;
 
     /**
-     * Swarm 상태 저장소를 주입해 코디네이터를 생성한다.
+     * Swarm 상태 저장소와 Redisson 클라이언트를 주입해 코디네이터를 생성한다.
      *
      * @param swarmStateStore Swarm 상태 저장소
+     * @param redissonClient Redisson 클라이언트 (분산 락)
      */
-    public DefaultSupervisorSwarmCoordinator(SupervisorSwarmStateStore swarmStateStore) {
+    public DefaultSupervisorSwarmCoordinator(SupervisorSwarmStateStore swarmStateStore, RedissonClient redissonClient) {
         this.swarmStateStore = swarmStateStore;
+        this.redissonClient = redissonClient;
     }
 
     /**
@@ -98,6 +105,13 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
             List<RoutingPlan> planned,
             Map<String, Object> swarmFacts
     ) {
+        RLock lock = redissonClient.getLock("swarm:lock:" + sessionId);
+        try {
+            // 10초 동안 락 획득 시도
+            if (!lock.tryLock(10, TimeUnit.SECONDS)) {
+                logger.warn("Swarm routing lock acquisition failed sessionId={}", safe(sessionId));
+                return List.copyOf(planned); // 락 획득 실패 시 원본 계획 반환
+            }
         if (planned == null || planned.isEmpty()) {
             return List.of();
         }
@@ -158,6 +172,15 @@ public class DefaultSupervisorSwarmCoordinator implements SupervisorSwarmCoordin
         }
 
         return filtered;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Swarm routing interrupted sessionId={}", safe(sessionId), e);
+            return List.copyOf(planned); // 인터럽트 시 원본 계획 반환
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
     }
 
     /**

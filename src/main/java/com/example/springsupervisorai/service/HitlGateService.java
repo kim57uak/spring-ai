@@ -58,8 +58,9 @@ public class HitlGateService {
             String sessionId,
             HitlDecisionType decision,
             String reason,
-            String decisionId
+            String decisionId,
+            String revisedMessage
     ) {
-        return hitlDecisionService.decide(taskId, sessionId, decision, reason, decisionId);
+        return hitlDecisionService.decide(taskId, sessionId, decision, reason, decisionId, revisedMessage);
     }
 }

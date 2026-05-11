@@ -56,7 +56,8 @@ public class DefaultHitlDecisionService implements HitlDecisionService {
                 now,
                 now.plusSeconds(REVIEW_TIMEOUT_SECONDS),
                 null,
-                ""
+                "",
+                null
         );
         reviewStore.open(ticket);
         upsertSwarmState(taskId, sessionId, Map.of(
@@ -80,12 +81,36 @@ public class DefaultHitlDecisionService implements HitlDecisionService {
      * {@inheritDoc}
      */
     @Override
-    public Optional<HitlReviewTicket> decide(String taskId, String sessionId, HitlDecisionType decision, String reason, String decisionId) {
+    public Optional<HitlReviewTicket> decide(String taskId, String sessionId, HitlDecisionType decision, String reason, String decisionId, String revisedMessage) {
         Optional<HitlReviewTicket> owned = getReview(taskId, sessionId);
         if (owned.isEmpty()) {
             return Optional.empty();
         }
-        Optional<HitlReviewTicket> decided = reviewStore.decide(taskId, decision, reason, decisionId);
+        if (decision == HitlDecisionType.REVISE) {
+            // REVISE 시 revisedMessage를 HITL 티켓에 반영
+            HitlReviewTicket revisedTicket = new HitlReviewTicket(
+                    owned.get().taskId(),
+                    owned.get().sessionId(),
+                    owned.get().message(),
+                    owned.get().model(),
+                    owned.get().policyId(),
+                    owned.get().policyReason(),
+                    HitlReviewStatus.REVISED,
+                    "Revised by user",
+                    owned.get().requestedAt(),
+                    owned.get().expiresAt(),
+                    Instant.now(),
+                    owned.get().decisionId(),
+                    reason
+            );
+            reviewStore.update(revisedTicket);
+            upsertSwarmState(taskId, sessionId, Map.of(
+                    "hitlDecision", "REVISED",
+                    "decisionReason", "Revised by user"
+            ), "HITL_REVIEW_REVISED");
+            return Optional.of(revisedTicket);
+        }
+        Optional<HitlReviewTicket> decided = reviewStore.decide(taskId, decision, reason, decisionId, revisedMessage);
         decided.ifPresent(ticket -> upsertSwarmState(taskId, sessionId, Map.of(
                 "hitlDecision", ticket.status().name(),
                 "decisionReason", ticket.decisionReason()
