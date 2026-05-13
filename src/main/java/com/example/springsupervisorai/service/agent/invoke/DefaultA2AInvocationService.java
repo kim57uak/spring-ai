@@ -3,6 +3,7 @@ package com.example.springsupervisorai.service.agent.invoke;
 import com.example.springsupervisorai.a2a.A2AJsonRpcClient;
 import com.example.springsupervisorai.a2a.A2ARequestMapper;
 import com.example.springsupervisorai.a2a.dto.JsonRpcRequest;
+import com.example.springsupervisorai.a2a.dto.TaskIdParams;
 import com.example.springsupervisorai.config.A2aSupervisorRoutingProperties;
 import com.example.springsupervisorai.model.DownstreamCallResult;
 import com.example.springsupervisorai.model.InvocationPolicyContext;
@@ -18,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -39,11 +41,13 @@ import java.util.concurrent.ConcurrentMap;
 public class DefaultA2AInvocationService implements A2AInvocationService {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultA2AInvocationService.class);
+    private static final String DOWNSTREAM_CANCEL_REASON = "canceled by supervisor";
     private final A2AClientRegistry clientRegistry;
     private final A2ARequestMapper requestMapper;
     private final A2AJsonRpcClient jsonRpcClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentMap<String, CircuitState> circuitStateByAgent = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ConcurrentMap<String, InvokedTarget>> downstreamTargetsBySession = new ConcurrentHashMap<>();
 
     /**
      * invocation 의존성을 생성자 주입으로 초기화한다.
@@ -110,6 +114,7 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
                     if (SupervisorA2aMethod.from(candidateMethod).map(SupervisorA2aMethod::isStream).orElse(false)) {
                         String streamPayload = jsonRpcClient.callStream(candidateTarget, candidateRequest, context.getSessionId());
                         markSuccess(plan.agentKey());
+                        trackInvocation(context.getSessionId(), plan.agentKey(), candidateTarget, "");
                         logger.info("Supervisor invoke success sessionId={}, agentKey={}, method={}",
                                 context.getSessionId(), plan.agentKey(), candidateMethod);
                         DownstreamCallResult provisional = new DownstreamCallResult(
@@ -130,6 +135,7 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
                         continue;
                     }
                     markSuccess(plan.agentKey());
+                    trackInvocation(context.getSessionId(), plan.agentKey(), candidateTarget, result.taskId());
                     logger.info("Supervisor invoke success sessionId={}, agentKey={}, method={}",
                             context.getSessionId(), plan.agentKey(), candidateMethod);
                     return result;
@@ -475,6 +481,75 @@ public class DefaultA2AInvocationService implements A2AInvocationService {
             state.openUntilEpochMs = Instant.now().toEpochMilli() + openDurationMs;
             state.consecutiveFailures = 0;
         }
+    }
+
+    @Override
+    public void cancelDownstream(String sessionId) {
+        ConcurrentMap<String, InvokedTarget> targets = downstreamTargetsBySession.get(sessionId);
+        if (targets == null || targets.isEmpty()) {
+            return;
+        }
+        Map<String, InvokedTarget> snapshot = Map.copyOf(targets);
+        downstreamTargetsBySession.remove(sessionId);
+
+        logger.info("Cancelling {} downstream agent(s) for session {}", snapshot.size(), sessionId);
+        for (Map.Entry<String, InvokedTarget> entry : snapshot.entrySet()) {
+            InvokedTarget target = entry.getValue();
+            try {
+                if (target.taskId.isBlank()) {
+                    A2AClientRegistry.A2ARouteTarget routeTarget = new A2AClientRegistry.A2ARouteTarget(
+                            target.agentKey, target.endpoint, "clear", target.timeout);
+                    jsonRpcClient.clearSession(routeTarget, sessionId);
+                    logger.info("Cleared downstream agent {} session (no taskId to cancel)", target.agentKey);
+                } else {
+                    JsonRpcRequest cancelRequest = new JsonRpcRequest(
+                            "2.0", null, SupervisorA2aMethod.TASKS_CANCEL.value(),
+                            objectMapper.valueToTree(new TaskIdParams(target.taskId, DOWNSTREAM_CANCEL_REASON))
+                    );
+                    A2AClientRegistry.A2ARouteTarget routeTarget = new A2AClientRegistry.A2ARouteTarget(
+                            target.agentKey, target.endpoint, SupervisorA2aMethod.TASKS_CANCEL.value(), target.timeout);
+                    jsonRpcClient.call(routeTarget, cancelRequest, sessionId);
+                    logger.info("Cancelled downstream agent {} task {}", target.agentKey, target.taskId);
+                }
+            } catch (Exception ex) {
+                logger.warn("Failed to cancel downstream agent {}: {}", target.agentKey, ex.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public void clearDownstream(String sessionId) {
+        ConcurrentMap<String, InvokedTarget> targets = downstreamTargetsBySession.get(sessionId);
+        if (targets == null || targets.isEmpty()) {
+            return;
+        }
+        Map<String, InvokedTarget> snapshot = Map.copyOf(targets);
+        downstreamTargetsBySession.remove(sessionId);
+
+        logger.info("Clearing {} downstream agent session(s) for session {}", snapshot.size(), sessionId);
+        for (Map.Entry<String, InvokedTarget> entry : snapshot.entrySet()) {
+            InvokedTarget target = entry.getValue();
+            try {
+                A2AClientRegistry.A2ARouteTarget routeTarget = new A2AClientRegistry.A2ARouteTarget(
+                        target.agentKey, target.endpoint, "clear", target.timeout);
+                jsonRpcClient.clearSession(routeTarget, sessionId);
+                logger.info("Cleared downstream agent {} session {}", target.agentKey, sessionId);
+            } catch (Exception ex) {
+                logger.warn("Failed to clear downstream agent {}: {}", target.agentKey, ex.getMessage());
+            }
+        }
+    }
+
+    private void trackInvocation(String sessionId, String agentKey, A2AClientRegistry.A2ARouteTarget target, String taskId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        downstreamTargetsBySession
+                .computeIfAbsent(sessionId, k -> new ConcurrentHashMap<>())
+                .put(agentKey, new InvokedTarget(agentKey, target.endpoint(), target.timeout(), taskId));
+    }
+
+    private record InvokedTarget(String agentKey, String endpoint, Duration timeout, String taskId) {
     }
 
     /**

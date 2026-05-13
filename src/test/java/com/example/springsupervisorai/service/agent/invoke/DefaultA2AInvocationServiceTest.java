@@ -16,7 +16,9 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -146,5 +148,173 @@ class DefaultA2AInvocationServiceTest {
         assertThat(invokeResult.status()).isEqualTo(SupervisorInvocationStatus.FAILED.value());
         assertThat(invokeResult.errorCode()).isEqualTo("DOWNSTREAM_TIMEOUT");
         assertThat(invokeResult.errorMessage()).isEqualTo("timeout from downstream");
+    }
+
+    @Test
+    void cancelDownstreamShouldSendCancelTaskToTrackedAgents() {
+        A2aSupervisorRoutingProperties properties = new A2aSupervisorRoutingProperties();
+        A2aSupervisorRoutingProperties.Route productRoute = new A2aSupervisorRoutingProperties.Route();
+        productRoute.setEndpoint("http://localhost:8082/a2a/product");
+        properties.setRouting(Map.of("product", productRoute));
+        properties.getRetry().setMaxRetries(0);
+
+        A2AClientRegistry clientRegistry = new A2AClientRegistry(properties);
+        ObjectMapper objectMapper = new ObjectMapper();
+        A2ARequestMapper requestMapper = new A2ARequestMapper(objectMapper);
+        A2AJsonRpcClient jsonRpcClient = mock(A2AJsonRpcClient.class);
+
+        ObjectNode response = objectMapper.createObjectNode();
+        ObjectNode result = response.putObject("result");
+        result.put("id", "task-1");
+        result.put("status", "COMPLETED");
+        when(jsonRpcClient.call(any(), any(), any())).thenReturn(response);
+
+        DefaultA2AInvocationService service = new DefaultA2AInvocationService(clientRegistry, requestMapper, jsonRpcClient);
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "test", "openai");
+        RoutingPlan plan = new RoutingPlan("product", "message/send", "test", 1, Map.of());
+
+        service.invoke(plan, context);
+        service.cancelDownstream("s1");
+
+        verify(jsonRpcClient, times(2)).call(any(), any(), any());
+    }
+
+    @Test
+    void cancelDownstreamWithEmptyTrackingShouldDoNothing() {
+        A2AClientRegistry clientRegistry = new A2AClientRegistry(new A2aSupervisorRoutingProperties());
+        A2ARequestMapper requestMapper = new A2ARequestMapper(new ObjectMapper());
+        A2AJsonRpcClient jsonRpcClient = mock(A2AJsonRpcClient.class);
+
+        DefaultA2AInvocationService service = new DefaultA2AInvocationService(clientRegistry, requestMapper, jsonRpcClient);
+        service.cancelDownstream("unknown-session");
+
+        verify(jsonRpcClient, never()).call(any(), any(), any());
+        verify(jsonRpcClient, never()).clearSession(any(), any());
+    }
+
+    @Test
+    void cancelDownstreamShouldHandleBlankTaskIdWithClearSession() {
+        A2aSupervisorRoutingProperties properties = new A2aSupervisorRoutingProperties();
+        A2aSupervisorRoutingProperties.Route productRoute = new A2aSupervisorRoutingProperties.Route();
+        productRoute.setEndpoint("http://localhost:8082/a2a/product");
+        properties.setRouting(Map.of("product", productRoute));
+        properties.getRetry().setMaxRetries(0);
+
+        A2AClientRegistry clientRegistry = new A2AClientRegistry(properties);
+        A2ARequestMapper requestMapper = new A2ARequestMapper(new ObjectMapper());
+        A2AJsonRpcClient jsonRpcClient = mock(A2AJsonRpcClient.class);
+        when(jsonRpcClient.callStream(any(), any(), any())).thenReturn("stream ok");
+
+        DefaultA2AInvocationService service = new DefaultA2AInvocationService(clientRegistry, requestMapper, jsonRpcClient);
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "test", "openai");
+        RoutingPlan plan = new RoutingPlan("product", "message/stream", "test", 1, Map.of());
+
+        service.invoke(plan, context);
+        service.cancelDownstream("s1");
+
+        verify(jsonRpcClient).clearSession(any(), eq("s1"));
+    }
+
+    @Test
+    void clearDownstreamShouldSendClearSessionToTrackedAgents() {
+        A2aSupervisorRoutingProperties properties = new A2aSupervisorRoutingProperties();
+        A2aSupervisorRoutingProperties.Route productRoute = new A2aSupervisorRoutingProperties.Route();
+        productRoute.setEndpoint("http://localhost:8082/a2a/product");
+        properties.setRouting(Map.of("product", productRoute));
+        properties.getRetry().setMaxRetries(0);
+
+        A2AClientRegistry clientRegistry = new A2AClientRegistry(properties);
+        ObjectMapper objectMapper = new ObjectMapper();
+        A2ARequestMapper requestMapper = new A2ARequestMapper(objectMapper);
+        A2AJsonRpcClient jsonRpcClient = mock(A2AJsonRpcClient.class);
+
+        ObjectNode response = objectMapper.createObjectNode();
+        ObjectNode result = response.putObject("result");
+        result.put("id", "task-1");
+        result.put("status", "COMPLETED");
+        when(jsonRpcClient.call(any(), any(), any())).thenReturn(response);
+
+        DefaultA2AInvocationService service = new DefaultA2AInvocationService(clientRegistry, requestMapper, jsonRpcClient);
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "test", "openai");
+        RoutingPlan plan = new RoutingPlan("product", "message/send", "test", 1, Map.of());
+
+        service.invoke(plan, context);
+        service.clearDownstream("s1");
+
+        verify(jsonRpcClient).clearSession(any(), eq("s1"));
+    }
+
+    @Test
+    void clearDownstreamWithEmptyTrackingShouldDoNothing() {
+        A2AClientRegistry clientRegistry = new A2AClientRegistry(new A2aSupervisorRoutingProperties());
+        A2ARequestMapper requestMapper = new A2ARequestMapper(new ObjectMapper());
+        A2AJsonRpcClient jsonRpcClient = mock(A2AJsonRpcClient.class);
+
+        DefaultA2AInvocationService service = new DefaultA2AInvocationService(clientRegistry, requestMapper, jsonRpcClient);
+        service.clearDownstream("unknown-session");
+
+        verify(jsonRpcClient, never()).call(any(), any(), any());
+        verify(jsonRpcClient, never()).clearSession(any(), any());
+    }
+
+    @Test
+    void cancelDownstreamIdempotentShouldHandleDoubleCancelGracefully() {
+        A2aSupervisorRoutingProperties properties = new A2aSupervisorRoutingProperties();
+        A2aSupervisorRoutingProperties.Route productRoute = new A2aSupervisorRoutingProperties.Route();
+        productRoute.setEndpoint("http://localhost:8082/a2a/product");
+        properties.setRouting(Map.of("product", productRoute));
+        properties.getRetry().setMaxRetries(0);
+
+        A2AClientRegistry clientRegistry = new A2AClientRegistry(properties);
+        ObjectMapper objectMapper = new ObjectMapper();
+        A2ARequestMapper requestMapper = new A2ARequestMapper(objectMapper);
+        A2AJsonRpcClient jsonRpcClient = mock(A2AJsonRpcClient.class);
+
+        ObjectNode response = objectMapper.createObjectNode();
+        ObjectNode result = response.putObject("result");
+        result.put("id", "task-1");
+        result.put("status", "COMPLETED");
+        when(jsonRpcClient.call(any(), any(), any())).thenReturn(response);
+
+        DefaultA2AInvocationService service = new DefaultA2AInvocationService(clientRegistry, requestMapper, jsonRpcClient);
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "test", "openai");
+        RoutingPlan plan = new RoutingPlan("product", "message/send", "test", 1, Map.of());
+
+        service.invoke(plan, context);
+        service.cancelDownstream("s1");
+        service.cancelDownstream("s1");
+
+        verify(jsonRpcClient, times(2)).call(any(), any(), any());
+    }
+
+    @Test
+    void clearDownstreamShouldHandleMultipleAgents() {
+        A2aSupervisorRoutingProperties properties = new A2aSupervisorRoutingProperties();
+        A2aSupervisorRoutingProperties.Route productRoute = new A2aSupervisorRoutingProperties.Route();
+        productRoute.setEndpoint("http://localhost:8082/a2a/product");
+        A2aSupervisorRoutingProperties.Route searchRoute = new A2aSupervisorRoutingProperties.Route();
+        searchRoute.setEndpoint("http://localhost:8082/a2a/search");
+        properties.setRouting(Map.of("product", productRoute, "search", searchRoute));
+        properties.getRetry().setMaxRetries(0);
+
+        A2AClientRegistry clientRegistry = new A2AClientRegistry(properties);
+        ObjectMapper objectMapper = new ObjectMapper();
+        A2ARequestMapper requestMapper = new A2ARequestMapper(objectMapper);
+        A2AJsonRpcClient jsonRpcClient = mock(A2AJsonRpcClient.class);
+
+        ObjectNode response = objectMapper.createObjectNode();
+        ObjectNode result = response.putObject("result");
+        result.put("id", "task-1");
+        result.put("status", "COMPLETED");
+        when(jsonRpcClient.call(any(), any(), any())).thenReturn(response);
+
+        DefaultA2AInvocationService service = new DefaultA2AInvocationService(clientRegistry, requestMapper, jsonRpcClient);
+        SupervisorPlanningContext context = new SupervisorPlanningContext("s1", "test", "openai");
+
+        service.invoke(new RoutingPlan("product", "message/send", "test", 1, Map.of()), context);
+        service.invoke(new RoutingPlan("search", "message/send", "test", 1, Map.of()), context);
+        service.clearDownstream("s1");
+
+        verify(jsonRpcClient, times(2)).clearSession(any(), eq("s1"));
     }
 }

@@ -126,6 +126,16 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Redis는 TTL 기반 자동 만료를 사용하므로 별도 처리하지 않는다.
+     */
+    @Override
+    public void evictExpired() {
+        // Redis TTL handles expiry automatically
+    }
+
     @Override
     public HitlReviewTicket update(HitlReviewTicket ticket) {
         save(ticket);

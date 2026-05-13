@@ -20,13 +20,14 @@ final class A2aTaskSnapshotTransitions {
                 current.taskId(),
                 current.scopeName(),
                 current.sessionId(),
-                A2aTaskStatus.RUNNING,
+                A2aTaskStatus.WORKING,
                 current.createdAt(),
                 now,
                 current.requestMessage(),
                 current.responsePayload(),
                 current.errorCode(),
-                current.errorMessage()
+                current.errorMessage(),
+                current.contextId()
         );
     }
 
@@ -46,7 +47,8 @@ final class A2aTaskSnapshotTransitions {
                 current.requestMessage(),
                 current.status() == A2aTaskStatus.CANCELED ? current.responsePayload() : (responsePayload == null ? "" : responsePayload),
                 current.status() == A2aTaskStatus.CANCELED ? current.errorCode() : "",
-                current.status() == A2aTaskStatus.CANCELED ? current.errorMessage() : ""
+                current.status() == A2aTaskStatus.CANCELED ? current.errorMessage() : "",
+                current.contextId()
         );
     }
 
@@ -66,7 +68,8 @@ final class A2aTaskSnapshotTransitions {
                 current.requestMessage(),
                 current.responsePayload(),
                 current.status() == A2aTaskStatus.CANCELED ? current.errorCode() : (errorCode == null ? "INTERNAL_ERROR" : errorCode),
-                current.status() == A2aTaskStatus.CANCELED ? current.errorMessage() : (errorMessage == null ? "A2A task failed" : errorMessage)
+                current.status() == A2aTaskStatus.CANCELED ? current.errorMessage() : (errorMessage == null ? "A2A task failed" : errorMessage),
+                current.contextId()
         );
     }
 
@@ -84,7 +87,8 @@ final class A2aTaskSnapshotTransitions {
                 current.requestMessage(),
                 current.responsePayload(),
                 "CANCELED",
-                reason == null || reason.isBlank() ? "Canceled by request" : reason
+                reason == null || reason.isBlank() ? "Canceled by request" : reason,
+                current.contextId()
         );
     }
 }

@@ -13,6 +13,7 @@ import com.example.springsupervisorai.model.HitlReviewTicket;
 import com.example.springsupervisorai.model.SupervisorOutputEvent;
 import com.example.springsupervisorai.model.SupervisorOutputEventType;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
+import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import org.junit.jupiter.api.Test;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -46,6 +47,7 @@ class SupervisorAgentServiceTest {
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
         SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -55,7 +57,8 @@ class SupervisorAgentServiceTest {
                 executionService,
                 reviewApplicationService,
                 streamProgressService,
-                preHitlA2uiService
+                preHitlA2uiService,
+                a2AInvocationService
         );
 
         when(preHitlA2uiService.build("session-1", "hello", "openai")).thenReturn(Optional.empty());
@@ -100,6 +103,7 @@ class SupervisorAgentServiceTest {
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
         SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -109,7 +113,8 @@ class SupervisorAgentServiceTest {
                 executionService,
                 reviewApplicationService,
                 streamProgressService,
-                preHitlA2uiService
+                preHitlA2uiService,
+                a2AInvocationService
         );
 
         when(preHitlA2uiService.build("session-1", "예약 생성해줘", "openai")).thenReturn(Optional.empty());
@@ -168,6 +173,7 @@ class SupervisorAgentServiceTest {
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
         SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -177,7 +183,8 @@ class SupervisorAgentServiceTest {
                 executionService,
                 reviewApplicationService,
                 streamProgressService,
-                preHitlA2uiService
+                preHitlA2uiService,
+                a2AInvocationService
         );
 
         HitlReviewTicket canceledTicket = HitlReviewTicket.create(
@@ -251,6 +258,7 @@ class SupervisorAgentServiceTest {
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
         SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -260,7 +268,8 @@ class SupervisorAgentServiceTest {
                 executionService,
                 reviewApplicationService,
                 streamProgressService,
-                preHitlA2uiService
+                preHitlA2uiService,
+                a2AInvocationService
         );
 
         HitlReviewTicket approvedTicket = HitlReviewTicket.create(
@@ -334,6 +343,7 @@ class SupervisorAgentServiceTest {
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
         SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -343,7 +353,8 @@ class SupervisorAgentServiceTest {
                 executionService,
                 reviewApplicationService,
                 streamProgressService,
-                preHitlA2uiService
+                preHitlA2uiService,
+                a2AInvocationService
         );
 
         when(reviewApplicationService.decideReviewStream("session-1", "sup-task-approve-2", "APPROVE", "approved_from_ui", "dec-2", null))
@@ -377,6 +388,7 @@ class SupervisorAgentServiceTest {
         SupervisorReviewApplicationService reviewApplicationService = mock(SupervisorReviewApplicationService.class);
         SupervisorStreamProgressService streamProgressService = mock(SupervisorStreamProgressService.class);
         SupervisorPreHitlA2uiService preHitlA2uiService = mock(SupervisorPreHitlA2uiService.class);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
         SupervisorAgentService service = new SupervisorAgentService(
                 orchestrator,
                 taskFacade,
@@ -386,7 +398,8 @@ class SupervisorAgentServiceTest {
                 executionService,
                 reviewApplicationService,
                 streamProgressService,
-                preHitlA2uiService
+                preHitlA2uiService,
+                a2AInvocationService
         );
 
         when(preHitlA2uiService.build("session-1", "상품 생성 화면 보여줘", "openai"))

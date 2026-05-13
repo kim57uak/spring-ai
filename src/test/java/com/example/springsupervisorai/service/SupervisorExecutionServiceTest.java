@@ -4,6 +4,7 @@ import com.example.springsupervisorai.a2a.task.A2aTaskSnapshot;
 import com.example.springsupervisorai.a2a.task.A2aTaskStatus;
 import com.example.springsupervisorai.model.SupervisorExecutionRequest;
 import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.Disposable;
@@ -28,9 +29,10 @@ class SupervisorExecutionServiceTest {
         SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
         SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
         SupervisorExecutionResultCollector collector = new SupervisorExecutionResultCollector();
-        SupervisorExecutionService service = new SupervisorExecutionService(orchestrator, taskFacade, collector);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
+        SupervisorExecutionService service = new SupervisorExecutionService(orchestrator, taskFacade, collector, a2AInvocationService);
 
-        A2aTaskSnapshot running = task("task-1", A2aTaskStatus.RUNNING, "");
+        A2aTaskSnapshot running = task("task-1", A2aTaskStatus.WORKING, "");
         A2aTaskSnapshot completed = task("task-1", A2aTaskStatus.COMPLETED, "answer");
         when(taskFacade.createRunningTask("s1", "hello")).thenReturn(running);
         when(orchestrator.executeEvents(any(), eq("task-1"))).thenReturn(Flux.just(
@@ -49,7 +51,8 @@ class SupervisorExecutionServiceTest {
         SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
         SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
         SupervisorExecutionResultCollector collector = new SupervisorExecutionResultCollector();
-        SupervisorExecutionService service = new SupervisorExecutionService(orchestrator, taskFacade, collector);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
+        SupervisorExecutionService service = new SupervisorExecutionService(orchestrator, taskFacade, collector, a2AInvocationService);
 
         when(orchestrator.executeEvents(any(), eq("task-2"))).thenReturn(Flux.just(SupervisorOutputEvent.text("answer")));
         when(taskFacade.getTask("task-2")).thenReturn(Optional.of(task("task-2", A2aTaskStatus.COMPLETED, "done")));
@@ -65,9 +68,10 @@ class SupervisorExecutionServiceTest {
         SupervisorAgentOrchestrator orchestrator = mock(SupervisorAgentOrchestrator.class);
         SupervisorTaskFacade taskFacade = mock(SupervisorTaskFacade.class);
         SupervisorExecutionResultCollector collector = new SupervisorExecutionResultCollector();
-        SupervisorExecutionService service = new SupervisorExecutionService(orchestrator, taskFacade, collector);
+        A2AInvocationService a2AInvocationService = mock(A2AInvocationService.class);
+        SupervisorExecutionService service = new SupervisorExecutionService(orchestrator, taskFacade, collector, a2AInvocationService);
 
-        A2aTaskSnapshot running = task("task-3", A2aTaskStatus.RUNNING, "");
+        A2aTaskSnapshot running = task("task-3", A2aTaskStatus.WORKING, "");
         when(taskFacade.createRunningTask("s1", "hello")).thenReturn(running);
         when(orchestrator.executeEvents(any(), eq("task-3"))).thenReturn(
                 Flux.just(SupervisorOutputEvent.text("partial")).concatWith(Flux.never())

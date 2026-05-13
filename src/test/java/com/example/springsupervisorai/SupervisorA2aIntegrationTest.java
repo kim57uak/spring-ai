@@ -101,7 +101,7 @@ class SupervisorA2aIntegrationTest {
 
         assertThat(response.path("error").isMissingNode() || response.path("error").isNull()).isTrue();
         assertThat(response.path("result").path("id").asText()).startsWith("sup-task-");
-        assertThat(response.path("result").path("status").asText()).isIn("RUNNING", "COMPLETED", "FAILED");
+        assertThat(response.path("result").path("status").asText()).isIn("WORKING", "COMPLETED", "FAILED");
     }
 
     @Test

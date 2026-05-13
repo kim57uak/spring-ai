@@ -7,14 +7,29 @@
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
       if (parsed && typeof parsed === 'object') {
+        if (parsed.a2ui && Array.isArray(parsed.a2ui.messages)) {
+          return parsed.a2ui.messages;
+        }
         if (Array.isArray(parsed.messages)) return parsed.messages;
-        if (parsed.a2ui && Array.isArray(parsed.a2ui.messages)) return parsed.a2ui.messages;
         if (parsed.surfaceUpdate || parsed.dataModelUpdate || parsed.beginRendering || parsed.deleteSurface) {
           return [parsed];
         }
       }
       if (typeof parsed === 'string') {
         return tryParseProtocolPayload(parsed);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function parseEnvelope(raw) {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.a2ui) {
+        return parsed;
       }
       return null;
     } catch (e) {
@@ -476,6 +491,7 @@
   global.A2uiRenderer = {
     STANDARD_CATALOG_ID,
     tryParseProtocolPayload,
+    parseEnvelope,
     render
   };
 }(window));

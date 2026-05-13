@@ -11,6 +11,7 @@ import com.example.springsupervisorai.model.SupervisorExecutionRequest;
 import com.example.springsupervisorai.model.SupervisorOutputEvent;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
+import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -37,6 +38,7 @@ public class SupervisorAgentService {
     private final SupervisorReviewApplicationService reviewApplicationService;
     private final SupervisorStreamProgressService streamProgressService;
     private final SupervisorPreHitlA2uiService preHitlA2uiService;
+    private final A2AInvocationService a2AInvocationService;
 
     /**
      * 서비스 의존성을 생성자 주입으로 초기화한다.
@@ -54,7 +56,8 @@ public class SupervisorAgentService {
             SupervisorExecutionService executionService,
             SupervisorReviewApplicationService reviewApplicationService,
             SupervisorStreamProgressService streamProgressService,
-            SupervisorPreHitlA2uiService preHitlA2uiService
+            SupervisorPreHitlA2uiService preHitlA2uiService,
+            A2AInvocationService a2AInvocationService
     ) {
         this.orchestrator = orchestrator;
         this.taskFacade = taskFacade;
@@ -65,6 +68,7 @@ public class SupervisorAgentService {
         this.reviewApplicationService = reviewApplicationService;
         this.streamProgressService = streamProgressService;
         this.preHitlA2uiService = preHitlA2uiService;
+        this.a2AInvocationService = a2AInvocationService;
     }
 
     /**
@@ -184,6 +188,7 @@ public class SupervisorAgentService {
      * @return 취소된 task snapshot(optional)
      */
     public Optional<A2aTaskSnapshot> cancelTask(String taskId, String sessionId, String reason) {
+        a2AInvocationService.cancelDownstream(sessionId);
         return taskFacade.cancelTask(taskId, sessionId, reason);
     }
 
@@ -203,6 +208,7 @@ public class SupervisorAgentService {
      * @param sessionId 세션 id
      */
     public void clearSession(String sessionId) {
+        a2AInvocationService.clearDownstream(sessionId);
         orchestrator.clearSession(sessionId);
     }
 

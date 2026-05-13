@@ -17,6 +17,21 @@ public record A2aTaskSnapshot(
         String requestMessage,
         String responsePayload,
         String errorCode,
-        String errorMessage
+        String errorMessage,
+        String contextId
 ) {
+    public A2aTaskSnapshot(
+            String taskId,
+            AgentScopeName scopeName,
+            String sessionId,
+            A2aTaskStatus status,
+            Instant createdAt,
+            Instant updatedAt,
+            String requestMessage,
+            String responsePayload,
+            String errorCode,
+            String errorMessage
+    ) {
+        this(taskId, scopeName, sessionId, status, createdAt, updatedAt, requestMessage, responsePayload, errorCode, errorMessage, null);
+    }
 }

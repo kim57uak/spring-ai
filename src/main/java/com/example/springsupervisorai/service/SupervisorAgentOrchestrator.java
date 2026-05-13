@@ -219,6 +219,7 @@ public class SupervisorAgentOrchestrator {
         }
 
         StringBuilder answer = new StringBuilder();
+        StringBuilder a2uiProtocol = new StringBuilder();
         AtomicBoolean failed = new AtomicBoolean(false);
         SupervisorOutputEvent composingProgress = progressEvent(
                 taskId,
@@ -246,9 +247,11 @@ public class SupervisorAgentOrchestrator {
                         .doOnNext(event -> {
                             if (event.type() == SupervisorOutputEventType.TEXT) {
                                 answer.append(event.content());
+                            } else if (event.type() == SupervisorOutputEventType.A2UI) {
+                                a2uiProtocol.append(event.content());
                             }
                         })
-                        .doOnComplete(() -> onComposeCompleted(request, taskId, context, answer, failed))
+                        .doOnComplete(() -> onComposeCompleted(request, taskId, context, answer, a2uiProtocol, failed))
                         .concatWith(Flux.just(completedProgress))
         );
     }
@@ -303,15 +306,22 @@ public class SupervisorAgentOrchestrator {
             String taskId,
             SupervisorPlanningContext context,
             StringBuilder answer,
+            StringBuilder a2uiProtocol,
             AtomicBoolean failed
     ) {
-        persistenceService.persistCompletion(context, answer.toString());
+        String a2uiPayload = a2uiProtocol.toString();
+        if (a2uiPayload.isBlank()) {
+            persistenceService.persistCompletion(context, answer.toString());
+        } else {
+            persistenceService.persistA2uiCompletion(context, answer.toString(), a2uiPayload);
+        }
         progressPublisher.recordNodeEvent(taskId, request.sessionId(), "COMPOSE", "Compose completed", Map.of(
                 "answerLength", answer.length(),
+                "a2uiProtocolLength", a2uiPayload.length(),
                 "resultsCount", context.getResults().size()
         ));
-        logger.info("Supervisor execute finished taskId={}, sessionId={}, results={}, responseLength={}",
-                taskId, request.sessionId(), context.getResults().size(), answer.length());
+        logger.info("Supervisor execute finished taskId={}, sessionId={}, results={}, responseLength={}, a2uiProtocolLength={}",
+                taskId, request.sessionId(), context.getResults().size(), answer.length(), a2uiPayload.length());
         if (!failed.get()) {
             persistenceService.markCompleted(taskId, answer.toString());
         }

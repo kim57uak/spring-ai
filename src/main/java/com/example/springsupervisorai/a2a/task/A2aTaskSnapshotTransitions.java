@@ -19,13 +19,14 @@ final class A2aTaskSnapshotTransitions {
         return new A2aTaskSnapshot(
                 current.taskId(),
                 current.sessionId(),
-                A2aTaskStatus.RUNNING,
+                A2aTaskStatus.WORKING,
                 current.createdAt(),
                 now,
                 current.requestMessage(),
                 current.responsePayload(),
                 current.errorCode(),
-                current.errorMessage()
+                current.errorMessage(),
+                current.contextId()
         );
     }
 
@@ -42,7 +43,8 @@ final class A2aTaskSnapshotTransitions {
                 current.requestMessage(),
                 current.responsePayload(),
                 "HITL_REQUIRED",
-                reason == null ? "Human review is required" : reason
+                reason == null ? "Human review is required" : reason,
+                current.contextId()
         );
     }
 
@@ -64,7 +66,8 @@ final class A2aTaskSnapshotTransitions {
                 current.requestMessage(),
                 responsePayload == null ? "" : responsePayload,
                 "",
-                ""
+                "",
+                current.contextId()
         );
     }
 
@@ -86,7 +89,8 @@ final class A2aTaskSnapshotTransitions {
                 current.requestMessage(),
                 current.responsePayload(),
                 errorCode == null ? SupervisorErrorCode.INTERNAL_ERROR.value() : errorCode,
-                errorMessage == null ? "Supervisor task failed" : errorMessage
+                errorMessage == null ? "Supervisor task failed" : errorMessage,
+                current.contextId()
         );
     }
 
@@ -103,7 +107,8 @@ final class A2aTaskSnapshotTransitions {
                 current.requestMessage(),
                 current.responsePayload(),
                 SupervisorErrorCode.CANCELED.value(),
-                reason == null || reason.isBlank() ? "Canceled by request" : reason
+                reason == null || reason.isBlank() ? "Canceled by request" : reason,
+                current.contextId()
         );
     }
 
@@ -120,7 +125,8 @@ final class A2aTaskSnapshotTransitions {
                 newMessage == null ? "" : newMessage,
                 current.responsePayload(),
                 current.errorCode(),
-                current.errorMessage()
+                current.errorMessage(),
+                current.contextId()
         );
     }
 }

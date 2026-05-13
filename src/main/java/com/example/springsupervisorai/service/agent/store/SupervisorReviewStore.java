@@ -44,4 +44,9 @@ public interface SupervisorReviewStore {
      * @return 갱신된 HITL 티켓
      */
     HitlReviewTicket update(HitlReviewTicket ticket);
+
+    /**
+     * 만료된 리뷰 티켓을 제거한다.
+     */
+    void evictExpired();
 }

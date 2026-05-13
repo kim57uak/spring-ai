@@ -30,4 +30,22 @@ public interface A2AInvocationService {
     default DownstreamCallResult invoke(RoutingPlan plan, SupervisorPlanningContext context) {
         return invoke(InvocationPolicyContext.of(plan, context));
     }
+
+    /**
+     * 특정 세션의 모든 downstream 호출을 취소한다.
+     * <p>
+     * 각 downstream agent에 대해 CancelTask JSON-RPC를 전송한다.
+     *
+     * @param sessionId 취소 대상 세션 id
+     */
+    void cancelDownstream(String sessionId);
+
+    /**
+     * 특정 세션의 모든 downstream 세션을 정리한다.
+     * <p>
+     * 각 downstream agent에 대해 세션 clear 요청을 전송한다.
+     *
+     * @param sessionId 정리 대상 세션 id
+     */
+    void clearDownstream(String sessionId);
 }
