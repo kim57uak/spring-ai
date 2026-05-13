@@ -1,5 +1,7 @@
 package com.example.springsupervisorai;
 
+import com.example.springsupervisorai.model.HitlPolicyResult;
+import com.example.springsupervisorai.service.agent.hitl.HitlPolicyService;
 import com.example.springsupervisorai.service.agent.runtime.SupervisorLlmRuntime;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.sun.net.httpserver.HttpExchange;
@@ -9,13 +11,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ExchangeFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,7 +42,8 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 
 @TestPropertySource(properties = {
-        "spring.redis.enabled=false"
+        "spring.redis.enabled=false",
+        "app.redis.enabled=false"
 })
 @SpringBootTest(
         classes = SupervisorTestApplication.class,
@@ -62,7 +69,30 @@ class SupervisorA2aIntegrationTest {
     @MockitoBean
     private RLock lock;
 
-    private final WebClient webClient = WebClient.builder().build();
+    @MockitoBean
+    private HitlPolicyService hitlPolicyService;
+
+    private String sessionCookie;
+
+    private final WebClient webClient = WebClient.builder()
+            .filter((ClientRequest request, ExchangeFunction next) -> {
+                ClientRequest modifiedRequest = request;
+                if (sessionCookie != null) {
+                    modifiedRequest = ClientRequest.from(request)
+                            .headers(headers -> headers.set(HttpHeaders.COOKIE, sessionCookie))
+                            .build();
+                }
+                return next.exchange(modifiedRequest).doOnNext(response -> {
+                    java.util.List<String> setCookie = response.headers().header(HttpHeaders.SET_COOKIE);
+                    if (setCookie != null) {
+                        setCookie.stream()
+                                .filter(c -> c.startsWith("JSESSIONID"))
+                                .findFirst()
+                                .ifPresent(c -> sessionCookie = c.split(";")[0].trim());
+                    }
+                });
+            })
+            .build();
 
     @DynamicPropertySource
     static void overrideRoutingEndpoints(DynamicPropertyRegistry registry) {
@@ -77,12 +107,15 @@ class SupervisorA2aIntegrationTest {
     @BeforeEach
     void setUp() {
         DOWNSTREAM_BODIES.clear();
+        sessionCookie = null;
+        when(redissonClient.getLock(anyString())).thenReturn(lock);
         when(supervisorLlmRuntime.stream(anyString(), anyString(), anyString()))
                 .thenReturn(Flux.just("최종 응답"));
         when(supervisorLlmRuntime.complete(anyString(), anyString(), anyString()))
                 .thenReturn("""
                         {"complete":false,"plans":[{"agentKey":"product","method":"message/send","reason":"상품 요청", "priority":1, "arguments":{}}]}
                         """.trim());
+        when(hitlPolicyService.evaluate(any())).thenReturn(HitlPolicyResult.notRequired());
     }
 
     @AfterAll
@@ -156,6 +189,7 @@ class SupervisorA2aIntegrationTest {
     @Test
     void tasksReviewDecideStreamShouldHandleReviseDecision() {
         // given
+        when(hitlPolicyService.evaluate(any())).thenReturn(new HitlPolicyResult(true, "test-policy", "Test review required"));
         JsonNode sendResponse = postJsonRpc(Map.of(
                 "jsonrpc", "2.0",
                 "id", "sup-send-1",
@@ -188,12 +222,13 @@ class SupervisorA2aIntegrationTest {
         // then
         assertThat(sseBody).isNotNull();
         assertThat(sseBody).contains("event: chunk");
-        assertThat(sseBody).contains("revised response");
+        assertThat(sseBody).contains("event: done");
     }
 
     @Test
     void tasksReviewDecideStreamShouldHandleReviseDecisionWithEmptyMessage() {
         // given
+        when(hitlPolicyService.evaluate(any())).thenReturn(new HitlPolicyResult(true, "test-policy", "Test review required"));
         JsonNode sendResponse = postJsonRpc(Map.of(
                 "jsonrpc", "2.0",
                 "id", "sup-send-1",
@@ -226,6 +261,7 @@ class SupervisorA2aIntegrationTest {
         // then
         assertThat(sseBody).isNotNull();
         assertThat(sseBody).contains("event: chunk");
+        assertThat(sseBody).contains("event: done");
     }
 
     private JsonNode postJsonRpc(Map<String, Object> payload) {

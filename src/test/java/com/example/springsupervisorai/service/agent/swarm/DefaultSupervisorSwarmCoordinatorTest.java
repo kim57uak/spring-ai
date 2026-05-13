@@ -36,6 +36,7 @@ class DefaultSupervisorSwarmCoordinatorTest {
     void applyRoutingRuleShouldSkipPersistenceWhenTaskIdIsBlank() throws InterruptedException {
         when(redissonClient.getLock("swarm:lock:session-1")).thenReturn(lock);
         when(lock.tryLock(10, TimeUnit.SECONDS)).thenReturn(true);
+        when(lock.isHeldByCurrentThread()).thenReturn(true);
 
         DefaultSupervisorSwarmCoordinator coordinator = new DefaultSupervisorSwarmCoordinator(swarmStateStore, redissonClient);
 
@@ -58,6 +59,7 @@ class DefaultSupervisorSwarmCoordinatorTest {
         // given
         when(redissonClient.getLock("swarm:lock:session-1")).thenReturn(lock);
         when(lock.tryLock(10, TimeUnit.SECONDS)).thenReturn(true);
+        when(lock.isHeldByCurrentThread()).thenReturn(true);
 
         DefaultSupervisorSwarmCoordinator coordinator = new DefaultSupervisorSwarmCoordinator(swarmStateStore, redissonClient);
 
