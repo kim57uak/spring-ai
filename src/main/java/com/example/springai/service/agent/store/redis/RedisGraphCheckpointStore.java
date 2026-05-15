@@ -9,6 +9,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,18 +24,20 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisGraphCheckpointStore.class);
     private static final String KEY_PREFIX = RedisKeyspace.AGENT_CHECKPOINT_PREFIX;
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final RedisStoreSupport storeSupport;
+    private final Duration ttl;
     private final Map<String, String> localFallback = new ConcurrentHashMap<>();
 
     /**
      * @param redisTemplateProvider Redis 템플릿 제공자
+     * @param ttlPolicy             TTL 정책
      */
-    public RedisGraphCheckpointStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider) {
+    public RedisGraphCheckpointStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplateProvider.getIfAvailable();
         this.storeSupport = new RedisStoreSupport(logger);
+        this.ttl = ttlPolicy.getStandard();
     }
 
     /**
@@ -76,7 +79,7 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
         if (redisTemplate == null) {
             return;
         }
-        storeSupport.runSafely(() -> redisTemplate.opsForValue().set(key(sessionId), payload, TTL), "save checkpoint", sessionId);
+        storeSupport.runSafely(() -> redisTemplate.opsForValue().set(key(sessionId), payload, ttl), "save checkpoint", sessionId);
     }
 
     /**

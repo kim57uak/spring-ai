@@ -5,6 +5,9 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Arrays;
 import java.util.Optional;
 
+/**
+ * A2A protocol task 상태 값.
+ */
 public enum TaskStatus {
     SUBMITTED("submitted"),
     WORKING("working"),
@@ -28,6 +31,7 @@ public enum TaskStatus {
     }
 
     public static Optional<TaskStatus> from(String value) {
+        // 문자열과 일치하는 TaskStatus 열거형 검색
         if (value == null) {
             return Optional.empty();
         }

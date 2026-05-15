@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 05. LangGraph4J Orchestration (Current Runtime)
+title 05. LangGraph4J Orchestration (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 

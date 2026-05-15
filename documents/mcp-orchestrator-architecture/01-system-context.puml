@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 01. Agentic AI System Context (Current Source)
+title 01. Agentic AI System Context (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam componentStyle rectangle

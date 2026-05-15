@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 06. Scoped Agent MCP Sequence (Current Source)
+title 06. Scoped Agent MCP Sequence (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 

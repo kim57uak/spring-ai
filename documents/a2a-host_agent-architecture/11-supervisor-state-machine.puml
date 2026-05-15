@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 11. Supervisor Agent Request / Runtime State Machine
+title 11. Supervisor Agent Request / Runtime State Machine (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 

@@ -6,23 +6,23 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CancellationException;
 
 /**
- * Normalizes exception handling for supervisor orchestration and compose stages.
+ * Supervisor 오케스트레이션 및 compose 단계의 예외 처리를 정규화한다.
  */
 @Service
 public class SupervisorExceptionTranslator {
 
     /**
-     * Structured failure translation result.
+     * 구조화된 실패 변환 결과.
      *
-     * @param errorCode normalized supervisor error code
-     * @param userMessage user-facing error message
-     * @param detail sanitized detail for persistence/logging
+     * @param errorCode 정규화된 supervisor 에러 코드
+     * @param userMessage 사용자 노출 에러 메시지
+     * @param detail 영속화/로깅용 정제된 상세 정보
      */
     public record Failure(SupervisorErrorCode errorCode, String userMessage, String detail) {
     }
 
     /**
-     * Translates a compose-stage exception.
+     * Compose 단계 예외를 변환한다.
      */
     public Failure composeFailure(Throwable error) {
         return new Failure(
@@ -33,7 +33,7 @@ public class SupervisorExceptionTranslator {
     }
 
     /**
-     * Translates an orchestration-stage exception.
+     * 오케스트레이션 단계 예외를 변환한다.
      */
     public Failure orchestrationFailure(Throwable error) {
         if (error instanceof CancellationException) {
@@ -51,7 +51,7 @@ public class SupervisorExceptionTranslator {
     }
 
     /**
-     * Sanitizes arbitrary values for logs and failure persistence.
+     * 임의 값을 로그 및 실패 영속화에 적합하도록 정제한다.
      */
     public String sanitize(String message) {
         return sanitize(message, "Unexpected supervisor error");

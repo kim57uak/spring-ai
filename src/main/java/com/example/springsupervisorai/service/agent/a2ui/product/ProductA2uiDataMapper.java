@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Maps product payload nodes into a stable rendering model consumed by A2UI message builders.
+ * 제품 페이로드 노드를 A2UI 메시지 빌더가 사용하는 안정적인 렌더링 모델로 매핑한다.
  */
 @Component
 public class ProductA2uiDataMapper {
@@ -303,7 +303,7 @@ public class ProductA2uiDataMapper {
                 try {
                     return Long.parseLong(value.asText().trim());
                 } catch (Exception ignored) {
-                    // Keep scanning candidate fields until a numeric value is found.
+                    // 숫자 값이 발견될 때까지 후보 필드 계속 스캔
                 }
             }
         }

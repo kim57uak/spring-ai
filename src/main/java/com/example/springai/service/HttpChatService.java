@@ -1,7 +1,9 @@
 package com.example.springai.service;
 
+import com.example.event.SessionClearEvent;
 import com.example.springai.model.agent.AgentChatRequest;
 import com.example.springai.service.agent.orchestrator.AgentOrchestrator;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -16,10 +18,12 @@ import reactor.core.publisher.Flux;
 public class HttpChatService {
     private final AgentOrchestrator agentOrchestrator;
     private final AgentScopeResolver scopeResolver;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public HttpChatService(AgentOrchestrator agentOrchestrator, AgentScopeResolver scopeResolver) {
+    public HttpChatService(AgentOrchestrator agentOrchestrator, AgentScopeResolver scopeResolver, ApplicationEventPublisher eventPublisher) {
         this.agentOrchestrator = agentOrchestrator;
         this.scopeResolver = scopeResolver;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -43,6 +47,7 @@ public class HttpChatService {
      */
     public void clearSession(String sessionId) {
         agentOrchestrator.clearSession(sessionId);
+        eventPublisher.publishEvent(new SessionClearEvent(sessionId));
     }
 
     /**

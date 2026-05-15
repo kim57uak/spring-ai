@@ -1,5 +1,8 @@
 package com.example.springsupervisorai.a2a.dto;
 
+/**
+ * JSON-RPC 2.0 응답. 성공 시 result, 실패 시 error를 설정한다.
+ */
 public record JsonRpcResponse(Object id, String jsonrpc, Object result, JsonRpcError error) {
 
     private static final String JSONRPC_VERSION = "2.0";

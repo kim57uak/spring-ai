@@ -5,11 +5,25 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.regex.Pattern;
 
+/**
+ * 사용자 메시지, 도구 결과, 대화 히스토리를 통한 프롬프트 인젝션으로부터 Supervisor LLM을 보호한다.
+ * <p>
+ * 신뢰할 수 없는 콘텐츠를 모델이 데이터로만 처리하도록 지시하는 구조적 구분자로 감싼다.
+ * 인젝션 탐지가 활성화되면 알려진 명령 재정의 패턴을 스캔하고 보안 경고를 감싸진 출력에 추가한다.
+ */
 @Component("supervisorPromptInjectionGuard")
 public class PromptInjectionGuard {
 
+    /**
+     * 포함된 사용자/도구 콘텐츠의 최대 허용 길이를 정의한다.
+     * 이 한도를 초과하는 콘텐츠는 잘린다.
+     */
     private static final int MAX_EMBEDDED_LENGTH = 12000;
 
+    /**
+     * 프롬프트 인젝션 시도를 탐지하는 데 사용되는 컴파일된 정규식 패턴.
+     * 영어와 한국어 지시 재정의 구문을 모두 포함한다.
+     */
     private static final List<Pattern> INJECTION_PATTERNS = List.of(
             Pattern.compile("(?i)ignore\\s+(all\\s+)?(previous|prior|above)\\s+instructions?"),
             Pattern.compile("(?i)disregard\\s+(all\\s+)?(system|developer|security)"),

@@ -5,6 +5,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+/**
+ * 비용 및 수수료 관련 요청에 사용되는 제품 가격 A2UI 템플릿.
+ * <p>
+ * 비용 내역, 포함/제외 항목, 보증금, 할증료를 강조하기 위해
+ * 가격 카드를 다른 섹션보다 우선시한다.
+ */
 @Component
 public class PricingProductA2uiTemplate extends AbstractProductA2uiTemplate {
 

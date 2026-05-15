@@ -23,6 +23,13 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
+/**
+ * HITL(Human-In-The-Loop) 리뷰 작업을 처리하는 REST 컨트롤러.
+ * <p>
+ * supervisor-a2a 프로토콜의 tasks/review/get, tasks/review/decide 엔드포인트를 제공한다.
+ * JSON-RPC 2.0 요청을 수신하며, 일반 JSON 응답과 SSE 스트리밍(TEXT_EVENT_STREAM)을
+ * 모두 지원한다.
+ */
 @RestController
 @RequestMapping("/a2a/supervisor")
 public class HitlReviewController {

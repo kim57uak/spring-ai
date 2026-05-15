@@ -1,14 +1,17 @@
 @startuml
 !pragma layout smetana
-title 10. Supervisor Agent Deployment Runtime
+title 10. Supervisor Agent Deployment Runtime (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
 
 node "Supervisor Agent Spring Boot Runtime" {
-  [SupervisorA2AController] as Controller
+  [SupervisorA2AController\n/a2a/supervisor] as Controller
   [SupervisorA2ARequestValidator] as Validator
+  [HitlReviewController\n/a2a/supervisor/tasks/review] as HitlReviewController
+  [CircuitBreakerController\n/a2a/circuit-breaker] as CircuitBreakerController
   [SupervisorAgentService] as Service
+  [SupervisorPreHitlA2uiService] as PreHitlA2ui
   [SupervisorA2aLifecycleService] as Lifecycle
   [SupervisorRequestIdempotencyService] as Idempotency
   [SupervisorAgentOrchestrator] as Orchestrator

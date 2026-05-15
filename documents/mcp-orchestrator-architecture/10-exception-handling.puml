@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 10. Exception Handling (Current Source)
+title 10. Exception Handling (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -57,6 +57,7 @@ GlobalExceptionHandler --> MethodArgumentNotValidException : @ExceptionHandler
 GlobalExceptionHandler --> ConstraintViolationException : @ExceptionHandler
 GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
 GlobalExceptionHandler --> HttpMessageNotReadableException : @ExceptionHandler
+GlobalExceptionHandler --> RuntimeException : name-based mapping\nA2ARoutingException /\nDownstreamA2AException /\nSupervisorChatProcessingException
 
 McpException <|-- McpClientCreationException
 McpException <|-- McpProcessLaunchException

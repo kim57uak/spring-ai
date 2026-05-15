@@ -1,6 +1,6 @@
 # 17. Supervisor Package / Class Specification
 
-Last synchronized with source: 2026-05-11  
+Last synchronized with source: 2026-05-14  
 Source baseline: `src/main/java/com/example/springsupervisorai`
 
 ## Current Package Structure
@@ -11,14 +11,14 @@ src/main/java/com/example/springsupervisorai
 │   ├── A2AJsonRpcClient
 │   ├── A2ARequestMapper
 │   ├── A2AResponseMapper
-│   ├── dto/{JsonRpcRequest, JsonRpcResponse, JsonRpcError, TaskIdParams, TaskQueryParams, TaskSendParams, TaskReviewGetParams, TaskReviewDecisionParams, TaskView, TaskReviewView, TasksListParams, TasksListResult}
+│   ├── dto/{DataPart, FilePart, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Message, MessageSendParams, Part, Task, TaskArtifactUpdateEvent, TaskIdParams, TaskQueryParams, TaskReviewDecisionParams, TaskReviewGetParams, TaskReviewView, TaskSendParams, TasksListParams, TasksListResult, TaskStatus, TaskStatusUpdateEvent, TaskView, TextPart}
 │   ├── idempotency/SupervisorRequestIdempotencyService
 │   ├── lifecycle/SupervisorA2aLifecycleService
 │   └── task/{A2ATaskStore, A2aTaskSnapshot, A2aTaskSnapshotTransitions, A2aTaskStatus, InMemoryA2ATaskStore, RedisA2ATaskStore}
 ├── common/redis/{RedisKeyspace, RedisTtlPolicy}
 ├── config/{A2aSupervisorRoutingProperties, SupervisorPromptProperties, SupervisorStreamProperties}
-├── controller/{SupervisorA2AController, SupervisorA2ARequestValidator}
-├── exception/{A2ARoutingException, DownstreamA2AException, SupervisorChatProcessingException}
+├── controller/{SupervisorA2AController, SupervisorA2ARequestValidator, HitlReviewController, CircuitBreakerController}
+├── exception/{A2ACommunicationException, A2ARoutingException, DownstreamA2AException, HitlProcessingException, SupervisorChatProcessingException, SupervisorGlobalExceptionHandler}
 ├── model
 │   ├── DownstreamCallResult
 │   ├── HandoffDirective
@@ -29,6 +29,7 @@ src/main/java/com/example/springsupervisorai
 │   ├── HitlPolicyResult
 │   ├── HitlReviewStatus
 │   ├── HitlReviewTicket
+│   ├── HitlStateMachine
 │   ├── InvocationPolicyContext
 │   ├── RoutingPlan
 │   ├── SupervisorA2aMethod
@@ -66,7 +67,7 @@ src/main/java/com/example/springsupervisorai
 │   ├── SupervisorReviewApplicationService
 │   ├── SupervisorStreamProgressService
 │   ├── SupervisorTaskFacade
-│   ├── agent/a2ui/common/{A2uiComposePromptProvider, A2uiComposePromptProviderRegistry, A2uiTemplateView, CompositeSupervisorA2uiService, SupervisorA2uiDomainService, SupervisorA2uiService, SupervisorA2uiSupport}
+│   ├── agent/a2ui/common/{A2uiComposePromptProvider, A2uiComposePromptProviderRegistry, A2uiTemplateView, CompositeSupervisorA2uiService, SupervisorA2uiDomainService, SupervisorA2uiMessageBuilder, SupervisorA2uiService, SupervisorA2uiSupport}
 │   ├── agent/a2ui/product/{AbstractProductA2uiTemplate, BookingProductA2uiTemplate, CreationFormProductA2uiTemplate, DefaultSupervisorProductInfoA2uiService, PricingProductA2uiTemplate, ProductA2uiComposePromptProvider, ProductA2uiDataMapper, ProductA2uiMessageBuilder, ProductA2uiTemplate, ProductA2uiTemplateRegistry, ProductPayloadExtractor, ProductPresentationModel, SummaryProductA2uiTemplate, TimelineProductA2uiTemplate}
 │   ├── agent/a2ui/reservation/{DefaultSupervisorReservationA2uiService, ReservationA2uiComposePromptProvider, ReservationA2uiMessageBuilder, ReservationPayloadExtractor, ReservationPresentationModel}
 │   ├── agent/compose/{A2uiDecisionParser, ComposeOutcomeAnalyzer, ComposePromptBuilder, LlmSupervisorResponseComposeService, SupervisorResponseComposeService}
@@ -78,9 +79,10 @@ src/main/java/com/example/springsupervisorai
 │   ├── agent/result/DownstreamResultInterpreter
 │   ├── agent/runtime/{DefaultSupervisorLlmRuntime, ReflectionSupervisorChatGateway, SupervisorChatGateway, SupervisorLlmRuntime}
 │   ├── agent/security/PromptInjectionGuard
-│   ├── agent/store/{ConversationStore, GraphCheckpointStore, InMemorySupervisorReviewStore, InMemorySupervisorSwarmStateStore, RedisSupervisorReviewStore, RedisSupervisorSwarmStateStore, SupervisorReviewStore, SupervisorSwarmStateStore, redis/RedisConversationStore, redis/RedisGraphCheckpointStore}
+│   ├── agent/store/{ConversationStore, GraphCheckpointStore, InMemorySupervisorReviewStore, InMemorySupervisorSwarmStateStore, RedisSupervisorReviewStore, RedisSupervisorSwarmStateStore, SupervisorReviewStore, SupervisorSwarmStateStore, redis/RedisConversationStore, redis/RedisGraphCheckpointStore, redis/RedisStoreSupport}
 │   ├── agent/swarm/{DefaultSupervisorSwarmCoordinator, SupervisorSwarmCoordinator, SwarmStateVersionConflictException}
-│   └── prompt/SupervisorPromptRenderService
+│   ├── prompt/SupervisorPromptRenderService
+│   └── resilience/CircuitBreakerUtils
 ```
 
 ## Current Core Contracts

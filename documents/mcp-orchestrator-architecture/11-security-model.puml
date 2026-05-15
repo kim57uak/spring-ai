@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 11. Security Model (Current Source)
+title 11. Security Model (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam componentStyle rectangle

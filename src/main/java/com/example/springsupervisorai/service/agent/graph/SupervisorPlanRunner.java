@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Executes a routing plan batch with the graph's resilience rules.
+ * 그래프의 복원력 규칙으로 라우팅 계획 배치를 실행한다.
  */
 @Component
 public class SupervisorPlanRunner {

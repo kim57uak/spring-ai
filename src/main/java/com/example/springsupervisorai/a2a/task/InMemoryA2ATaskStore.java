@@ -139,11 +139,16 @@ public class InMemoryA2ATaskStore implements A2ATaskStore {
      *
      * @param taskId task 식별자
      * @param newMessage 새로운 요청 메시지
-     * @return 갱신된 스냅샷(미존재 시 empty)
+     * @return 갱신된 스냅샷(optional)
      */
     @Override
     public Optional<A2aTaskSnapshot> updateTaskMessage(String taskId, String newMessage) {
         return update(taskId, old -> A2aTaskSnapshotTransitions.updateTaskMessage(old, newMessage, Instant.now()));
+    }
+
+    @Override
+    public void clearSession(String sessionId) {
+        tasks.values().removeIf(t -> sessionId.equals(t.sessionId()));
     }
 
     /**

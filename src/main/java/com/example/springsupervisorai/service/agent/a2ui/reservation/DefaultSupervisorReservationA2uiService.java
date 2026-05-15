@@ -12,7 +12,11 @@ import org.springframework.stereotype.Component;
 import java.util.Optional;
 
 /**
- * Owns reservation-domain A2UI screens and keeps reservation input assembly outside product templates.
+ * 예약 도메인 A2UI 화면을 소유하며 예약 입력 조립을 제품 템플릿 외부에서 관리한다.
+ * <p>
+ * downstream 결과나 사용자 메시지에서 직접 예약 시드 데이터를 추출하여
+ * PACKAGE_RESERVATION_FORM 뷰를 지원한다. 예약 라우팅 계획은 있지만
+ * 결과 데이터가 아직 없을 때는 빈 시드로 폴백한다.
  */
 @Component
 public class DefaultSupervisorReservationA2uiService implements SupervisorA2uiDomainService {
@@ -39,6 +43,7 @@ public class DefaultSupervisorReservationA2uiService implements SupervisorA2uiDo
         if (context == null) {
             return false;
         }
+        // 예약 라우팅 계획 또는 관련 downstream 결과가 있는 경우 지원
         return hasReservationRoutingPlan(context)
                 || (context.getResults() != null && context.getResults().stream().anyMatch(this::isSupportedResult));
     }
@@ -71,6 +76,7 @@ public class DefaultSupervisorReservationA2uiService implements SupervisorA2uiDo
         if (context == null) {
             return null;
         }
+        // 각 지원되는 downstream 결과에서 추출 시도
         if (context.getResults() != null) {
             for (DownstreamCallResult result : context.getResults()) {
                 if (!isSupportedResult(result)) {
@@ -82,10 +88,12 @@ public class DefaultSupervisorReservationA2uiService implements SupervisorA2uiDo
                 }
             }
         }
+        // 사용자 메시지에서만 추출하는 것으로 폴백
         Optional<ReservationPresentationModel> extracted = payloadExtractor.extract(null, context.getUserMessage());
         if (extracted.isPresent()) {
             return extracted.get();
         }
+        // 라우팅 계획이 있으면 빈 시드 반환 (데이터는 나중에 도착)
         if (hasReservationRoutingPlan(context)) {
             return new ReservationPresentationModel("", "", "", "1");
         }

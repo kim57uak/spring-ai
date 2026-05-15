@@ -9,10 +9,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A2UI event and message support utilities.
+ * A2UI 이벤트 및 메시지 지원 유틸리티.
  * <p>
- * Provides JSONL serialization for A2UI protocol messages and
- * wrap/unwrap helpers for event stream framing.
+ * A2UI 프로토콜 메시지의 JSONL 직렬화와
+ * 이벤트 스트림 프레이밍을 위한 wrap/unwrap 헬퍼를 제공한다.
  */
 public final class SupervisorA2uiSupport {
 
@@ -28,9 +28,9 @@ public final class SupervisorA2uiSupport {
     }
 
     /**
-     * Builds an A2UI v0.8 standard envelope.
+     * A2UI v0.8 표준 봉투를 빌드한다.
      * <p>
-     * Format:
+     * 형식:
      * <pre>
      * {
      *   "version": "1.0",
@@ -50,11 +50,11 @@ public final class SupervisorA2uiSupport {
      * }
      * </pre>
      *
-     * @param textMessage      human-readable summary text
-     * @param catalogId        A2UI catalog identifier
-     * @param protocolMessages list of A2UI protocol messages (surfaceUpdate, dataModelUpdate, beginRendering, etc.)
-     * @param meta             metadata map with sessionId, taskId, sourceAgent, schemaValidated, missingFields
-     * @return envelope map
+     * @param textMessage      사람이 읽을 수 있는 요약 텍스트
+     * @param catalogId        A2UI 카탈로그 식별자
+     * @param protocolMessages A2UI 프로토콜 메시지 목록 (surfaceUpdate, dataModelUpdate, beginRendering 등)
+     * @param meta             sessionId, taskId, sourceAgent, schemaValidated, missingFields를 포함한 메타데이터 맵
+     * @return 봉투 맵
      */
     public static Map<String, Object> buildEnvelope(
             String textMessage,
@@ -84,14 +84,14 @@ public final class SupervisorA2uiSupport {
     }
 
     /**
-     * Creates meta block for A2UI envelope.
+     * A2UI 봉투용 메타 블록을 생성한다.
      *
-     * @param sessionId        session identifier
-     * @param taskId           task identifier
-     * @param sourceAgent      source agent name
-     * @param schemaValidated  whether schema validation was performed
-     * @param missingFields    list of missing field names (may be null)
-     * @return meta map
+     * @param sessionId        세션 식별자
+     * @param taskId           작업 식별자
+     * @param sourceAgent      소스 에이전트 이름
+     * @param schemaValidated  스키마 검증 수행 여부
+     * @param missingFields    누락된 필드명 목록 (null 가능)
+     * @return 메타 맵
      */
     public static Map<String, Object> buildMeta(
             String sessionId,
@@ -118,15 +118,15 @@ public final class SupervisorA2uiSupport {
     }
 
     /**
-     * Wraps a payload string with the A2UI event prefix for SSE framing.
+     * SSE 프레이밍을 위해 페이로드 문자열을 A2UI 이벤트 프리픽스로 감싼다.
      */
     public static String wrap(String payload) {
         return EVENT_PREFIX + (payload == null ? "" : payload);
     }
 
     /**
-     * Marks the given protocol payload array as an A2UI event string.
-     * Alias for wrap, used for semantic clarity.
+     * 주어진 프로토콜 페이로드 배열을 A2UI 이벤트 문자열로 표시한다.
+     * 의미적 명확성을 위한 wrap의 별칭.
      */
     public static String markA2ui(String payload) {
         return wrap(payload);
@@ -144,8 +144,8 @@ public final class SupervisorA2uiSupport {
     }
 
     /**
-     * Serializes a list of A2UI protocol messages (Map) into JSONL format.
-     * Each map is serialized as a single JSON line.
+     * A2UI 프로토콜 메시지(Map) 목록을 JSONL 형식으로 직렬화한다.
+     * 각 맵은 단일 JSON 라인으로 직렬화된다.
      */
     public static String toJsonl(List<Map<String, Object>> protocolMessages) {
         if (protocolMessages == null || protocolMessages.isEmpty()) {
@@ -165,7 +165,7 @@ public final class SupervisorA2uiSupport {
     }
 
     /**
-     * Deserializes a JSONL string back into a list of protocol message maps.
+     * JSONL 문자열을 프로토콜 메시지 맵 목록으로 역직렬화한다.
      */
     public static List<Map<String, Object>> fromJsonl(String jsonl) {
         if (jsonl == null || jsonl.isBlank()) {
@@ -188,14 +188,14 @@ public final class SupervisorA2uiSupport {
     }
 
     /**
-     * Wraps a list of A2UI protocol messages into an assistant-role content block
-     * that embeds the protocol payload in JSONL format alongside the human-readable message.
-     * The format is compatible with Spring AI API message representation.
+     * A2UI 프로토콜 메시지 목록을 사람이 읽을 수 있는 메시지와 함께 JSONL 형식의
+     * 프로토콜 페이로드를 포함하는 assistant 역할 콘텐츠 블록으로 감싼다.
+     * 형식은 Spring AI API 메시지 표현과 호환된다.
      *
-     * @param textMessage      the human-readable assistant message text
-     * @param protocolMessages the A2UI protocol messages (surfaceUpdate, dataModelUpdate, beginRendering, etc.)
-     * @param objectMapper     ObjectMapper for serialization
-     * @return a Spring AI API-compatible message map with role, content, and protocol payload
+     * @param textMessage      사람이 읽을 수 있는 assistant 메시지 텍스트
+     * @param protocolMessages A2UI 프로토콜 메시지 (surfaceUpdate, dataModelUpdate, beginRendering 등)
+     * @param objectMapper     직렬화용 ObjectMapper
+     * @return 역할, 콘텐츠, 프로토콜 페이로드를 포함한 Spring AI API 호환 메시지 맵
      */
     public static Map<String, Object> toAssistantMessage(
             String textMessage,
@@ -212,8 +212,8 @@ public final class SupervisorA2uiSupport {
     }
 
     /**
-     * Converts an assistant message map (as produced by toAssistantMessage) back to its
-     * protocol payload JSONL and text parts.
+     * assistant 메시지 맵(toAssistantMessage가 생성한)을
+     * 프로토콜 페이로드 JSONL과 텍스트 부분으로 다시 변환한다.
      */
     public record A2uiAssistantParts(String text, String jsonlPayload) {
     }

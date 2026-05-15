@@ -6,7 +6,7 @@ import com.example.springsupervisorai.model.SupervisorProgressEvent;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 
 /**
- * Serializes structured supervisor output events into the legacy string stream contract.
+ * 구조화된 supervisor 출력 이벤트를 레거시 문자열 스트림 계약으로 직렬화한다.
  */
 public final class SupervisorOutputEventSupport {
 

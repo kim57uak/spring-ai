@@ -4,6 +4,13 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * HITL 리뷰 상태 전이를 관리하는 불변 상태 머신.
+ * <p>
+ * {@link HitlReviewStatus} 간 유효 전이 규칙을 중앙에 정의하고,
+ * 실행 시점에 유효성을 검증한다. WAITING 상태에서만 APPROVED / CANCELED / REVISED
+ * 전이가 허용되며, 터미널 상태에서는 자기 자신으로만 전이 가능하다.
+ */
 public final class HitlStateMachine {
 
     private static final Map<HitlReviewStatus, Set<HitlReviewStatus>> TRANSITIONS = new EnumMap<>(HitlReviewStatus.class);

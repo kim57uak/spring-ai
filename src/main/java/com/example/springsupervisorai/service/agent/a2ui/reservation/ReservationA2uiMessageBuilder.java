@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds a standard-catalog reservation creation form.
+ * 표준 카탈로그 예약 생성 폼을 빌드한다.
  */
 @Component
 public class ReservationA2uiMessageBuilder {

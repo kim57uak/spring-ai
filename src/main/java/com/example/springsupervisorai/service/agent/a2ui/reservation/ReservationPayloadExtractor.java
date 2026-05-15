@@ -11,7 +11,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Extracts reservation-form seed data from reservation/product payloads or user message.
+ * 예약/제품 페이로드 또는 사용자 메시지에서 예약 폼 시드 데이터를 추출한다.
  */
 @Component
 public class ReservationPayloadExtractor {

@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.Map;
 
+/**
+ * A2A message/send 요청 파라미터.
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record MessageSendParams(
         Message message,

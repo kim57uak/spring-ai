@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Assembles normalized product data into A2UI standard catalog messages.
+ * 정규화된 제품 데이터를 A2UI 표준 카탈로그 메시지로 조립한다.
  */
 @Component
 public class ProductA2uiMessageBuilder {

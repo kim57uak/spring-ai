@@ -7,6 +7,8 @@ skinparam componentStyle rectangle
 package "entry" {
   [SupervisorA2AController\n/a2a/supervisor] as Controller
   [SupervisorA2ARequestValidator] as Validator
+  [HitlReviewController\n/a2a/supervisor/tasks/review] as HitlReviewController
+  [CircuitBreakerController\n/a2a/circuit-breaker] as CircuitBreakerController
 }
 
 package "application services" {

@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 05. Supervisor Agent LangGraph4J Orchestration
+title 05. Supervisor Agent LangGraph4J Orchestration (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam linetype ortho

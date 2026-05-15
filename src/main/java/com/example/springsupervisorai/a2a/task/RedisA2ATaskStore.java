@@ -29,23 +29,23 @@ import java.util.function.Function;
 public class RedisA2ATaskStore implements A2ATaskStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisA2ATaskStore.class);
-    // 요청하신 운영 기준: task 데이터 TTL 30분 고정
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
-    // 단건 조회(get)는 taskId 기반 계약이라 본문 키는 taskId를 사용한다.
     private static final String TASK_KEY_PREFIX = RedisKeyspace.SUPERVISOR_TASK_PREFIX;
-    // 목록(list)은 최신순 조회를 위해 전역 sorted-set 인덱스를 사용한다.
     private static final String TASK_INDEX_KEY = RedisKeyspace.SUPERVISOR_TASK_INDEX_KEY;
+    private static final String SESSION_TASKS_PREFIX = RedisKeyspace.SUPERVISOR_TASK_SESSION_PREFIX;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final java.time.Duration ttl;
 
     /**
      * @param redisTemplate Redis 접근 템플릿
      * @param objectMapper  스냅샷 직렬화 도구
+     * @param ttlPolicy     TTL 정책
      */
-    public RedisA2ATaskStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public RedisA2ATaskStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.ttl = ttlPolicy.getStandard();
     }
 
     /**
@@ -169,14 +169,17 @@ public class RedisA2ATaskStore implements A2ATaskStore {
     }
 
     /**
-     * task 본문과 전역 인덱스를 함께 저장한다.
+     * task 본문, 전역 인덱스, 세션 인덱스를 함께 저장한다.
      */
     private void save(A2aTaskSnapshot snapshot) {
         try {
             String key = taskKey(snapshot.taskId());
-            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(snapshot), TTL);
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(snapshot), ttl);
             redisTemplate.opsForZSet().add(TASK_INDEX_KEY, snapshot.taskId(), snapshot.updatedAt().toEpochMilli());
-            redisTemplate.expire(TASK_INDEX_KEY, TTL);
+            redisTemplate.expire(TASK_INDEX_KEY, ttl);
+            String sessionKey = sessionTasksKey(snapshot.sessionId());
+            redisTemplate.opsForSet().add(sessionKey, snapshot.taskId());
+            redisTemplate.expire(sessionKey, ttl);
         } catch (JsonProcessingException ex) {
             logger.error("Failed to serialize supervisor task snapshot taskId={}", snapshot.taskId(), ex);
             throw new IllegalStateException("Supervisor task serialization failed", ex);
@@ -199,7 +202,39 @@ public class RedisA2ATaskStore implements A2ATaskStore {
         }
     }
 
+    @Override
+    public void clearSession(String sessionId) {
+        String sessionKey = sessionTasksKey(sessionId);
+        Set<String> indexedTaskIds = redisTemplate.opsForSet().members(sessionKey);
+        // Delete tasks found via session index (fast path)
+        if (indexedTaskIds != null) {
+            for (String taskId : indexedTaskIds) {
+                redisTemplate.delete(taskKey(taskId));
+                redisTemplate.opsForZSet().remove(TASK_INDEX_KEY, taskId);
+            }
+        }
+        // Scan global index for tasks of this session not yet in session index
+        // (handles data created before session index was introduced)
+        Set<String> allTaskIds = redisTemplate.opsForZSet().range(TASK_INDEX_KEY, 0, -1);
+        if (allTaskIds != null) {
+            for (String taskId : allTaskIds) {
+                if (indexedTaskIds != null && indexedTaskIds.contains(taskId)) continue;
+                load(taskId).ifPresent(snapshot -> {
+                    if (sessionId.equals(snapshot.sessionId())) {
+                        redisTemplate.delete(taskKey(taskId));
+                        redisTemplate.opsForZSet().remove(TASK_INDEX_KEY, taskId);
+                    }
+                });
+            }
+        }
+        redisTemplate.delete(sessionKey);
+    }
+
     private String taskKey(String taskId) {
         return TASK_KEY_PREFIX + taskId;
+    }
+
+    private String sessionTasksKey(String sessionId) {
+        return SESSION_TASKS_PREFIX + sessionId;
     }
 }

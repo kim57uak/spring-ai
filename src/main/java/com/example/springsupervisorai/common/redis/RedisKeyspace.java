@@ -13,6 +13,7 @@ public final class RedisKeyspace {
     public static final String SUPERVISOR_CHECKPOINT_PREFIX = PACKAGE_PREFIX + "supervisor:ckpt:";
     public static final String SUPERVISOR_TASK_PREFIX = PACKAGE_PREFIX + "supervisor:task:";
     public static final String SUPERVISOR_TASK_INDEX_KEY = PACKAGE_PREFIX + "supervisor:tasks:index";
+    public static final String SUPERVISOR_TASK_SESSION_PREFIX = PACKAGE_PREFIX + "supervisor:task:session:";
     public static final String SUPERVISOR_REVIEW_PREFIX = PACKAGE_PREFIX + "supervisor:review:";
     public static final String SWARM_STATE_PREFIX = PACKAGE_PREFIX + "swarm:state:";
     public static final String SWARM_SESSION_INDEX_PREFIX = PACKAGE_PREFIX + "swarm:session:";

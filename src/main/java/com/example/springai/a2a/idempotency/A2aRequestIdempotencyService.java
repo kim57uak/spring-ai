@@ -30,9 +30,6 @@ import java.util.function.Supplier;
 public class A2aRequestIdempotencyService {
 
     private static final Logger logger = LoggerFactory.getLogger(A2aRequestIdempotencyService.class);
-    // 요청하신 운영 기준: idempotency 응답/락 TTL 30분 통일
-    private static final Duration COMPLETED_TTL = RedisTtlPolicy.STANDARD;
-    private static final Duration LOCK_TTL = RedisTtlPolicy.STANDARD;
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(130);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(120);
     private static final String RESPONSE_PREFIX = RedisKeyspace.IDEMPOTENCY_A2A_RESPONSE_PREFIX;
@@ -42,22 +39,27 @@ public class A2aRequestIdempotencyService {
     private final ConcurrentMap<String, CachedResponse> localFallback = new ConcurrentHashMap<>();
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Duration completedTtl;
+    private final Duration lockTtl;
 
     /**
      * 테스트/로컬 호환용 생성자.
      */
     public A2aRequestIdempotencyService() {
-        this((StringRedisTemplate) null, new ObjectMapper());
+        this((StringRedisTemplate) null, new ObjectMapper(), null);
     }
 
     @Autowired
-    public A2aRequestIdempotencyService(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper) {
-        this(redisTemplateProvider.getIfAvailable(), objectMapper);
+    public A2aRequestIdempotencyService(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
+        this(redisTemplateProvider.getIfAvailable(), objectMapper, ttlPolicy);
     }
 
-    private A2aRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    private A2aRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
+        Duration ttl = ttlPolicy != null ? ttlPolicy.getStandard() : Duration.ofMinutes(30);
+        this.completedTtl = ttl;
+        this.lockTtl = ttl;
     }
 
     /**
@@ -145,12 +147,12 @@ public class A2aRequestIdempotencyService {
     private JsonRpcResponse runAsOwner(String key, Supplier<JsonRpcResponse> action) {
         if (redisTemplate == null) {
             JsonRpcResponse response = action.get();
-            localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+            localFallback.put(key, new CachedResponse(response, Instant.now().plus(completedTtl)));
             return response;
         }
 
         String lockKey = lockKey(key);
-        Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", lockTtl);
         if (Boolean.TRUE.equals(lockAcquired)) {
             try {
                 JsonRpcResponse response = action.get();
@@ -225,12 +227,12 @@ public class A2aRequestIdempotencyService {
     }
 
     private void storeCached(String key, JsonRpcResponse response) {
-        localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+        localFallback.put(key, new CachedResponse(response, Instant.now().plus(completedTtl)));
         if (redisTemplate == null) {
             return;
         }
         try {
-            redisTemplate.opsForValue().set(responseKey(key), objectMapper.writeValueAsString(response), COMPLETED_TTL);
+            redisTemplate.opsForValue().set(responseKey(key), objectMapper.writeValueAsString(response), completedTtl);
         } catch (Exception ex) {
             logger.warn("A2A idempotency redis write failed key={}: {}", key, ex.getMessage());
         }

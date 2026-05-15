@@ -5,6 +5,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A2A task. id, status, history, artifacts를 포함한다.
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record Task(
         String id,

@@ -1,5 +1,5 @@
 @startuml
-title 06. Supervisor A2A Request Sequence (Current Source, 2026-04-18)
+title 06. Supervisor A2A Request Sequence (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam sequenceMessageAlign center

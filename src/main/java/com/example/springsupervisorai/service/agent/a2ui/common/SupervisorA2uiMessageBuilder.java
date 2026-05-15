@@ -8,12 +8,12 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Builds Spring AI API-compatible assistant messages for A2UI protocol payloads.
+ * A2UI 프로토콜 페이로드에 대한 Spring AI API 호환 assistant 메시지를 빌드한다.
  * <p>
- * Converts raw A2UI protocol message lists (surfaceUpdate, dataModelUpdate, beginRendering, etc.)
- * into a structured assistant message that embeds the protocol payload in JSONL format.
- * This enables the conversation history to track A2UI interactions as first-class
- * Spring AI API messages, supporting both human-readable text and structured protocol data.
+ * 원시 A2UI 프로토콜 메시지 목록(surfaceUpdate, dataModelUpdate, beginRendering 등)을
+ * 프로토콜 페이로드를 JSONL 형식으로 포함하는 구조화된 assistant 메시지로 변환한다.
+ * 이를 통해 대화 히스토리는 A2UI 상호작용을 일급 Spring AI API 메시지로 추적할 수 있으며,
+ * 사람이 읽을 수 있는 텍스트와 구조화된 프로토콜 데이터를 모두 지원한다.
  */
 public final class SupervisorA2uiMessageBuilder {
 
@@ -27,21 +27,21 @@ public final class SupervisorA2uiMessageBuilder {
     }
 
     /**
-     * Builds a structured assistant message from A2UI protocol messages.
+     * A2UI 프로토콜 메시지로부터 구조화된 assistant 메시지를 빌드한다.
      * <p>
-     * The result contains the human-readable text alongside the protocol payload
-     * as a separate field, suitable for both SSE transport and conversation storage.
+     * 결과는 사람이 읽을 수 있는 텍스트와 프로토콜 페이로드를 별도 필드로 포함하며,
+     * SSE 전송 및 대화 저장소 모두에 적합하다.
      *
-     * @param textMessage      the human-readable assistant message text
-     * @param protocolMessages the A2UI protocol messages built by domain-specific builders
-     * @return a message map compatible with Spring AI API message structure
+     * @param textMessage      사람이 읽을 수 있는 assistant 메시지 텍스트
+     * @param protocolMessages 도메인별 빌더가 생성한 A2UI 프로토콜 메시지
+     * @return Spring AI API 메시지 구조와 호환되는 메시지 맵
      */
     public Map<String, Object> build(String textMessage, List<Map<String, Object>> protocolMessages) {
         return SupervisorA2uiSupport.toAssistantMessage(textMessage, protocolMessages, objectMapper);
     }
 
     /**
-     * Serializes the assistant message to a JSON string.
+     * assistant 메시지를 JSON 문자열로 직렬화한다.
      */
     public String serialize(Map<String, Object> assistantMessage) {
         try {
@@ -52,7 +52,7 @@ public final class SupervisorA2uiMessageBuilder {
     }
 
     /**
-     * Deserializes a JSON string back into a message map.
+     * JSON 문자열을 메시지 맵으로 역직렬화한다.
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> deserialize(String json) {
@@ -64,7 +64,7 @@ public final class SupervisorA2uiMessageBuilder {
     }
 
     /**
-     * Extracts the text content from a serialized A2UI assistant message.
+     * 직렬화된 A2UI assistant 메시지에서 텍스트 내용을 추출한다.
      */
     public Optional<String> extractText(String serializedMessage) {
         try {
@@ -76,7 +76,7 @@ public final class SupervisorA2uiMessageBuilder {
     }
 
     /**
-     * Extracts the protocol payload (JSONL) from a serialized A2UI assistant message.
+     * 직렬화된 A2UI assistant 메시지에서 프로토콜 페이로드(JSONL)를 추출한다.
      */
     public Optional<String> extractProtocolJsonl(String serializedMessage) {
         try {
@@ -93,10 +93,10 @@ public final class SupervisorA2uiMessageBuilder {
     }
 
     /**
-     * Converts the Spring AI API-compatible message to legacy storage format
-     * for backward compatibility with the existing conversation store.
+     * Spring AI API 호환 메시지를 기존 대화 저장소와의 하위 호환성을 위해
+     * 레거시 저장소 형식으로 변환한다.
      * <p>
-     * Format: {@code a2ui_assistant: <text message>}
+     * 형식: {@code a2ui_assistant: <text message>}
      */
     public String toLegacyStorage(Map<String, Object> assistantMessage) {
         String text = (String) assistantMessage.getOrDefault("content", "");
@@ -104,14 +104,14 @@ public final class SupervisorA2uiMessageBuilder {
     }
 
     /**
-     * Checks if a legacy storage entry is an A2UI assistant message.
+     * 레거시 저장소 항목이 A2UI assistant 메시지인지 확인한다.
      */
     public static boolean isLegacyA2uiEntry(String entry) {
         return entry != null && entry.startsWith(LEGACY_STORAGE_PREFIX);
     }
 
     /**
-     * Extracts text content from a legacy storage A2UI entry.
+     * 레거시 저장소 A2UI 항목에서 텍스트 내용을 추출한다.
      */
     public static String extractLegacyText(String entry) {
         if (!isLegacyA2uiEntry(entry)) {
@@ -121,33 +121,33 @@ public final class SupervisorA2uiMessageBuilder {
     }
 
     /**
-     * Converts a list of A2UI protocol messages and a text message into
-     * a legacy-style storage entry (for systems that don't support JSON storage).
+     * A2UI 프로토콜 메시지 목록과 텍스트 메시지를 레거시 스타일 저장소 항목으로 변환한다
+     * (JSON 저장소를 지원하지 않는 시스템용).
      *
-     * @param textMessage      the human-readable text
-     * @param protocolMessages the A2UI protocol messages
-     * @return legacy format string: "a2ui_assistant: <text>"
+     * @param textMessage      사람이 읽을 수 있는 텍스트
+     * @param protocolMessages A2UI 프로토콜 메시지
+     * @return 레거시 형식 문자열: "a2ui_assistant: <text>"
      */
     public String toLegacyStorage(String textMessage, List<Map<String, Object>> protocolMessages) {
         return toLegacyStorage(build(textMessage, protocolMessages));
     }
 
     /**
-     * Serializes a list of A2UI protocol messages directly to JSONL.
+     * A2UI 프로토콜 메시지 목록을 JSONL로 직접 직렬화한다.
      */
     public String toJsonl(List<Map<String, Object>> protocolMessages) {
         return SupervisorA2uiSupport.toJsonl(protocolMessages);
     }
 
     /**
-     * Deserializes JSONL to protocol messages.
+     * JSONL을 프로토콜 메시지로 역직렬화한다.
      */
     public List<Map<String, Object>> fromJsonl(String jsonl) {
         return SupervisorA2uiSupport.fromJsonl(jsonl);
     }
 
     /**
-     * Creates a map with role marker suitable for serialization via Spring AI ChatClient.
+     * Spring AI ChatClient를 통한 직렬화에 적합한 역할 마커가 있는 맵을 생성한다.
      */
     public Map<String, Object> createToolCallResultMessage(String toolName, String toolResult) {
         Map<String, Object> msg = new LinkedHashMap<>();

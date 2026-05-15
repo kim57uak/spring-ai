@@ -6,6 +6,13 @@ import com.example.springsupervisorai.service.agent.a2ui.common.A2uiComposePromp
 import com.example.springsupervisorai.service.agent.result.DownstreamResultInterpreter;
 import org.springframework.stereotype.Component;
 
+/**
+ * 예약 도메인용 A2UI compose 프롬프트 제공자.
+ * <p>
+ * 컨텍스트에 성공적인 제품 또는 예약 결과가 있거나 "reservation" 에이전트를
+ * 대상으로 하는 라우팅 계획이 있을 때 활성화된다.
+ * 단일 템플릿 뷰(PACKAGE_RESERVATION_FORM)를 제공한다.
+ */
 @Component
 public class ReservationA2uiComposePromptProvider implements A2uiComposePromptProvider {
 
@@ -14,6 +21,7 @@ public class ReservationA2uiComposePromptProvider implements A2uiComposePromptPr
         if (context == null) {
             return false;
         }
+        // 지원되는 downstream 결과 또는 예약 라우팅 계획이 있는지 확인
         boolean hasSupportedResult = context.getResults() != null
                 && context.getResults().stream().anyMatch(this::isSupportedResult);
         boolean hasReservationPlan = context.getRoutingPlans() != null

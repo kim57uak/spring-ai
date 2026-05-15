@@ -5,6 +5,7 @@ import com.example.springsupervisorai.model.SupervisorPlanningContext;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiMessageBuilder;
 import com.example.springsupervisorai.service.agent.store.ConversationStore;
 import com.example.springsupervisorai.service.agent.store.GraphCheckpointStore;
+import com.example.springsupervisorai.service.agent.store.SupervisorSwarmStateStore;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -19,15 +20,18 @@ public class SupervisorExecutionPersistenceService {
 
     private final ConversationStore conversationStore;
     private final GraphCheckpointStore checkpointStore;
+    private final SupervisorSwarmStateStore swarmStateStore;
     private final SupervisorA2aLifecycleService lifecycleService;
 
     public SupervisorExecutionPersistenceService(
             ConversationStore conversationStore,
             GraphCheckpointStore checkpointStore,
+            SupervisorSwarmStateStore swarmStateStore,
             SupervisorA2aLifecycleService lifecycleService
     ) {
         this.conversationStore = conversationStore;
         this.checkpointStore = checkpointStore;
+        this.swarmStateStore = swarmStateStore;
         this.lifecycleService = lifecycleService;
     }
 
@@ -95,5 +99,7 @@ public class SupervisorExecutionPersistenceService {
     public void clearSession(String sessionId) {
         conversationStore.clear(sessionId);
         checkpointStore.clear(sessionId);
+        swarmStateStore.clearSession(sessionId);
+        lifecycleService.clearSession(sessionId);
     }
 }

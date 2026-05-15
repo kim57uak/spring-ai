@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,23 +31,22 @@ import java.util.function.Function;
 public class RedisA2ATaskStore implements A2ATaskStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisA2ATaskStore.class);
-    // 요청하신 운영 기준: task 데이터 TTL 30분 고정
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
-    // 단건 조회(get)는 taskId 기반이므로 본문 키는 taskId를 사용한다.
     private static final String TASK_KEY_PREFIX = RedisKeyspace.AGENT_TASK_PREFIX;
-    // 목록(list)은 scope 단위 조회이므로 scope 인덱스를 별도로 유지한다.
     private static final String SCOPE_INDEX_PREFIX = RedisKeyspace.AGENT_TASK_SCOPE_INDEX_PREFIX;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Duration ttl;
 
     /**
      * @param redisTemplate Redis 접근 템플릿
      * @param objectMapper  스냅샷 직렬화 도구
+     * @param ttlPolicy     TTL 정책
      */
-    public RedisA2ATaskStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public RedisA2ATaskStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.ttl = ttlPolicy.getStandard();
     }
 
     /**
@@ -175,9 +175,9 @@ public class RedisA2ATaskStore implements A2ATaskStore {
     private void save(A2aTaskSnapshot snapshot) {
         try {
             String key = taskKey(snapshot.taskId());
-            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(snapshot), TTL);
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(snapshot), ttl);
             redisTemplate.opsForZSet().add(scopeIndexKey(snapshot.scopeName()), snapshot.taskId(), snapshot.updatedAt().toEpochMilli());
-            redisTemplate.expire(scopeIndexKey(snapshot.scopeName()), TTL);
+            redisTemplate.expire(scopeIndexKey(snapshot.scopeName()), ttl);
         } catch (JsonProcessingException ex) {
             logger.error("Failed to serialize A2A task snapshot taskId={}", snapshot.taskId(), ex);
             throw new IllegalStateException("A2A task serialization failed", ex);

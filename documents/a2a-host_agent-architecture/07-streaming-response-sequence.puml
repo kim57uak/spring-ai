@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 07. Supervisor Agent Streaming Response Sequence
+title 07. Supervisor Agent Streaming Response Sequence (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 

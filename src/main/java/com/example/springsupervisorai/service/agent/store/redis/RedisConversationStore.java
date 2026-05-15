@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -29,21 +30,23 @@ public class RedisConversationStore implements ConversationStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisConversationStore.class);
     private static final String KEY_PREFIX = RedisKeyspace.SUPERVISOR_CONVERSATION_PREFIX;
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final RedisStoreSupport storeSupport;
+    private final Duration ttl;
     private final Map<String, List<String>> localFallback = new ConcurrentHashMap<>();
 
     /**
      * @param redisTemplateProvider Redis 템플릿 제공자
      * @param objectMapper          JSON 직렬화/역직렬화 도구
+     * @param ttlPolicy             TTL 정책
      */
-    public RedisConversationStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper) {
+    public RedisConversationStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplateProvider.getIfAvailable();
         this.objectMapper = objectMapper;
         this.storeSupport = new RedisStoreSupport(logger);
+        this.ttl = ttlPolicy.getStandard();
     }
 
     /**
@@ -90,11 +93,11 @@ public class RedisConversationStore implements ConversationStore {
                     public Void execute(RedisOperations ops) throws DataAccessException {
                         ops.watch(redisKey);
                         ops.multi();
-                        ops.opsForValue().set(redisKey, payload, TTL);
-                        List<Object> exec = ops.exec();
-                        if (exec == null) {
-                            logger.warn("Concurrent save conflict for session {}; falling back to direct set", sessionId);
-                            ops.opsForValue().set(redisKey, payload, TTL);
+ops.opsForValue().set(redisKey, payload, ttl);
+                    List<Object> exec = ops.exec();
+                    if (exec == null) {
+                        logger.warn("Concurrent save conflict for session {}; falling back to direct set", sessionId);
+                        ops.opsForValue().set(redisKey, payload, ttl);
                         }
                         return null;
                     }

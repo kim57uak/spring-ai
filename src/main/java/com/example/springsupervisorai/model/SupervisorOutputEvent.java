@@ -1,7 +1,7 @@
 package com.example.springsupervisorai.model;
 
 /**
- * Structured output event emitted by the supervisor pipeline before transport serialization.
+ * Supervisor pipeline이 전송 직렬화 전에 방출하는 구조화된 출력 이벤트.
  */
 public record SupervisorOutputEvent(
         SupervisorOutputEventType type,

@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 02. Supervisor Agent Package Policy (com.example.springsupervisorai)
+title 02. Supervisor Agent Package Policy (com.example.springsupervisorai, synced 2026-05-14)
 
 skinparam shadowing false
 skinparam packageStyle rectangle
@@ -15,6 +15,8 @@ package "com.example.springsupervisorai" {
   package "controller" {
     class SupervisorA2AController
     class SupervisorA2ARequestValidator
+    class HitlReviewController
+    class CircuitBreakerController
   }
 
   package "service" {
@@ -26,6 +28,7 @@ package "com.example.springsupervisorai" {
     class SupervisorStreamProgressService
     class SupervisorTaskFacade
     class HitlGateService
+    class SupervisorPreHitlA2uiService
     class SupervisorProgressPublisher
     class SupervisorExecutionPersistenceService
     class SupervisorExecutionStateLoader
@@ -60,11 +63,44 @@ package "com.example.springsupervisorai" {
       class ComposePromptBuilder
       class A2uiDecisionParser
     }
+    package "result" {
+      class DownstreamResultInterpreter
+    }
+    package "security" {
+      class PromptInjectionGuard
+    }
+    package "a2ui.common" {
+      interface A2uiComposePromptProvider
+      class A2uiComposePromptProviderRegistry
+      class A2uiTemplateView
+      interface SupervisorA2uiService
+      class CompositeSupervisorA2uiService
+      class SupervisorA2uiDomainService
+      class SupervisorA2uiMessageBuilder
+      class SupervisorA2uiSupport
+    }
     package "a2ui.product" {
+      class AbstractProductA2uiTemplate
+      class BookingProductA2uiTemplate
+      class CreationFormProductA2uiTemplate
+      class PricingProductA2uiTemplate
+      class SummaryProductA2uiTemplate
+      class TimelineProductA2uiTemplate
+      class ProductA2uiTemplate
+      class ProductA2uiTemplateRegistry
       class DefaultSupervisorProductInfoA2uiService
       class ProductPayloadExtractor
       class ProductA2uiDataMapper
       class ProductA2uiMessageBuilder
+      class ProductA2uiComposePromptProvider
+      class ProductPresentationModel
+    }
+    package "a2ui.reservation" {
+      class DefaultSupervisorReservationA2uiService
+      class ReservationA2uiComposePromptProvider
+      class ReservationA2uiMessageBuilder
+      class ReservationPayloadExtractor
+      class ReservationPresentationModel
     }
     package "graph" {
       interface SupervisorStateGraphFactory
@@ -84,10 +120,6 @@ package "com.example.springsupervisorai" {
       interface SupervisorSwarmCoordinator
       class DefaultSupervisorSwarmCoordinator
     }
-    package "a2ui" {
-      interface SupervisorA2uiService
-      interface A2uiComposePromptProvider
-    }
     package "runtime" {
       interface SupervisorLlmRuntime
       class DefaultSupervisorLlmRuntime
@@ -99,21 +131,51 @@ package "com.example.springsupervisorai" {
       interface GraphCheckpointStore
       interface SupervisorSwarmStateStore
       interface SupervisorReviewStore
+
+      package "redis" {
+        class RedisConversationStore
+        class RedisGraphCheckpointStore
+        class RedisSupervisorSwarmStateStore
+        class RedisSupervisorReviewStore
+      }
     }
+  }
+
+  package "service.prompt" {
+    class SupervisorPromptRenderService
+  }
+
+  package "service.resilience" {
+    class CircuitBreakerUtils
   }
 
   package "a2a" {
     class A2AJsonRpcClient
     class A2ARequestMapper
     class A2AResponseMapper
-  }
 
-  package "a2a.lifecycle" {
-    class SupervisorA2aLifecycleService
-  }
+    package "dto" {
+      class TaskReviewView
+      class TaskReviewDecisionParams
+      class TaskReviewGetParams
+    }
 
-  package "a2a.idempotency" {
-    class SupervisorRequestIdempotencyService
+    package "task" {
+      interface A2ATaskStore
+      enum A2aTaskStatus
+      class A2aTaskSnapshot
+      class A2aTaskSnapshotTransitions
+      class InMemoryA2ATaskStore
+      class RedisA2ATaskStore
+    }
+
+    package "lifecycle" {
+      class SupervisorA2aLifecycleService
+    }
+
+    package "idempotency" {
+      class SupervisorRequestIdempotencyService
+    }
   }
 
   package "model" {
@@ -124,7 +186,8 @@ package "com.example.springsupervisorai" {
     class HandoffPolicyContext
     class InvocationPolicyContext
     class SupervisorOutputEvent
-    class SupervisorOutputEventType
+    enum SupervisorOutputEventType
+    class SupervisorProgressEvent
     class SupervisorPlanningContext
     class SwarmState
     class HitlPolicyResult
@@ -134,13 +197,24 @@ package "com.example.springsupervisorai" {
     class HandoffDirective
     class HandoffValidationResult
     class SupervisorGraphState
-    class SupervisorRuntimeState
+    enum SupervisorRuntimeState
+    enum SupervisorErrorCode
+    enum SupervisorInvocationStatus
+    enum SupervisorGraphNode
+    enum SupervisorGraphRoute
+    enum HitlDecisionType
+    enum HitlReviewStatus
+    enum SupervisorA2aMethod
   }
 
   package "exception" {
     class A2ARoutingException
+    class A2ACommunicationException
     class DownstreamA2AException
+    class HitlProcessingException
     class SupervisorChatProcessingException
+    class SwarmStateVersionConflictException
+    class SupervisorGlobalExceptionHandler
   }
 }
 

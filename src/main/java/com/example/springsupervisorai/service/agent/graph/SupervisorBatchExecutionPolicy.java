@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * Resolves which routing plans should be executed in the current graph batch.
+ * 현재 그래프 배치에서 실행되어야 할 라우팅 계획을 결정한다.
  */
 @Component
 public class SupervisorBatchExecutionPolicy {

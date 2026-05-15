@@ -33,7 +33,7 @@ public record HitlReviewTicket(
         String decisionId,
         String revisedMessage
 ) {
-    // Compact constructor for validation
+    // 검증을 위한 컴팩트 생성자
     public HitlReviewTicket {
         if (taskId == null || taskId.isBlank()) {
             throw new IllegalArgumentException("taskId must not be blank");

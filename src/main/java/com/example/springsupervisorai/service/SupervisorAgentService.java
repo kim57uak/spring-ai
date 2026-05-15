@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service;
 
+import com.example.event.SessionClearEvent;
 import com.example.springsupervisorai.a2a.A2AResponseMapper;
 import com.example.springsupervisorai.a2a.dto.JsonRpcResponse;
 import com.example.springsupervisorai.a2a.dto.TaskView;
@@ -12,6 +13,7 @@ import com.example.springsupervisorai.model.SupervisorOutputEvent;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService;
 import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -210,6 +212,11 @@ public class SupervisorAgentService {
     public void clearSession(String sessionId) {
         a2AInvocationService.clearDownstream(sessionId);
         orchestrator.clearSession(sessionId);
+    }
+
+    @EventListener
+    public void onSessionClear(SessionClearEvent event) {
+        clearSession(event.sessionId());
     }
 
     /**

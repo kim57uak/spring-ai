@@ -7,7 +7,10 @@ import com.example.springsupervisorai.model.HitlReviewTicket;
 import java.util.Optional;
 
 /**
- * HITL review 티켓의 생성/조회/결정 반영 포트.
+ * HITL 리뷰 티켓 관리 포트: HITL 리뷰를 열고, 조회하고, 결정한다.
+ * <p>
+ * Supervisor 그래프 실행 중 HITL 게이트는 진행 전 수동 승인이 필요한
+ * 리뷰 티켓을 생성할 수 있다. 이 포트는 티켓 영속화 및 라이프사이클 관리를 추상화한다.
  */
 public interface HitlDecisionService {
 

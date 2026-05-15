@@ -63,15 +63,17 @@ public class SupervisorReviewApplicationService {
                 if (decisionType == HitlDecisionType.REVISE) {
                         A2aTaskSnapshot task = taskFacade.getTask(taskId, sessionId)
                                         .orElseThrow(() -> new IllegalArgumentException("Task not found"));
+                        HitlReviewTicket ticket = hitlGateService.getReview(taskId, sessionId)
+                                        .orElseThrow(() -> new IllegalArgumentException("Review ticket not found"));
                         // 사용자 입력 반영
                         taskFacade.updateTaskMessage(taskId, revisedMessage);
                         // HITL 티켓에 revisedMessage 반영
                         hitlGateService.decide(taskId, sessionId, HitlDecisionType.REVISE, "Revised by user",
                                         decisionId, revisedMessage);
-                        // 재실행 (model은 프론트엔드에서 전달)
+                        // 재실행 (ticket에 보관된 원본 model 유지)
                         executionService.executeSync(
                                         new com.example.springsupervisorai.model.SupervisorExecutionRequest(
-                                                        sessionId, revisedMessage, null));
+                                                        sessionId, revisedMessage, ticket.model()));
                         return Optional.of(Map.of(
                                         "status", "REVISED",
                                         "taskId", taskId,
@@ -124,15 +126,17 @@ public class SupervisorReviewApplicationService {
                 if (decisionType == HitlDecisionType.REVISE) {
                         A2aTaskSnapshot task = taskFacade.getTask(taskId, sessionId)
                                         .orElseThrow(() -> new IllegalArgumentException("Task not found"));
+                        HitlReviewTicket ticket = hitlGateService.getReview(taskId, sessionId)
+                                        .orElseThrow(() -> new IllegalArgumentException("Review ticket not found"));
                         // 사용자 입력 반영
                         taskFacade.updateTaskMessage(taskId, revisedMessage);
                         // HITL 티켓에 revisedMessage 반영
                         hitlGateService.decide(taskId, sessionId, HitlDecisionType.REVISE, "Revised by user",
                                         decisionId, revisedMessage);
-                        // 재실행 스트리밍 (model은 프론트엔드에서 전달)
+                        // 재실행 스트리밍 (ticket에 보관된 원본 model 유지)
                         return executionService.executeStreamEvents(
                                         new com.example.springsupervisorai.model.SupervisorExecutionRequest(
-                                                        sessionId, revisedMessage, null));
+                                                        sessionId, revisedMessage, ticket.model()));
                 }
 
                 Optional<HitlReviewTicket> decided = hitlGateService.decide(taskId, sessionId, decisionType, reason,

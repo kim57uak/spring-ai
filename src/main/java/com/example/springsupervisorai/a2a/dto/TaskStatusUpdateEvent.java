@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.Map;
 
+/**
+ * A2A task 상태 변경 이벤트.
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record TaskStatusUpdateEvent(
         String id,

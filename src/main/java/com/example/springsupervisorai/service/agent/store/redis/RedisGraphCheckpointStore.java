@@ -27,18 +27,20 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisGraphCheckpointStore.class);
     private static final String KEY_PREFIX = RedisKeyspace.SUPERVISOR_CHECKPOINT_PREFIX;
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final RedisStoreSupport storeSupport;
+    private final java.time.Duration ttl;
     private final Map<String, String> localFallback = new ConcurrentHashMap<>();
 
     /**
      * @param redisTemplateProvider Redis 템플릿 제공자
+     * @param ttlPolicy             TTL 정책
      */
-    public RedisGraphCheckpointStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider) {
+    public RedisGraphCheckpointStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplateProvider.getIfAvailable();
         this.storeSupport = new RedisStoreSupport(logger);
+        this.ttl = ttlPolicy.getStandard();
     }
 
     /**
@@ -86,11 +88,11 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
                 public Void execute(RedisOperations ops) throws DataAccessException {
                     ops.watch(redisKey);
                     ops.multi();
-                    ops.opsForValue().set(redisKey, payload, TTL);
+                    ops.opsForValue().set(redisKey, payload, ttl);
                     List<Object> exec = ops.exec();
                     if (exec == null) {
                         logger.warn("Concurrent checkpoint save conflict for session {}; falling back to direct set", sessionId);
-                        ops.opsForValue().set(redisKey, payload, TTL);
+                        ops.opsForValue().set(redisKey, payload, ttl);
                     }
                     return null;
                 }

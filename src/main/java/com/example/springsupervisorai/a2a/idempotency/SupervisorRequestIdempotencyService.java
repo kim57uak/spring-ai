@@ -32,9 +32,6 @@ import java.util.function.Supplier;
 public class SupervisorRequestIdempotencyService {
 
     private static final Logger logger = LoggerFactory.getLogger(SupervisorRequestIdempotencyService.class);
-    // 요청하신 운영 기준: idempotency 응답/락 TTL 30분 통일
-    private static final Duration COMPLETED_TTL = RedisTtlPolicy.STANDARD;
-    private static final Duration LOCK_TTL = RedisTtlPolicy.STANDARD;
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(130);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(120);
     private static final String RESPONSE_PREFIX = RedisKeyspace.IDEMPOTENCY_SUPERVISOR_RESPONSE_PREFIX;
@@ -44,22 +41,27 @@ public class SupervisorRequestIdempotencyService {
     private final ConcurrentMap<String, CachedResponse> localFallback = new ConcurrentHashMap<>();
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Duration completedTtl;
+    private final Duration lockTtl;
 
     /**
      * 테스트/로컬 호환용 생성자.
      */
     public SupervisorRequestIdempotencyService() {
-        this((StringRedisTemplate) null, new ObjectMapper());
+        this((StringRedisTemplate) null, new ObjectMapper(), null);
     }
 
     @Autowired
-    public SupervisorRequestIdempotencyService(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper) {
-        this(redisTemplateProvider.getIfAvailable(), objectMapper);
+    public SupervisorRequestIdempotencyService(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
+        this(redisTemplateProvider.getIfAvailable(), objectMapper, ttlPolicy);
     }
 
-    private SupervisorRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    private SupervisorRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
+        Duration ttl = ttlPolicy != null ? ttlPolicy.getStandard() : Duration.ofMinutes(30);
+        this.completedTtl = ttl;
+        this.lockTtl = ttl;
     }
 
     /**
@@ -146,7 +148,7 @@ public class SupervisorRequestIdempotencyService {
         try {
             String lockKey = lockKey(key);
             String ownerId = UUID.randomUUID().toString();
-            Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, ownerId, LOCK_TTL);
+            Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, ownerId, lockTtl);
             if (Boolean.TRUE.equals(lockAcquired)) {
                 try {
                     JsonRpcResponse response = action.get();
@@ -165,7 +167,7 @@ public class SupervisorRequestIdempotencyService {
 
     private JsonRpcResponse executeLocally(String key, Supplier<JsonRpcResponse> action) {
         JsonRpcResponse response = action.get();
-        localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+        localFallback.put(key, new CachedResponse(response, Instant.now().plus(completedTtl)));
         return response;
     }
 
@@ -259,12 +261,12 @@ public class SupervisorRequestIdempotencyService {
      * 완료 응답을 로컬/Redis 캐시에 저장한다.
      */
     private void storeCached(String key, JsonRpcResponse response) {
-        localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+        localFallback.put(key, new CachedResponse(response, Instant.now().plus(completedTtl)));
         if (redisTemplate == null) {
             return;
         }
         try {
-            redisTemplate.opsForValue().set(responseKey(key), objectMapper.writeValueAsString(response), COMPLETED_TTL);
+            redisTemplate.opsForValue().set(responseKey(key), objectMapper.writeValueAsString(response), completedTtl);
         } catch (Exception ex) {
             logger.warn("Supervisor idempotency redis write failed key={}: {}", key, ex.getMessage());
         }

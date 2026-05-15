@@ -41,17 +41,19 @@ public class RedisSupervisorSwarmStateStore implements SupervisorSwarmStateStore
     private static final Logger logger = LoggerFactory.getLogger(RedisSupervisorSwarmStateStore.class);
     private static final String KEY_PREFIX = RedisKeyspace.SWARM_STATE_PREFIX;
     private static final String SESSION_INDEX_PREFIX = RedisKeyspace.SWARM_SESSION_INDEX_PREFIX;
-    private static final Duration DEFAULT_TTL = RedisTtlPolicy.SWARM_STATE;
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Duration ttl;
 
     public RedisSupervisorSwarmStateStore(
             RedisTemplate<String, String> redisTemplate,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            RedisTtlPolicy ttlPolicy
     ) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.ttl = ttlPolicy.getSwarmState();
     }
 
     /**
@@ -88,13 +90,22 @@ public class RedisSupervisorSwarmStateStore implements SupervisorSwarmStateStore
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Redis 트랜잭션을 통한 낙관적 락 구현:
-     * 1. WATCH로 키 모니터링
-     * 2. 현재 버전 확인
-     * 3. 충돌 시 예외 발생
-     * 4. MULTI/EXEC로 원자적 저장
-     * 5. 충돌 감지 시 자동 롤백
+     */
+    @Override
+    public void clearSession(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        String indexKey = SESSION_INDEX_PREFIX + sessionId;
+        String taskId = redisTemplate.opsForValue().get(indexKey);
+        redisTemplate.delete(indexKey);
+        if (taskId != null && !taskId.isBlank()) {
+            redisTemplate.delete(KEY_PREFIX + taskId);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
      */
     @Override
     public SwarmState upsert(SwarmState state) throws SwarmStateVersionConflictException {
@@ -137,9 +148,9 @@ public class RedisSupervisorSwarmStateStore implements SupervisorSwarmStateStore
                 }
 
                 operations.multi();
-                operations.opsForValue().set(key, json, DEFAULT_TTL);
+                operations.opsForValue().set(key, json, ttl);
                 if (indexKey != null) {
-                    operations.opsForValue().set(indexKey, taskId, DEFAULT_TTL);
+                    operations.opsForValue().set(indexKey, taskId, ttl);
                 }
                 List<Object> execResult = operations.exec();
 

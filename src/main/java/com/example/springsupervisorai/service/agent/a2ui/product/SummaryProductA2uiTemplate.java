@@ -5,6 +5,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+/**
+ * 일반적인 제품 개요 요청에 사용되는 제품 요약 A2UI 템플릿.
+ * <p>
+ * 요약 핵심 필드(가격, 일정 등)를 필요로 하며 요약, 가격, 일정, 공지, 예약의
+ * 전체 카드 세트를 렌더링한다.
+ */
 @Component
 public class SummaryProductA2uiTemplate extends AbstractProductA2uiTemplate {
 

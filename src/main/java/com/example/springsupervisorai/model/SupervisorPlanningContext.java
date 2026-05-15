@@ -4,6 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Supervisor 실행 전반에 걸쳐 유지되는 변경 가능한 계획 컨텍스트.
+ * <p>
+ * 사용자 메시지, 세션 정보, 라우팅 계획, downstream 호출 결과, swarm 공유 팩트 등
+ * supervisor graph 실행의 모든 중간 상태를 보유한다. graph 시작 시 {@link SupervisorGraphState}에서
+ * 역직렬화되어 각 노드 간에 전달되며, 완료 시 다시 스냅샷으로 직렬화된다.
+ */
 public class SupervisorPlanningContext {
 
     private final String taskId;

@@ -10,7 +10,7 @@ import java.util.Iterator;
 import java.util.Optional;
 
 /**
- * Extracts the product detail node from heterogeneous downstream payload shapes.
+ * 이기종 downstream 페이로드 형태에서 제품 상세 노드를 추출한다.
  */
 @Component
 public class ProductPayloadExtractor {

@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
 
+/**
+ * A2A 메시지. role(발신자 역할)과 parts(메시지 내용 목록)로 구성된다.
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record Message(
         String role,

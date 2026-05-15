@@ -5,6 +5,9 @@ server:
 app:
   redis:
     enabled: true
+    ttl:
+      standard: 30m
+      swarm-state: 1h
 
 spring:
   config:

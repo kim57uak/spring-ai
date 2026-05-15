@@ -11,6 +11,7 @@ import com.example.springsupervisorai.service.agent.compose.SupervisorResponseCo
 import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import com.example.springsupervisorai.service.agent.store.ConversationStore;
 import com.example.springsupervisorai.service.agent.store.GraphCheckpointStore;
+import com.example.springsupervisorai.service.agent.store.SupervisorSwarmStateStore;
 import com.example.springsupervisorai.service.agent.swarm.SupervisorSwarmCoordinator;
 import org.junit.jupiter.api.Test;
 
@@ -85,8 +86,9 @@ class SupervisorAgentOrchestratorExecuteTest {
         private final A2AInvocationService invocationService = mock(A2AInvocationService.class);
         private final SupervisorSwarmCoordinator swarmCoordinator = mock(SupervisorSwarmCoordinator.class);
         private final SupervisorProgressPublisher progressPublisher = new SupervisorProgressPublisher(swarmCoordinator);
+        private final SupervisorSwarmStateStore swarmStateStore = mock(SupervisorSwarmStateStore.class);
         private final SupervisorExecutionPersistenceService persistenceService =
-                new SupervisorExecutionPersistenceService(conversationStore, checkpointStore, lifecycleService);
+                new SupervisorExecutionPersistenceService(conversationStore, checkpointStore, swarmStateStore, lifecycleService);
         private final SupervisorFallbackInvokeService fallbackInvokeService =
                 new SupervisorFallbackInvokeService(
                         new SupervisorBatchExecutionPolicy(new com.example.springsupervisorai.config.A2aSupervisorRoutingProperties()),

@@ -58,6 +58,7 @@ class SupervisorReviewApplicationServiceTest {
                 HitlReviewStatus.REVISED, "Revised by user", Instant.now(), Instant.now(), Instant.now(), "dec-1", revisedMessage);
 
         when(taskFacade.getTask(taskId, sessionId)).thenReturn(Optional.of(task));
+        when(hitlGateService.getReview(taskId, sessionId)).thenReturn(Optional.of(revisedTicket));
         when(hitlGateService.decide(taskId, sessionId, HitlDecisionType.REVISE, "Revised by user", "dec-1", revisedMessage))
                 .thenReturn(Optional.of(revisedTicket));
 
@@ -69,7 +70,7 @@ class SupervisorReviewApplicationServiceTest {
         assertThat(result.get()).containsEntry("status", "REVISED");
         assertThat(result.get()).containsEntry("revisedMessage", revisedMessage);
         verify(taskFacade).updateTaskMessage(taskId, revisedMessage);
-        verify(executionService).executeSync(new SupervisorExecutionRequest(sessionId, revisedMessage, null));
+        verify(executionService).executeSync(new SupervisorExecutionRequest(sessionId, revisedMessage, "openai"));
     }
 
     @Test
@@ -80,11 +81,15 @@ class SupervisorReviewApplicationServiceTest {
         String revisedMessage = "revised message";
         A2aTaskSnapshot task = new A2aTaskSnapshot(
                 taskId, sessionId, A2aTaskStatus.WAITING_REVIEW, Instant.now(), Instant.now(), "original message", "", "", "");
+        HitlReviewTicket revisedTicket = HitlReviewTicket.create(
+                taskId, sessionId, "original message", "openai", "policy-1", "reason",
+                HitlReviewStatus.WAITING, "Revised by user", Instant.now(), Instant.now(), Instant.now(), "dec-1", revisedMessage);
         Flux<SupervisorOutputEvent> expectedEvents = Flux.just(
                 SupervisorOutputEvent.text("revised response"));
 
         when(taskFacade.getTask(taskId, sessionId)).thenReturn(Optional.of(task));
-        when(executionService.executeStreamEvents(new SupervisorExecutionRequest(sessionId, revisedMessage, null)))
+        when(hitlGateService.getReview(taskId, sessionId)).thenReturn(Optional.of(revisedTicket));
+        when(executionService.executeStreamEvents(new SupervisorExecutionRequest(sessionId, revisedMessage, "openai")))
                 .thenReturn(expectedEvents);
 
         // when
@@ -111,6 +116,7 @@ class SupervisorReviewApplicationServiceTest {
                 HitlReviewStatus.REVISED, "Revised by user", Instant.now(), Instant.now(), Instant.now(), "dec-1", revisedMessage);
 
         when(taskFacade.getTask(taskId, sessionId)).thenReturn(Optional.of(task));
+        when(hitlGateService.getReview(taskId, sessionId)).thenReturn(Optional.of(revisedTicket));
         when(hitlGateService.decide(taskId, sessionId, HitlDecisionType.REVISE, "Revised by user", "dec-1", revisedMessage))
                 .thenReturn(Optional.of(revisedTicket));
 
@@ -122,7 +128,7 @@ class SupervisorReviewApplicationServiceTest {
         assertThat(result.get()).containsEntry("status", "REVISED");
         assertThat(result.get()).containsEntry("revisedMessage", revisedMessage);
         verify(taskFacade).updateTaskMessage(taskId, revisedMessage);
-        verify(executionService).executeSync(new SupervisorExecutionRequest(sessionId, revisedMessage, null));
+        verify(executionService).executeSync(new SupervisorExecutionRequest(sessionId, revisedMessage, "openai"));
     }
 
     @Test
@@ -133,11 +139,15 @@ class SupervisorReviewApplicationServiceTest {
         String revisedMessage = "";
         A2aTaskSnapshot task = new A2aTaskSnapshot(
                 taskId, sessionId, A2aTaskStatus.WAITING_REVIEW, Instant.now(), Instant.now(), "original message", "", "", "");
+        HitlReviewTicket revisedTicket = HitlReviewTicket.create(
+                taskId, sessionId, "original message", "openai", "policy-1", "reason",
+                HitlReviewStatus.WAITING, "Revised by user", Instant.now(), Instant.now(), Instant.now(), "dec-1", revisedMessage);
         Flux<SupervisorOutputEvent> expectedEvents = Flux.just(
                 SupervisorOutputEvent.text("revised response"));
 
         when(taskFacade.getTask(taskId, sessionId)).thenReturn(Optional.of(task));
-        when(executionService.executeStreamEvents(new SupervisorExecutionRequest(sessionId, revisedMessage, null)))
+        when(hitlGateService.getReview(taskId, sessionId)).thenReturn(Optional.of(revisedTicket));
+        when(executionService.executeStreamEvents(new SupervisorExecutionRequest(sessionId, revisedMessage, "openai")))
                 .thenReturn(expectedEvents);
 
         // when
