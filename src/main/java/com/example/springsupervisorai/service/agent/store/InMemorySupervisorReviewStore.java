@@ -44,7 +44,14 @@ public class InMemorySupervisorReviewStore implements SupervisorReviewStore {
      */
     @Override
     public Optional<HitlReviewTicket> get(String taskId) {
-        return Optional.ofNullable(reviews.get(taskId));
+        HitlReviewTicket ticket = reviews.get(taskId);
+        if (ticket == null || ticket.expiresAt().isBefore(Instant.now())) {
+            if (ticket != null) {
+                reviews.remove(taskId);
+            }
+            return Optional.empty();
+        }
+        return Optional.of(ticket);
     }
 
     /**
@@ -52,11 +59,27 @@ public class InMemorySupervisorReviewStore implements SupervisorReviewStore {
      * <p>
      * 원자적 `compute`로 WAITING -> APPROVED/CANCELED 전이를 보장한다.
      */
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void evictExpired() {
+        Instant now = Instant.now();
+        reviews.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Optional<HitlReviewTicket> decide(String taskId, HitlDecisionType decision, String reason, String decisionId, String revisedMessage) {
         AtomicReference<HitlReviewTicket> updatedRef = new AtomicReference<>();
         reviews.compute(taskId, (key, current) -> {
             if (current == null) {
+                return null;
+            }
+            if (current.expiresAt().isBefore(Instant.now())) {
+                reviews.remove(taskId);
                 return null;
             }
             if (!current.isWaiting()) {

@@ -4,6 +4,7 @@ import com.example.springsupervisorai.a2a.task.A2aTaskSnapshot;
 import com.example.springsupervisorai.a2a.task.A2aTaskStatus;
 import com.example.springsupervisorai.model.SupervisorExecutionRequest;
 import com.example.springsupervisorai.model.SupervisorOutputEvent;
+import com.example.springsupervisorai.service.agent.invoke.A2AInvocationService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.SignalType;
@@ -17,15 +18,18 @@ public class SupervisorExecutionService {
     private final SupervisorAgentOrchestrator orchestrator;
     private final SupervisorTaskFacade taskFacade;
     private final SupervisorExecutionResultCollector executionResultCollector;
+    private final A2AInvocationService a2AInvocationService;
 
     public SupervisorExecutionService(
             SupervisorAgentOrchestrator orchestrator,
             SupervisorTaskFacade taskFacade,
-            SupervisorExecutionResultCollector executionResultCollector
+            SupervisorExecutionResultCollector executionResultCollector,
+            A2AInvocationService a2AInvocationService
     ) {
         this.orchestrator = orchestrator;
         this.taskFacade = taskFacade;
         this.executionResultCollector = executionResultCollector;
+        this.a2AInvocationService = a2AInvocationService;
     }
 
     /**
@@ -69,6 +73,7 @@ public class SupervisorExecutionService {
         return orchestrator.executeEvents(request.toAgentRequest(), task.taskId())
                 .doFinally(signalType -> {
                     if (signalType == SignalType.CANCEL) {
+                        a2AInvocationService.cancelDownstream(request.sessionId());
                         taskFacade.cancelTask(task.taskId(), "Stream canceled");
                     }
                 });

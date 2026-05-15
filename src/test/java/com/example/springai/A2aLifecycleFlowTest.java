@@ -31,7 +31,7 @@ class A2aLifecycleFlowTest {
                 "session-lifecycle-1",
                 "상품 조회"
         );
-        assertThat(created.status()).isEqualTo(A2aTaskStatus.RUNNING);
+        assertThat(created.status()).isEqualTo(A2aTaskStatus.WORKING);
 
         lifecycleService.markCompleted(created.taskId(), AgentScopeName.PRODUCT, "완료 응답");
         Optional<A2aTaskSnapshot> completed = lifecycleService.get(created.taskId(), AgentScopeName.PRODUCT);

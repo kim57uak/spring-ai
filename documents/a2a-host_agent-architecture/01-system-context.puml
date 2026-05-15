@@ -12,10 +12,13 @@ rectangle "Client Channel" {
 }
 
 rectangle "Supervisor Agent (spring-ai + springsupervisorai)" {
-  [SupervisorA2AController] as Controller
+  [SupervisorA2AController\n/a2a/supervisor] as Controller
   [SupervisorA2ARequestValidator] as Validator
+  [HitlReviewController\n/a2a/supervisor/tasks/review] as HitlReviewController
+  [CircuitBreakerController\n/a2a/circuit-breaker] as CircuitBreakerController
   [SupervisorAgentService] as Service
   [SupervisorRequestIdempotencyService] as Idempotency
+  [SupervisorPreHitlA2uiService] as PreHitlA2ui
   [HitlPolicyService] as HitlPolicy
   [HitlDecisionService] as HitlDecision
   [SupervisorA2aLifecycleService] as Lifecycle
@@ -28,8 +31,9 @@ rectangle "Supervisor Agent (spring-ai + springsupervisorai)" {
   [SupervisorResponseComposeService] as Composer
   [SupervisorA2uiService] as A2uiService
   [DefaultSupervisorLlmRuntime] as LlmRuntime
+  [SupervisorProgressSupport] as ProgressSupport
   [A2AClientRegistry] as Registry
-  [GlobalExceptionHandler] as Advice
+  [SupervisorGlobalExceptionHandler] as Advice
 }
 
 database "Stores / Redis or InMemory" as Stores {

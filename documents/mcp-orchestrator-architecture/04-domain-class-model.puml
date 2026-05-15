@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 04. SpringAI Domain / Contract Class Model (Current Source, 2026-04-18)
+title 04. SpringAI Domain / Contract Class Model (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam classAttributeIconSize 0
@@ -25,16 +25,25 @@ class AgentScope {
   +unrestricted: boolean
 }
 
+enum AgentScopeName {
+  PRODUCT
+  RESERVATION
+  SEARCH
+}
+
 class PlanningContext {
   +sessionId: String
   +userMessage: String
   +model: String
+  +requestNonce: String
   +history: List<String>
   +currentNode: String
   +checkpointId: String
+  +plan: ToolPlan
   +plans: List<ToolPlan>
   +executionResult: ToolExecutionResult
   +toolTrace: List<String>
+  +toolCallCounts: Map<String, Integer>
   +scope: AgentScope
 }
 
@@ -45,9 +54,23 @@ class AgentGraphState {
   +HISTORY
   +CHECKPOINT_ID
   +CURRENT_NODE
-  +PLAN_*
-  +EXEC_*
-  +SCOPE_*
+  +PLANS
+  +SCOPE_ALLOWED_SERVERS
+  +SCOPE_ALLOWED_TOOLS
+  +SCOPE_UNRESTRICTED
+  +PLAN_CAPABILITY
+  +PLAN_SERVER
+  +PLAN_TOOL
+  +PLAN_REASON
+  +PLAN_REQUIRED
+  +EXEC_SERVER
+  +EXEC_TOOL
+  +EXEC_PAYLOAD
+  +EXEC_ARGS
+  +EXEC_TRACE
+  +EXEC_SUCCESS
+  +EXEC_EXECUTED
+  +EXEC_TERMINAL
 }
 
 class ToolPlan {
@@ -71,7 +94,15 @@ class ToolExecutionResult {
 
 class A2aStructuredResponse {
   +response: String
-  +structuredData: Object
+  +structuredData: Map<String, Object>
+}
+
+enum ChunkType {
+  TOKEN
+  TOOL_RESULT
+  HUMAN_MESSAGE
+  COMPLETE
+  ERROR
 }
 
 class A2aTaskSnapshot {
@@ -79,18 +110,25 @@ class A2aTaskSnapshot {
   +scopeName: AgentScopeName
   +sessionId: String
   +status: A2aTaskStatus
+  +createdAt: Instant
+  +updatedAt: Instant
   +requestMessage: String
   +responsePayload: String
   +errorCode: String
   +errorMessage: String
+  +contextId: String
 }
 
 enum A2aTaskStatus {
   SUBMITTED
-  RUNNING
+  WORKING
   COMPLETED
   FAILED
   CANCELED
+  INPUT_REQUIRED
+  REJECTED
+  AUTH_REQUIRED
+  UNKNOWN
 }
 
 interface ConversationStore {
@@ -134,6 +172,7 @@ interface A2ATaskStore {
 class A2aLifecycleService
 class A2AResponseMapper
 class AgentCardRegistry
+class A2aRequestIdempotencyService
 class RedisConversationStore
 class RedisGraphCheckpointStore
 class InMemoryA2ATaskStore
@@ -169,6 +208,7 @@ Runtime orchestration state shared across:
 - executor
 - composer
 - persistence
+Includes tool call counting and request nonce for idempotency.
 end note
 
 note bottom of A2aTaskSnapshot
@@ -176,6 +216,7 @@ Ownership and lifecycle are enforced by:
 - scopeName
 - sessionId
 - status transition helpers
+Includes timestamps and contextId for distributed tracing.
 end note
 
 @enduml

@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service.agent.a2ui.reservation;
 
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -8,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Builds a standard-catalog reservation creation form.
+ * 표준 카탈로그 예약 생성 폼을 빌드한다.
  */
 @Component
 public class ReservationA2uiMessageBuilder {
@@ -32,6 +33,41 @@ public class ReservationA2uiMessageBuilder {
                         stringEntry("headCount", valueOrBlank(model.headCount()).isBlank() ? "1" : valueOrBlank(model.headCount()))
                 )),
                 beginRendering(surfaceId, "root")
+        );
+    }
+
+    /**
+     * Builds A2UI protocol messages and returns them as JSONL, the format used
+     * for embedding protocol data within a Spring AI API-compatible assistant message.
+     *
+     * @param surfaceId target surface identifier
+     * @param model     reservation presentation data
+     * @return JSONL string of the protocol messages
+     */
+    public String buildProtocolJsonl(String surfaceId, ReservationPresentationModel model) {
+        List<Map<String, Object>> protocolMessages = build(surfaceId, model);
+        return SupervisorA2uiSupport.toJsonl(protocolMessages);
+    }
+
+    /**
+     * Builds a Spring AI API-compatible assistant message map with A2UI protocol
+     * payload embedded as JSONL under the {@link SupervisorA2uiSupport#A2UI_PROTOCOL_MARKER} key.
+     *
+     * @param surfaceId  target surface identifier
+     * @param model      reservation presentation data
+     * @param textMessage the human-readable assistant message text
+     * @return a message map with role, content, and a2ui_protocol fields
+     */
+    public Map<String, Object> buildAssistantMessage(String surfaceId, ReservationPresentationModel model, String textMessage) {
+        List<Map<String, Object>> protocolMessages = build(surfaceId, model);
+        String resolvedText = textMessage == null || textMessage.isBlank()
+                ? "요청에 맞는 입력 화면을 준비했습니다."
+                : textMessage;
+        return Map.of(
+                "role", "assistant",
+                "content", resolvedText,
+                SupervisorA2uiSupport.A2UI_PROTOCOL_MARKER, SupervisorA2uiSupport.toJsonl(protocolMessages),
+                "contentType", SupervisorA2uiSupport.A2UI_CONTENT_TYPE
         );
     }
 

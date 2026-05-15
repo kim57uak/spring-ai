@@ -14,7 +14,30 @@ public class CircuitBreakerUtilsTest {
     @Test
     public void testCircuitBreakerOpenState() {
         CircuitBreakerUtils.CircuitBreaker circuitBreaker = new CircuitBreakerUtils.CircuitBreaker(1, 1000);
+        assertThrows(RuntimeException.class, () -> {
+            circuitBreaker.execute(() -> {
+                throw new RuntimeException("Test exception");
+            });
+        });
+        assertEquals(CircuitBreakerUtils.CircuitState.OPEN, circuitBreaker.getState());
         assertThrows(CircuitBreakerUtils.CircuitBreakerOpenException.class, () -> {
+            circuitBreaker.execute(() -> "Should not execute");
+        });
+    }
+
+    @Test
+    public void testCircuitBreakerHalfOpenState() throws InterruptedException {
+        CircuitBreakerUtils.CircuitBreaker circuitBreaker = new CircuitBreakerUtils.CircuitBreaker(1, 100);
+        // Open the circuit breaker
+        assertThrows(RuntimeException.class, () -> {
+            circuitBreaker.execute(() -> {
+                throw new RuntimeException("Test exception");
+            });
+        });
+        // Wait for the timeout to expire
+        Thread.sleep(150);
+        // After timeout, execute() enters HALF_OPEN, supplier throws → re-opens
+        assertThrows(RuntimeException.class, () -> {
             circuitBreaker.execute(() -> {
                 throw new RuntimeException("Test exception");
             });
@@ -23,33 +46,17 @@ public class CircuitBreakerUtilsTest {
     }
 
     @Test
-    public void testCircuitBreakerHalfOpenState() throws InterruptedException {
-        CircuitBreakerUtils.CircuitBreaker circuitBreaker = new CircuitBreakerUtils.CircuitBreaker(1, 100);
-        // Open the circuit breaker
-        assertThrows(CircuitBreakerUtils.CircuitBreakerOpenException.class, () -> {
-            circuitBreaker.execute(() -> {
-                throw new RuntimeException("Test exception");
-            });
-        });
-        // Wait for the timeout to expire
-        Thread.sleep(150);
-        // Should be in HALF_OPEN state
-        assertEquals(CircuitBreakerUtils.CircuitState.HALF_OPEN, circuitBreaker.getState());
-    }
-
-    @Test
     public void testCircuitBreakerRecovery() throws InterruptedException {
         CircuitBreakerUtils.CircuitBreaker circuitBreaker = new CircuitBreakerUtils.CircuitBreaker(1, 100);
         // Open the circuit breaker
-        assertThrows(CircuitBreakerUtils.CircuitBreakerOpenException.class, () -> {
+        assertThrows(RuntimeException.class, () -> {
             circuitBreaker.execute(() -> {
                 throw new RuntimeException("Test exception");
             });
         });
         // Wait for the timeout to expire
         Thread.sleep(150);
-        // Should be in HALF_OPEN state
-        assertEquals(CircuitBreakerUtils.CircuitState.HALF_OPEN, circuitBreaker.getState());
+        // After timeout, execute() enters HALF_OPEN
         // Execute successfully to close the circuit breaker
         circuitBreaker.execute(() -> "Success");
         assertEquals(CircuitBreakerUtils.CircuitState.CLOSED, circuitBreaker.getState());

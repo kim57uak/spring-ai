@@ -101,7 +101,7 @@ public class DefaultHitlDecisionService implements HitlDecisionService {
                     owned.get().expiresAt(),
                     Instant.now(),
                     owned.get().decisionId(),
-                    reason
+                    revisedMessage
             );
             reviewStore.update(revisedTicket);
             upsertSwarmState(taskId, sessionId, Map.of(

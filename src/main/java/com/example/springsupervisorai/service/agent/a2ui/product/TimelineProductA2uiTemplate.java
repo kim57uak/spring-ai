@@ -5,6 +5,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+/**
+ * 일정 및 날짜 관련 요청에 사용되는 제품 타임라인 A2UI 템플릿.
+ * <p>
+ * 출발/도착 날짜, 여정, 미팅 시간, 호텔 체크인 상세를 강조하기 위해
+ * 타임라인 카드를 우선시한다.
+ */
 @Component
 public class TimelineProductA2uiTemplate extends AbstractProductA2uiTemplate {
 

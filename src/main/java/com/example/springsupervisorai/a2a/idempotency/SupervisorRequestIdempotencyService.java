@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -30,9 +32,6 @@ import java.util.function.Supplier;
 public class SupervisorRequestIdempotencyService {
 
     private static final Logger logger = LoggerFactory.getLogger(SupervisorRequestIdempotencyService.class);
-    // 요청하신 운영 기준: idempotency 응답/락 TTL 30분 통일
-    private static final Duration COMPLETED_TTL = RedisTtlPolicy.STANDARD;
-    private static final Duration LOCK_TTL = RedisTtlPolicy.STANDARD;
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(130);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(120);
     private static final String RESPONSE_PREFIX = RedisKeyspace.IDEMPOTENCY_SUPERVISOR_RESPONSE_PREFIX;
@@ -42,22 +41,27 @@ public class SupervisorRequestIdempotencyService {
     private final ConcurrentMap<String, CachedResponse> localFallback = new ConcurrentHashMap<>();
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Duration completedTtl;
+    private final Duration lockTtl;
 
     /**
      * 테스트/로컬 호환용 생성자.
      */
     public SupervisorRequestIdempotencyService() {
-        this((StringRedisTemplate) null, new ObjectMapper());
+        this((StringRedisTemplate) null, new ObjectMapper(), null);
     }
 
     @Autowired
-    public SupervisorRequestIdempotencyService(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper) {
-        this(redisTemplateProvider.getIfAvailable(), objectMapper);
+    public SupervisorRequestIdempotencyService(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
+        this(redisTemplateProvider.getIfAvailable(), objectMapper, ttlPolicy);
     }
 
-    private SupervisorRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    private SupervisorRequestIdempotencyService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
+        Duration ttl = ttlPolicy != null ? ttlPolicy.getStandard() : Duration.ofMinutes(30);
+        this.completedTtl = ttl;
+        this.lockTtl = ttl;
     }
 
     /**
@@ -133,37 +137,71 @@ public class SupervisorRequestIdempotencyService {
 
     /**
      * owner 락 획득 시 action을 실행하고, 락 미획득 시 owner 결과를 기다린다.
+     * <p>
+     * 락 값에 UUID를 포함해 소유자만 삭제할 수 있도록 한다.
      */
     private JsonRpcResponse runAsOwner(String key, Supplier<JsonRpcResponse> action) {
         if (redisTemplate == null) {
-            JsonRpcResponse response = action.get();
-            localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
-            return response;
+            return executeLocally(key, action);
         }
 
-        String lockKey = lockKey(key);
-        Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
-        if (Boolean.TRUE.equals(lockAcquired)) {
-            try {
-                JsonRpcResponse response = action.get();
-                storeCached(key, response);
-                return response;
-            } finally {
-                redisTemplate.delete(lockKey);
+        try {
+            String lockKey = lockKey(key);
+            String ownerId = UUID.randomUUID().toString();
+            Boolean lockAcquired = redisTemplate.opsForValue().setIfAbsent(lockKey, ownerId, lockTtl);
+            if (Boolean.TRUE.equals(lockAcquired)) {
+                try {
+                    JsonRpcResponse response = action.get();
+                    storeCached(key, response);
+                    return response;
+                } finally {
+                    releaseLock(lockKey, ownerId);
+                }
             }
+            return waitForOwnerResult(key, action, ownerId);
+        } catch (RuntimeException ex) {
+            logger.warn("Supervisor idempotency redis lock failed key={}: {}", key, ex.getMessage());
+            return executeLocally(key, action);
         }
-        return waitForOwnerResult(key, action);
     }
 
-    private JsonRpcResponse waitForOwnerResult(String key, Supplier<JsonRpcResponse> action) {
+    private JsonRpcResponse executeLocally(String key, Supplier<JsonRpcResponse> action) {
+        JsonRpcResponse response = action.get();
+        localFallback.put(key, new CachedResponse(response, Instant.now().plus(completedTtl)));
+        return response;
+    }
+
+    /**
+     * Lua EVAL을 통해 소유자 ID가 일치할 때만 락을 삭제한다.
+     */
+    private void releaseLock(String lockKey, String ownerId) {
+        try {
+            String script = """
+                    if redis.call("GET", KEYS[1]) == ARGV[1] then
+                        return redis.call("DEL", KEYS[1])
+                    else
+                        return 0
+                    end
+                    """;
+            redisTemplate.execute(
+                    new org.springframework.data.redis.core.script.DefaultRedisScript<>(script, Long.class),
+                    Collections.singletonList(lockKey),
+                    ownerId
+            );
+        } catch (Exception ex) {
+            logger.warn("Failed to release idempotency lock key={}: {}", lockKey, ex.getMessage());
+        }
+    }
+
+    /**
+     * owner의 완료를 폴링하며 기다린다. 락 소멸 시 재실행하지 않고 캐시만 확인한다.
+     */
+    private JsonRpcResponse waitForOwnerResult(String key, Supplier<JsonRpcResponse> action, String ownerId) {
         long deadlineNanos = System.nanoTime() + WAIT_TIMEOUT.toNanos();
         while (System.nanoTime() < deadlineNanos) {
             JsonRpcResponse cached = readCached(key);
             if (cached != null) {
                 return cached;
-            }
-            if (redisTemplate == null || Boolean.FALSE.equals(redisTemplate.hasKey(lockKey(key)))) {
-                return runAsOwner(key, action);
             }
             try {
                 TimeUnit.MILLISECONDS.sleep(POLL_INTERVAL.toMillis());
@@ -172,7 +210,11 @@ public class SupervisorRequestIdempotencyService {
                 throw new IllegalStateException("Interrupted while waiting for supervisor idempotency owner", ex);
             }
         }
-        logger.warn("Supervisor idempotency wait timeout key={}. Executing action as fallback.", key);
+        JsonRpcResponse cached = readCached(key);
+        if (cached != null) {
+            return cached;
+        }
+        logger.warn("Supervisor idempotency wait timeout key={}. Executing action as last resort.", key);
         JsonRpcResponse response = action.get();
         storeCached(key, response);
         return response;
@@ -219,12 +261,12 @@ public class SupervisorRequestIdempotencyService {
      * 완료 응답을 로컬/Redis 캐시에 저장한다.
      */
     private void storeCached(String key, JsonRpcResponse response) {
-        localFallback.put(key, new CachedResponse(response, Instant.now().plus(COMPLETED_TTL)));
+        localFallback.put(key, new CachedResponse(response, Instant.now().plus(completedTtl)));
         if (redisTemplate == null) {
             return;
         }
         try {
-            redisTemplate.opsForValue().set(responseKey(key), objectMapper.writeValueAsString(response), COMPLETED_TTL);
+            redisTemplate.opsForValue().set(responseKey(key), objectMapper.writeValueAsString(response), completedTtl);
         } catch (Exception ex) {
             logger.warn("Supervisor idempotency redis write failed key={}: {}", key, ex.getMessage());
         }

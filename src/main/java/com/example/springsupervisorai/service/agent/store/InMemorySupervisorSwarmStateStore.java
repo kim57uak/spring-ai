@@ -97,6 +97,17 @@ public class InMemorySupervisorSwarmStateStore implements SupervisorSwarmStateSt
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void clearSession(String sessionId) {
+        SwarmState removed = latestBySession.remove(sessionId);
+        if (removed != null) {
+            states.remove(removed.taskId());
+        }
+    }
+
+    /**
      * 만료된 항목을 정리한다.
      * <p>
      * - 1시간 이상 지난 항목 제거

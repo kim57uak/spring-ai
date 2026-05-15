@@ -4,7 +4,10 @@ import com.example.springsupervisorai.model.HitlPolicyContext;
 import com.example.springsupervisorai.model.HitlPolicyResult;
 
 /**
- * HITL 정책 평가 포트.
+ * 사용자 메시지에 HITL 리뷰가 필요한지 결정하는 HITL 정책 평가 포트.
+ * <p>
+ * 평가는 메시지 내용 민감도, 신뢰도 임계값, 프롬프트 템플릿을 통해 구성된
+ * 도메인별 규칙과 같은 요소를 고려한다.
  */
 public interface HitlPolicyService {
 

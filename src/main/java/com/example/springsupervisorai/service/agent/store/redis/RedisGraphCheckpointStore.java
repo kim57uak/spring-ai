@@ -6,9 +6,13 @@ import com.example.springsupervisorai.service.agent.store.GraphCheckpointStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,18 +27,20 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisGraphCheckpointStore.class);
     private static final String KEY_PREFIX = RedisKeyspace.SUPERVISOR_CHECKPOINT_PREFIX;
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final RedisStoreSupport storeSupport;
+    private final java.time.Duration ttl;
     private final Map<String, String> localFallback = new ConcurrentHashMap<>();
 
     /**
      * @param redisTemplateProvider Redis 템플릿 제공자
+     * @param ttlPolicy             TTL 정책
      */
-    public RedisGraphCheckpointStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider) {
+    public RedisGraphCheckpointStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplateProvider.getIfAvailable();
         this.storeSupport = new RedisStoreSupport(logger);
+        this.ttl = ttlPolicy.getStandard();
     }
 
     /**
@@ -59,6 +65,9 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
 
     /**
      * 세션 체크포인트를 저장한다.
+     * <p>
+     * CAS (WATCH/MULTI/EXEC)를 통해 동시 저장 충돌을 감지한다.
+     * 충돌 시 경고 로그 후 단순 SET으로 폴백한다.
      *
      * @param sessionId 세션 식별자
      * @param payload   저장할 체크포인트
@@ -71,7 +80,24 @@ public class RedisGraphCheckpointStore implements GraphCheckpointStore {
         if (redisTemplate == null) {
             return;
         }
-        storeSupport.runSafely(() -> redisTemplate.opsForValue().set(key(sessionId), payload, TTL), "save checkpoint", sessionId);
+        storeSupport.runSafely(() -> {
+            String redisKey = key(sessionId);
+            redisTemplate.execute(new SessionCallback<Void>() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Void execute(RedisOperations ops) throws DataAccessException {
+                    ops.watch(redisKey);
+                    ops.multi();
+                    ops.opsForValue().set(redisKey, payload, ttl);
+                    List<Object> exec = ops.exec();
+                    if (exec == null) {
+                        logger.warn("Concurrent checkpoint save conflict for session {}; falling back to direct set", sessionId);
+                        ops.opsForValue().set(redisKey, payload, ttl);
+                    }
+                    return null;
+                }
+            });
+        }, "save checkpoint", sessionId);
     }
 
     /**

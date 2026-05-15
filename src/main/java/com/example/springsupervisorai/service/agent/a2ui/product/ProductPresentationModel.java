@@ -4,7 +4,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Product A2UI rendering payload normalized into a typed structure before protocol assembly.
+ * 프로토콜 어셈블리 전에 타입 구조로 정규화된 제품 A2UI 렌더링 페이로드.
+ * <p>
+ * 다양한 제품 템플릿 뷰에서 사용되는 표시 필드(이름, 가격, 날짜)와
+ * 생성 폼 필드(productCode, departureDays)를 모두 포함한다.
  */
 public record ProductPresentationModel(
         String productCode,

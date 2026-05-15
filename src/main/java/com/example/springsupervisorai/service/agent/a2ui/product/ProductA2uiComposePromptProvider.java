@@ -6,6 +6,13 @@ import com.example.springsupervisorai.service.agent.a2ui.common.A2uiComposePromp
 import com.example.springsupervisorai.service.agent.result.DownstreamResultInterpreter;
 import org.springframework.stereotype.Component;
 
+/**
+ * 제품 도메인용 A2UI compose 프롬프트 제공자.
+ * <p>
+ * 현재 컨텍스트에 성공적인 제품 downstream 결과나 "product" 에이전트를 대상으로 하는
+ * 라우팅 계획이 있을 때 활성화된다. 요약, 가격, 일정, 예약, 판매 제품 생성 폼의
+ * 다섯 가지 템플릿 뷰를 제공한다.
+ */
 @Component
 public class ProductA2uiComposePromptProvider implements A2uiComposePromptProvider {
 
@@ -14,6 +21,7 @@ public class ProductA2uiComposePromptProvider implements A2uiComposePromptProvid
         if (context == null) {
             return false;
         }
+        // 성공적인 제품 결과 또는 제품 라우팅 계획이 있는지 확인
         boolean hasProductResult = context.getResults() != null
                 && context.getResults().stream().anyMatch(this::isSuccessfulProductResult);
         boolean hasProductPlan = context.getRoutingPlans() != null

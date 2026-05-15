@@ -27,17 +27,16 @@ import java.util.Optional;
 public class RedisSupervisorReviewStore implements SupervisorReviewStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisSupervisorReviewStore.class);
-    // review 조회/결정 API가 taskId를 기준으로 동작하므로 키도 taskId 기반으로 유지한다.
     private static final String KEY_PREFIX = RedisKeyspace.SUPERVISOR_REVIEW_PREFIX;
-    // 요청하신 운영 기준: review TTL 30분 고정
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final java.time.Duration ttl;
 
-    public RedisSupervisorReviewStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public RedisSupervisorReviewStore(StringRedisTemplate redisTemplate, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.ttl = ttlPolicy.getStandard();
     }
 
     @Override
@@ -98,7 +97,7 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
                         decision == HitlDecisionType.REVISE ? revisedMessage : current.get().revisedMessage()
                 );
                 operations.multi();
-                operations.opsForValue().set(key, serialize(updated), TTL);
+                operations.opsForValue().set(key, serialize(updated), ttl);
                 List<Object> exec = operations.exec();
                 if (exec == null) {
                     return null;
@@ -110,7 +109,7 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
     }
 
     private void save(HitlReviewTicket ticket) {
-        redisTemplate.opsForValue().set(key(ticket.taskId()), serialize(ticket), TTL);
+        redisTemplate.opsForValue().set(key(ticket.taskId()), serialize(ticket), ttl);
     }
 
     private String key(String taskId) {
@@ -124,6 +123,16 @@ public class RedisSupervisorReviewStore implements SupervisorReviewStore {
             logger.error("Failed to serialize review ticket taskId={}", ticket.taskId(), ex);
             throw new IllegalStateException("Review ticket serialization failed", ex);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Redis는 TTL 기반 자동 만료를 사용하므로 별도 처리하지 않는다.
+     */
+    @Override
+    public void evictExpired() {
+        // Redis TTL이 자동으로 만료를 처리함
     }
 
     @Override

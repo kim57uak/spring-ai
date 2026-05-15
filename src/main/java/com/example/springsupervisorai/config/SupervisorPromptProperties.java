@@ -2,6 +2,12 @@ package com.example.springsupervisorai.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Supervisor 프롬프트 템플릿 설정.
+ * <p>
+ * 애플리케이션 설정의 {@code supervisor.prompts.*} 프리픽스를 planning, HITL 정책 평가,
+ * compose, A2UI compose 렌더러에서 사용하는 타입 필드에 매핑한다.
+ */
 @ConfigurationProperties(prefix = "supervisor.prompts")
 public class SupervisorPromptProperties {
 

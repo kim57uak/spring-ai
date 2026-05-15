@@ -8,9 +8,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -26,21 +30,23 @@ public class RedisConversationStore implements ConversationStore {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisConversationStore.class);
     private static final String KEY_PREFIX = RedisKeyspace.SUPERVISOR_CONVERSATION_PREFIX;
-    private static final java.time.Duration TTL = RedisTtlPolicy.STANDARD;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final RedisStoreSupport storeSupport;
+    private final Duration ttl;
     private final Map<String, List<String>> localFallback = new ConcurrentHashMap<>();
 
     /**
      * @param redisTemplateProvider Redis 템플릿 제공자
      * @param objectMapper          JSON 직렬화/역직렬화 도구
+     * @param ttlPolicy             TTL 정책
      */
-    public RedisConversationStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper) {
+    public RedisConversationStore(ObjectProvider<StringRedisTemplate> redisTemplateProvider, ObjectMapper objectMapper, RedisTtlPolicy ttlPolicy) {
         this.redisTemplate = redisTemplateProvider.getIfAvailable();
         this.objectMapper = objectMapper;
         this.storeSupport = new RedisStoreSupport(logger);
+        this.ttl = ttlPolicy.getStandard();
     }
 
     /**
@@ -67,6 +73,9 @@ public class RedisConversationStore implements ConversationStore {
 
     /**
      * 세션 대화 히스토리를 저장한다.
+     * <p>
+     * CAS (WATCH/MULTI/EXEC)를 통해 동시 저장 충돌을 감지한다.
+     * 충돌 시 경고 로그 후 단순 SET으로 폴백한다.
      *
      * @param sessionId 세션 식별자
      * @param messages  저장할 메시지 목록
@@ -74,14 +83,28 @@ public class RedisConversationStore implements ConversationStore {
     @Override
     public void save(String sessionId, List<String> messages) {
         List<String> safe = messages == null ? Collections.emptyList() : messages;
-        localFallback.put(sessionId, List.copyOf(safe));
-        if (redisTemplate == null) {
-            return;
+        if (redisTemplate != null) {
+            storeSupport.runSafely(() -> {
+                String redisKey = key(sessionId);
+                String payload = objectMapper.writeValueAsString(safe);
+                redisTemplate.execute(new SessionCallback<Void>() {
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public Void execute(RedisOperations ops) throws DataAccessException {
+                        ops.watch(redisKey);
+                        ops.multi();
+ops.opsForValue().set(redisKey, payload, ttl);
+                    List<Object> exec = ops.exec();
+                    if (exec == null) {
+                        logger.warn("Concurrent save conflict for session {}; falling back to direct set", sessionId);
+                        ops.opsForValue().set(redisKey, payload, ttl);
+                        }
+                        return null;
+                    }
+                });
+            }, "save conversation", sessionId);
         }
-        storeSupport.runSafely(() -> {
-            String payload = objectMapper.writeValueAsString(safe);
-            redisTemplate.opsForValue().set(key(sessionId), payload, TTL);
-        }, "save conversation", sessionId);
+        localFallback.put(sessionId, List.copyOf(safe));
     }
 
     /**

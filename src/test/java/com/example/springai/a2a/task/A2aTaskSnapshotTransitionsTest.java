@@ -43,7 +43,7 @@ class A2aTaskSnapshotTransitionsTest {
                 "task-2",
                 AgentScopeName.PRODUCT,
                 "s-2",
-                A2aTaskStatus.RUNNING,
+                A2aTaskStatus.WORKING,
                 Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-01T00:01:00Z"),
                 "request",

@@ -546,6 +546,65 @@
       border-color: #dc2626;
     }
 
+    .btn.revise {
+      background: var(--accent-secondary);
+      border: 1px solid var(--accent-secondary);
+      color: white;
+    }
+
+    .btn.revise:hover:not(:disabled) {
+      background: #7c3aed;
+      border-color: #7c3aed;
+    }
+
+    .btn.revise-send {
+      background: var(--warning);
+      border: 1px solid var(--warning);
+      color: white;
+    }
+
+    .btn.revise-send:hover:not(:disabled) {
+      background: #d97706;
+      border-color: #d97706;
+    }
+
+    .review-revise-area {
+      margin-top: 12px;
+      display: none;
+    }
+
+    .review-revise-area.active {
+      display: block;
+    }
+
+    .review-revise-input {
+      width: 100%;
+      min-height: 80px;
+      max-height: 240px;
+      resize: vertical;
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+
+    .review-revise-input:focus {
+      outline: none;
+      border-color: var(--accent-secondary);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    }
+
+    .review-revise-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
     /* Math Equations */
     .katex-display {
       margin: 16px 0;
@@ -1238,7 +1297,15 @@
           </div>
           <div class="review-actions">
             <button class="btn approve" type="button">승인(APPROVE)</button>
+            <button class="btn revise" type="button">수정(REVISE)</button>
             <button class="btn cancel" type="button">취소(CANCEL)</button>
+          </div>
+          <div class="review-revise-area">
+            <textarea class="review-revise-input" placeholder="수정할 메시지를 입력하세요..."></textarea>
+            <div class="review-revise-actions">
+              <button class="btn revise-send" type="button">수정 전송</button>
+              <button class="btn" type="button">취소</button>
+            </div>
           </div>
         </div>
         <div class="assistant-a2ui"></div>
@@ -1259,6 +1326,11 @@
       const reviewProgressFill = bubble.querySelector('.review-progress-fill');
       const approveBtn = bubble.querySelector('.btn.approve');
       const cancelBtn = bubble.querySelector('.btn.cancel');
+      const reviseBtn = bubble.querySelector('.btn.revise');
+      const reviseArea = bubble.querySelector('.review-revise-area');
+      const reviseInput = bubble.querySelector('.review-revise-input');
+      const reviseSendBtn = bubble.querySelector('.btn.revise-send');
+      const reviseCancelBtn = bubble.querySelector('.review-revise-actions .btn:last-child');
 
       toggle.addEventListener('click', () => {
         panel.classList.toggle('collapsed');
@@ -1268,7 +1340,7 @@
       return {
         bubble, panel, stream, toggle, answer, a2ui, progressFill, currentStage,
         reviewPanel, reviewDesc, reviewProgress, reviewProgressText, reviewProgressFill,
-        approveBtn, cancelBtn
+        approveBtn, cancelBtn, reviseBtn, reviseArea, reviseInput, reviseSendBtn, reviseCancelBtn
       };
     }
 
@@ -1452,6 +1524,7 @@
         planning: '📋 계획',
         hitl: '🛡️ HITL 평가',
         hitl_waiting: '🧑 검토 대기',
+        hitl_revising: '✏️ 수정 재실행',
         routing: '🎯 라우팅',
         invoking: '⚡ 실행',
         composing: '✨ 합성',
@@ -1612,18 +1685,25 @@
       }
     }
 
-    async function streamReviewDecision(ai, taskId, decision) {
+    async function streamReviewDecision(ai, taskId, decision, revisedMessage) {
       const requestId = `ui-review-${Date.now()}`;
+      const reason = decision === 'APPROVE' ? 'approved_from_ui'
+        : decision === 'REVISE' ? 'revised_from_ui'
+        : 'canceled_from_ui';
+      const params = {
+        id: taskId,
+        decision,
+        reason,
+        decisionId: `ui-decision-${Date.now()}`
+      };
+      if (decision === 'REVISE' && revisedMessage) {
+        params.revisedMessage = revisedMessage;
+      }
       const payload = {
         jsonrpc: '2.0',
         id: requestId,
         method: 'tasks/review/decide/stream',
-        params: {
-          id: taskId,
-          decision,
-          reason: decision === 'APPROVE' ? 'approved_from_ui' : 'canceled_from_ui',
-          decisionId: `ui-decision-${Date.now()}`
-        }
+        params
       };
 
       const res = await fetch(endpoint, {
@@ -1799,7 +1879,7 @@
       }
 
       if (!doneReceived) {
-        throw new Error('승인 후 스트림이 비정상 종료되었습니다.');
+        throw new Error('결정 후 스트림이 비정상 종료되었습니다.');
       }
 
       if (!acc.trim()) {
@@ -1809,36 +1889,40 @@
         await enhanceBubble(ai.answer);
       }
 
+      const completionLabel = decision === 'REVISE' ? '수정' : '승인';
       ai.progressFill.style.width = '100%';
       ai.progressFill.classList.add('completed');
-      ai.currentStage.textContent = '✅ 완료 - 승인 후 실행이 정상 완료되었습니다.';
+      ai.currentStage.textContent = `✅ 완료 - ${completionLabel} 후 실행이 정상 완료되었습니다.`;
       setStatus('완료', 'complete', {
         progress: 100,
-        activity: '승인 후 실행 완료'
+        activity: `${completionLabel} 후 실행 완료`
       });
     }
 
-    async function handleReviewDecision(ai, taskId, decision) {
+    async function handleReviewDecision(ai, taskId, decision, revisedMessage) {
       // 버튼 비활성화
       ai.approveBtn.disabled = true;
       ai.cancelBtn.disabled = true;
+      ai.reviseBtn.disabled = true;
 
       // 프로그레스 바 표시
-      ai.reviewProgress.classList.add('active');
-      ai.reviewProgressText.textContent = decision === 'APPROVE' ? '승인 처리 중...' : '취소 처리 중...';
+      const actionLabel = decision === 'APPROVE' ? '승인' : decision === 'REVISE' ? '수정' : '취소';
+      ai.reviewProgressText.textContent = `${actionLabel} 처리 중...`;
       ai.reviewProgressFill.style.width = '30%';
 
-      if (decision === 'APPROVE') {
-        setStatus('승인 후 실행 시작...', 'streaming');
+      if (decision === 'APPROVE' || decision === 'REVISE') {
+        setStatus(`${actionLabel} 후 실행 시작...`, 'streaming');
       }
 
       try {
-        if (decision === 'APPROVE') {
-          await streamReviewDecision(ai, taskId, decision);
+        if (decision === 'APPROVE' || decision === 'REVISE') {
+          await streamReviewDecision(ai, taskId, decision, revisedMessage);
           setTimeout(() => {
             ai.reviewProgress.classList.remove('active');
             ai.approveBtn.style.display = 'none';
             ai.cancelBtn.style.display = 'none';
+            ai.reviseBtn.style.display = 'none';
+            if (ai.reviseArea) ai.reviseArea.classList.remove('active');
           }, 1000);
           return;
         }
@@ -1849,11 +1933,10 @@
         const decideRes = await rpcCall('tasks/review/decide', {
           id: taskId,
           decision,
-          reason: decision === 'APPROVE' ? 'approved_from_ui' : 'canceled_from_ui',
+          reason: 'canceled_from_ui',
           decisionId: `ui-decision-${Date.now()}`
         });
 
-        // 70% 진행
         ai.reviewProgressFill.style.width = '70%';
 
         if (decideRes?.error) {
@@ -1861,68 +1944,43 @@
           ai.reviewDesc.textContent = `결정 실패: ${decideRes.error.message || 'unknown error'}`;
           ai.approveBtn.disabled = false;
           ai.cancelBtn.disabled = false;
+          ai.reviseBtn.disabled = false;
           return;
         }
 
-	        const task = decideRes?.result?.task;
-	        const review = decideRes?.result?.review;
-	        let resolvedTask = task;
-	        let taskStatus = String(task?.status || '').toUpperCase();
+        const task = decideRes?.result?.task;
+        const review = decideRes?.result?.review;
 
-        // 90% 진행
         ai.reviewProgressFill.style.width = '90%';
         ai.reviewProgressText.textContent = '결과 처리 중...';
 
-        if (decision === 'APPROVE' && taskStatus !== 'COMPLETED') {
-          ai.reviewProgressText.textContent = '승인 후 실행 대기 중...';
-          ai.reviewDesc.textContent = '승인은 완료되었습니다. 후속 실행 상태를 확인 중입니다.';
-          resolvedTask = await waitForTaskTerminal(taskId);
-          taskStatus = String(resolvedTask?.status || '').toUpperCase();
+        ai.reviewDesc.textContent = `결정 완료: ${review?.status || decision}`;
+        await renderTaskOutcome(ai, task, decision);
+
+        ai.reviewProgressFill.style.width = '100%';
+        ai.reviewProgressText.textContent = '완료';
+
+        if (task && task.status === 'CANCELED') {
+          ai.currentStage.textContent = '🛑 검토 취소 - 요청이 검토 단계에서 종료되었습니다.';
+          setStatus('검토 취소', 'ready', {
+            progress: 0,
+            activity: '사용자 취소'
+          });
         }
 
-        ai.reviewDesc.textContent = `결정 완료: ${review?.status || decision}`;
-        await renderTaskOutcome(ai, resolvedTask, decision);
-
-	        // 100% 완료
-	        ai.reviewProgressFill.style.width = '100%';
-	        ai.reviewProgressText.textContent = '완료';
-
-	        if (decision === 'APPROVE' && taskStatus === 'COMPLETED') {
-	          // replaySupervisorLogs가 상태를 'streaming'으로 변경했을 수 있으므로 다시 완료 상태로 설정
-	          ai.progressFill.style.width = '100%';
-	          ai.progressFill.classList.add('completed');
-	          ai.currentStage.textContent = '✅ 완료 - 승인 후 실행이 정상 완료되었습니다.';
-	          // 약간의 지연 후 완료 상태 설정하여 replaySupervisorLogs의 효과를 덮어씀
-	          setTimeout(() => {
-	            setStatus('완료', 'complete', {
-	              progress: 100,
-	              activity: '승인 후 실행 완료'
-	            });
-	          }, 100);
-	        } else if (decision === 'CANCEL' && taskStatus === 'CANCELED') {
-	          ai.currentStage.textContent = '🛑 검토 취소 - 요청이 검토 단계에서 종료되었습니다.';
-	          setStatus('검토 취소', 'ready', {
-	            progress: 0,
-	            activity: '사용자 취소'
-	          });
-	        }
-
-	        // 1초 후 프로그레스 바 숨기기
-	        setTimeout(() => {
-	          ai.reviewProgress.classList.remove('active');
-	          ai.approveBtn.style.display = 'none';
-	          ai.cancelBtn.style.display = 'none';
-	        }, 1000);
-
-	        if (!((decision === 'APPROVE' && taskStatus === 'COMPLETED')
-	            || (decision === 'CANCEL' && taskStatus === 'CANCELED'))) {
-	          setStatus(`Review ${decision} 완료`, 'complete');
-	        }
-	      } catch (e) {
+        setTimeout(() => {
+          ai.reviewProgress.classList.remove('active');
+          ai.approveBtn.style.display = 'none';
+          ai.cancelBtn.style.display = 'none';
+          ai.reviseBtn.style.display = 'none';
+          if (ai.reviseArea) ai.reviseArea.classList.remove('active');
+        }, 1000);
+      } catch (e) {
         ai.reviewProgress.classList.remove('active');
         ai.reviewDesc.textContent = `결정 처리 실패: ${e.message}`;
         ai.approveBtn.disabled = false;
         ai.cancelBtn.disabled = false;
+        ai.reviseBtn.disabled = false;
       }
     }
 
@@ -1973,7 +2031,7 @@
     function buildTextMessagePayload(text) {
       return {
         parts: [
-          { text, mediaType: 'text/plain' }
+          { type: 'text', text }
         ],
         metadata: {
           a2uiClientCapabilities: buildA2uiClientCapabilities()
@@ -1985,6 +2043,7 @@
       return {
         parts: [
           {
+            type: 'data',
             data: actionPayload,
             mediaType: 'application/json+a2ui'
           }
@@ -2020,10 +2079,34 @@
       ai.reviewDesc.textContent = `taskId=${taskId}${reason ? `, reason=${reason}` : ''}`;
       ai.approveBtn.style.display = '';
       ai.cancelBtn.style.display = '';
+      ai.reviseBtn.style.display = '';
       ai.approveBtn.disabled = false;
       ai.cancelBtn.disabled = false;
+      ai.reviseBtn.disabled = false;
       ai.approveBtn.onclick = () => handleReviewDecision(ai, taskId, 'APPROVE');
       ai.cancelBtn.onclick = () => handleReviewDecision(ai, taskId, 'CANCEL');
+      ai.reviseBtn.onclick = () => {
+        ai.approveBtn.style.display = 'none';
+        ai.cancelBtn.style.display = 'none';
+        ai.reviseBtn.style.display = 'none';
+        ai.reviseArea.classList.add('active');
+        ai.reviseInput.focus();
+        ai.reviseSendBtn.onclick = () => {
+          const revisedMessage = ai.reviseInput.value.trim();
+          if (!revisedMessage) {
+            ai.reviseInput.focus();
+            return;
+          }
+          handleReviewDecision(ai, taskId, 'REVISE', revisedMessage);
+        };
+        ai.reviseCancelBtn.onclick = () => {
+          ai.reviseArea.classList.remove('active');
+          ai.reviseInput.value = '';
+          ai.approveBtn.style.display = '';
+          ai.cancelBtn.style.display = '';
+          ai.reviseBtn.style.display = '';
+        };
+      };
     }
 
     function showHitlReviewPanel(ai, reason, preferredTaskId = '') {
@@ -2036,8 +2119,12 @@
       ai.reviewDesc.textContent = '리뷰 대기 task를 조회 중입니다...';
       ai.approveBtn.disabled = true;
       ai.cancelBtn.disabled = true;
+      ai.reviseBtn.disabled = true;
       ai.approveBtn.style.display = '';
       ai.cancelBtn.style.display = '';
+      ai.reviseBtn.style.display = '';
+      ai.reviseArea.classList.remove('active');
+      ai.reviseInput.value = '';
 
       void (async () => {
         try {
@@ -2046,6 +2133,7 @@
             ai.reviewDesc.textContent = '리뷰 대기 task를 찾지 못했습니다. 잠시 후 다시 시도해주세요.';
             ai.approveBtn.disabled = true;
             ai.cancelBtn.disabled = true;
+            ai.reviseBtn.disabled = true;
             return;
           }
           bindReviewTask(ai, taskId, reason);
@@ -2053,6 +2141,7 @@
           ai.reviewDesc.textContent = `리뷰 대기 task 조회 실패: ${e.message || e}`;
           ai.approveBtn.disabled = true;
           ai.cancelBtn.disabled = true;
+          ai.reviseBtn.disabled = true;
         }
       })();
     }
@@ -2064,6 +2153,7 @@
         ai.reviewDesc.textContent = '리뷰 대기 task를 찾지 못했습니다. 잠시 후 다시 시도해주세요.';
         ai.approveBtn.disabled = true;
         ai.cancelBtn.disabled = true;
+        ai.reviseBtn.disabled = true;
         return;
       }
       bindReviewTask(ai, taskId, '');

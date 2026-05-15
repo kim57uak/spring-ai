@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service.agent.store.redis;
 
+import com.example.springsupervisorai.common.redis.RedisTtlPolicy;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -10,11 +11,13 @@ import static org.mockito.Mockito.when;
 
 class RedisGraphCheckpointStoreTest {
 
+    private static final RedisTtlPolicy ttlPolicy = new RedisTtlPolicy();
+
     @Test
     void saveLoadAndClearUsesLocalFallbackWhenRedisIsUnavailable() {
         ObjectProvider<StringRedisTemplate> redisProvider = mock(ObjectProvider.class);
         when(redisProvider.getIfAvailable()).thenReturn(null);
-        RedisGraphCheckpointStore store = new RedisGraphCheckpointStore(redisProvider);
+        RedisGraphCheckpointStore store = new RedisGraphCheckpointStore(redisProvider, ttlPolicy);
 
         store.saveCheckpoint("session-1", "{\"step\":\"COMPOSE\"}");
 

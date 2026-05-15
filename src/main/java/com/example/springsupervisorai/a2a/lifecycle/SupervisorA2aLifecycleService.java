@@ -110,4 +110,13 @@ public class SupervisorA2aLifecycleService {
     public void updateTaskMessage(String taskId, String newMessage) {
         taskStore.updateTaskMessage(taskId, newMessage);
     }
+
+    /**
+     * 세션에 속한 모든 task를 삭제한다.
+     *
+     * @param sessionId 세션 식별자
+     */
+    public void clearSession(String sessionId) {
+        taskStore.clearSession(sessionId);
+    }
 }

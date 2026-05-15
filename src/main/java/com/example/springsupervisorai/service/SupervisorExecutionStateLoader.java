@@ -16,10 +16,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Loads execution state required before graph invocation.
+ * Graph 호출 전 필요한 실행 상태를 로드한다.
  * <p>
- * This service centralizes history lookup, swarm state lookup and checkpoint validation
- * so orchestration code does not depend on storage-specific recovery rules.
+ * 이 서비스는 히스토리 조회, swarm 상태 조회, 체크포인트 검증을 중앙화하여
+ * 오케스트레이션 코드가 스토리지별 복구 규칙에 의존하지 않도록 한다.
  */
 @Service
 public class SupervisorExecutionStateLoader {
@@ -40,13 +40,13 @@ public class SupervisorExecutionStateLoader {
     );
 
     /**
-     * Immutable snapshot of the pre-graph execution state.
+     * Graph 실행 전 상태의 불변 스냅샷.
      *
-     * @param history loaded session history
-     * @param latestSwarm latest swarm state if present
-     * @param swarmFacts normalized swarm facts
-     * @param swarmStateVersion swarm state version
-     * @param checkpointId validated checkpoint payload
+     * @param history 로드된 세션 히스토리
+     * @param latestSwarm 최신 swarm 상태 (있는 경우)
+     * @param swarmFacts 정규화된 swarm 팩트
+     * @param swarmStateVersion swarm 상태 버전
+     * @param checkpointId 검증된 체크포인트 페이로드
      */
     public record LoadedState(
             List<String> history,
@@ -72,10 +72,10 @@ public class SupervisorExecutionStateLoader {
     }
 
     /**
-     * Loads all state required before graph execution.
+     * Graph 실행 전 필요한 모든 상태를 로드한다.
      *
-     * @param sessionId session identifier
-     * @return loaded execution state
+     * @param sessionId 세션 식별자
+     * @return 로드된 실행 상태
      */
     public LoadedState load(String sessionId) {
         List<String> history = conversationStore.load(sessionId);
@@ -87,10 +87,10 @@ public class SupervisorExecutionStateLoader {
     }
 
     /**
-     * Validates and normalizes checkpoint payload. Invalid payloads are cleared eagerly.
+     * 체크포인트 페이로드를 검증하고 정규화한다. 유효하지 않은 페이로드는 즉시 제거된다.
      *
-     * @param sessionId session identifier
-     * @return validated checkpoint payload or empty string
+     * @param sessionId 세션 식별자
+     * @return 검증된 체크포인트 페이로드 또는 빈 문자열
      */
     public String resolveCheckpointId(String sessionId) {
         String payload = checkpointStore.loadCheckpoint(sessionId).orElse("");

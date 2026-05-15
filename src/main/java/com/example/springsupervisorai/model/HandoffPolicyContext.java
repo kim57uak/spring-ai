@@ -3,10 +3,10 @@ package com.example.springsupervisorai.model;
 import java.util.List;
 
 /**
- * Input model for handoff policy evaluation.
+ * Handoff 정책 평가 입력 모델.
  *
- * @param planningContext current supervisor planning context
- * @param batchResults downstream results from the latest invoke batch
+ * @param planningContext 현재 supervisor planning 컨텍스트
+ * @param batchResults 최신 invoke 배치의 downstream 결과
  */
 public record HandoffPolicyContext(
         SupervisorPlanningContext planningContext,
@@ -14,7 +14,7 @@ public record HandoffPolicyContext(
 ) {
 
     /**
-     * Creates a null-safe handoff policy context.
+     * 널-세이프 handoff 정책 컨텍스트를 생성한다.
      */
     public static HandoffPolicyContext of(
             SupervisorPlanningContext planningContext,

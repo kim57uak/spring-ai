@@ -1200,6 +1200,8 @@
         try {
             if (transport !== 'a2a-supervisor') {
                 await fetch(`${apiBase}/clear`, { method: 'POST' });
+            } else {
+                await fetch('/a2a/supervisor/clear', { method: 'POST' });
             }
             const c = document.getElementById('chat-container');
             c.innerHTML = `

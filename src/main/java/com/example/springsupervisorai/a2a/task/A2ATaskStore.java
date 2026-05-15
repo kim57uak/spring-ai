@@ -36,4 +36,11 @@ public interface A2ATaskStore {
      * @return 갱신된 스냅샷(optional)
      */
     Optional<A2aTaskSnapshot> updateTaskMessage(String taskId, String newMessage);
+
+    /**
+     * 세션에 속한 모든 task를 삭제한다.
+     *
+     * @param sessionId 세션 식별자
+     */
+    void clearSession(String sessionId);
 }

@@ -3,7 +3,10 @@ package com.example.springsupervisorai.service.agent.runtime;
 import reactor.core.publisher.Flux;
 
 /**
- * Supervisor LLM 호출용 게이트웨이 포트.
+ * Supervisor LLM 호출 게이트웨이로, 채팅 모델 호출을 추상화한다.
+ * <p>
+ * Planning, compose, repair 단계에서 LLM 응답 생성을 위한
+ * 동기({@link #complete}) 및 스트리밍({@link #stream}) 인터페이스를 제공한다.
  */
 public interface SupervisorChatGateway {
 

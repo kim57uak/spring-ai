@@ -5,8 +5,12 @@ package com.example.springai.a2a.task;
  */
 public enum A2aTaskStatus {
     SUBMITTED,
-    RUNNING,
+    WORKING,
     COMPLETED,
     FAILED,
-    CANCELED
+    CANCELED,
+    INPUT_REQUIRED,
+    REJECTED,
+    AUTH_REQUIRED,
+    UNKNOWN
 }

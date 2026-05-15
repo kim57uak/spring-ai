@@ -2,6 +2,7 @@ package com.example.springai.mcp;
 
 import com.example.springai.config.McpProperties;
 import com.example.springai.exception.McpToolCallException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -72,7 +73,7 @@ public class SpringAiMcpClient implements McpClient {
             }
             
             return result.tools().stream()
-                    .map(t -> (Map<String, Object>) objectMapper.convertValue(t, Map.class))
+                    .map(t -> objectMapper.convertValue(t, new TypeReference<Map<String, Object>>() {}))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             logger.warn("Failed to list MCP tools for server={}", serverName, e);

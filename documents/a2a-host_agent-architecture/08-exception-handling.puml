@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 08. Supervisor Agent Exception Handling
+title 08. Supervisor Agent Exception Handling (Synced with Source, 2026-05-14)
 
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -12,16 +12,14 @@ class LlmHitlPolicyService
 class LlmSupervisorResponseComposeService
 class DefaultA2AInvocationService
 class A2AJsonRpcClient
-class GlobalExceptionHandler
+class SupervisorGlobalExceptionHandler
 
 class A2ARoutingException
+class A2ACommunicationException
 class DownstreamA2AException
 class SupervisorChatProcessingException
-class ChatProcessingException
-class WebClientResponseException
-class HttpMessageNotReadableException
-class IllegalArgumentException
-class IllegalStateException
+class HitlProcessingException
+class CircuitBreakerOpenException
 
 SupervisorA2AController --> SupervisorAgentService
 SupervisorAgentService --> SupervisorAgentOrchestrator
@@ -31,25 +29,25 @@ SupervisorAgentOrchestrator --> DefaultA2AInvocationService
 DefaultA2AInvocationService --> A2AJsonRpcClient
 
 DefaultA2AInvocationService --> A2ARoutingException : invalid route / method
+DefaultA2AInvocationService --> A2ACommunicationException : invalid args / target
 A2AJsonRpcClient --> DownstreamA2AException : downstream A2A failure
 LlmSupervisorResponseComposeService --> SupervisorChatProcessingException : compose/planning failure
 SupervisorAgentOrchestrator --> IllegalStateException : state/persistence mismatch
+SupervisorAgentService --> HitlProcessingException : HITL pre-gate / decision error
 SupervisorA2AController --> IllegalArgumentException : validator / params
 SupervisorA2AController --> HttpMessageNotReadableException : invalid JSON
 A2AJsonRpcClient --> WebClientResponseException : upstream HTTP failure
 
-GlobalExceptionHandler --> ChatProcessingException : @ExceptionHandler
-GlobalExceptionHandler --> RuntimeException : name-based mapping\nA2ARoutingException / DownstreamA2AException /\nSupervisorChatProcessingException
-GlobalExceptionHandler --> IllegalArgumentException : @ExceptionHandler
-GlobalExceptionHandler --> IllegalStateException : @ExceptionHandler
-GlobalExceptionHandler --> WebClientResponseException : @ExceptionHandler
-GlobalExceptionHandler --> HttpMessageNotReadableException : @ExceptionHandler
+SupervisorGlobalExceptionHandler --> DownstreamA2AException : @ExceptionHandler -> -32002
+SupervisorGlobalExceptionHandler --> IllegalArgumentException : @ExceptionHandler -> -32602
+SupervisorGlobalExceptionHandler --> UnsupportedOperationException : @ExceptionHandler -> -32601
+SupervisorGlobalExceptionHandler --> IllegalStateException : @ExceptionHandler -> -32603
+SupervisorGlobalExceptionHandler --> CircuitBreakerOpenException : @ExceptionHandler -> -32008
+SupervisorGlobalExceptionHandler --> Exception : @ExceptionHandler catch-all -> -32603
 
-note bottom of GlobalExceptionHandler
-Return sanitized response
-- /a2a/** -> JsonRpcResponse(error)
-- non-A2A -> ErrorResponse
-- no downstream raw body/header leak
-- many JSON-RPC validation errors are returned directly by controller/validator without throwing
+note bottom of SupervisorGlobalExceptionHandler
+Return sanitized JSON-RPC error responses for /a2a/** paths
+- A2ARoutingException, DownstreamA2AException, SupervisorChatProcessingException
+  are also handled by the springai GlobalExceptionHandler via name-based RuntimeException mapping
 end note
 @enduml

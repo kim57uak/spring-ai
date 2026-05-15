@@ -1,6 +1,6 @@
 # 20. MCP Package / Class Specification
 
-Last synchronized with source: 2026-04-18  
+Last synchronized with source: 2026-05-14  
 Source baseline: `src/main/java/com/example/springai`
 
 ## Base Package
@@ -17,12 +17,12 @@ src/main/java/com/example/springai
 ├── a2a
 │   ├── A2aMethod
 │   ├── context/A2aExecutionContext
-│   ├── dto/{JsonRpcRequest, JsonRpcResponse, JsonRpcError, TaskSendParams, TaskIdParams, TaskQueryParams, TasksListParams, TasksListResult, TaskView}
+│   ├── dto/{DataPart, FilePart, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Message, MessageSendParams, Part, Task, TaskArtifactUpdateEvent, TaskIdParams, TaskQueryParams, TaskSendParams, TasksListParams, TasksListResult, TaskStatus, TaskStatusUpdateEvent, TaskView, TextPart}
 │   ├── idempotency/A2aRequestIdempotencyService
 │   ├── lifecycle/A2aLifecycleService
 │   ├── mapper/A2AResponseMapper
 │   ├── registry/AgentCardRegistry
-│   └── task/{A2ATaskStore, A2aTaskSnapshot, A2aTaskStatus, InMemoryA2ATaskStore, RedisA2ATaskStore}
+│   └── task/{A2ATaskStore, A2aTaskSnapshot, A2aTaskSnapshotTransitions, A2aTaskStatus, InMemoryA2ATaskStore, RedisA2ATaskStore}
 ├── common/redis/{RedisKeyspace, RedisTtlPolicy}
 ├── config
 │   ├── AgentCardProperties
@@ -39,7 +39,7 @@ src/main/java/com/example/springai
 │   └── base/{BaseAgentControllerSupport, HttpChatController, ProductAgentController, ReservationAgentController, SearchAgentController}
 ├── dto/{ChatRequest, ChatResponse, ErrorResponse}
 ├── exception/{ChatProcessingException, McpException family}
-├── mcp/{JsonRpcRequest, McpClient, McpClientFactory, StdioMcpClient, SseMcpClient, ProcessManager, McpProcessLauncher, ToolSchemaRegistry}
+├── mcp/{JsonRpcRequest, McpClient, McpClientFactory, McpClientSessionManager, McpProcessLauncher, McpTransportFactory, ProcessManager, SpringAiMcpClient, SseMcpClient, StdioMcpClient, ToolSchemaRegistry}
 ├── model/agent
 │   ├── A2aStructuredResponse
 │   ├── AgentChatRequest
@@ -70,7 +70,7 @@ src/main/java/com/example/springai
 │       ├── prompt/{DefaultPromptTemplateService, PromptRenderService, PromptTemplateService}
 │       ├── runtime/{AgentLlmRuntime, DefaultAgentLlmRuntime}
 │       ├── security/{HumanMessageService, PromptInjectionGuard}
-│       └── store/{ConversationStore, GraphCheckpointStore, redis/RedisConversationStore, redis/RedisGraphCheckpointStore}
+│       └── store/{ConversationStore, GraphCheckpointStore, redis/RedisConversationStore, redis/RedisGraphCheckpointStore, redis/RedisStoreSupport}
 ```
 
 ## Current Core Contracts

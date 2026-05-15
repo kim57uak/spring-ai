@@ -1,6 +1,6 @@
 @startuml
 !pragma layout smetana
-title 02. Package Policy (com.example.springai)
+title 02. Package Policy (com.example.springai, synced 2026-05-14)
 
 skinparam shadowing false
 skinparam packageStyle rectangle
@@ -13,11 +13,18 @@ package "com.example.springai" {
     class LlmRateLimitProperties
     class McpProperties
     class ObservationConfig
+    class PromptProperties
     class SpringAiChatAdvisorConfig
   }
 
   package "advice" {
     class GlobalExceptionHandler
+  }
+
+  package "dto" {
+    class ChatRequest
+    class ChatResponse
+    class ErrorResponse
   }
 
   package "controller" {
@@ -41,6 +48,17 @@ package "com.example.springai" {
   package "exception" {
     class ChatProcessingException
     class McpException
+    class McpClientCreationException
+    class McpToolCallException
+    class McpValidationException
+    class McpProcessLaunchException
+  }
+
+  package "common" {
+    package "redis" {
+      class RedisKeyspace
+      class RedisTtlPolicy
+    }
   }
 
   package "service" {
@@ -88,21 +106,35 @@ package "com.example.springai" {
       }
       package "graph" {
         interface AgentStateGraphFactory
+        class LangGraphAgentStateGraphFactory
       }
       package "plan" {
         interface PlanningService
+        class HeuristicPlanningService
       }
       package "execute" {
         interface ToolExecutionService
+        class McpToolExecutionService
       }
       package "compose" {
         interface ResponseComposeService
+        class LlmResponseComposeService
+        class AgentTraceSummaryFormatter
       }
       package "prompt" {
         interface PromptTemplateService
+        class DefaultPromptTemplateService
+        class PromptRenderService
       }
       package "runtime" {
         interface AgentLlmRuntime
+        class DefaultAgentLlmRuntime
+      }
+      package "a2ui" {
+        class AgentStructuredDataExtractor
+        class CompositeAgentStructuredDataExtractor
+        class SaleProductStructuredDataExtractor
+        class ScopedAgentStructuredDataExtractor
       }
       package "security" {
         class HumanMessageService
@@ -111,47 +143,83 @@ package "com.example.springai" {
       package "store" {
         interface ConversationStore
         interface GraphCheckpointStore
+
+        package "redis" {
+          class RedisConversationStore
+          class RedisGraphCheckpointStore
+        }
       }
     }
   }
 
   package "mcp" {
-    class McpClientFactory
-    class ProcessManager
-    class StdioMcpClient
+    interface McpClient
+    class SpringAiMcpClient
     class SseMcpClient
+    class StdioMcpClient
+    class McpClientFactory
+    class McpClientSessionManager
+    class McpTransportFactory
+    class McpProcessLauncher
+    class ProcessManager
     class ToolSchemaRegistry
   }
 
   package "model.agent" {
     class AgentChatRequest
     class AgentScope
+    enum AgentScopeName
     class PlanningContext
     class ToolPlan
     class ToolExecutionResult
     class AgentGraphState
+    class A2aStructuredResponse
+    enum ChunkType
   }
 
   package "a2a" {
     package "dto" {
       class JsonRpcRequest
       class JsonRpcResponse
-    }
-    package "task" {
-      interface A2ATaskStore
-      class InMemoryA2ATaskStore
+      class Task
+      class TaskStatus
+      class Part
+      class TextPart
+      class DataPart
+      class FilePart
+      class Message
+      class MessageSendParams
+      class TaskSendParams
+      class TaskQueryParams
+      class TaskIdParams
+      class TaskView
+      class TaskArtifactUpdateEvent
+      class TaskStatusUpdateEvent
+      class TasksListParams
+      class TasksListResult
     }
     package "context" {
       class A2aExecutionContext
     }
+    package "idempotency" {
+      class A2aRequestIdempotencyService
+    }
     package "lifecycle" {
       class A2aLifecycleService
+    }
+    package "mapper" {
+      class A2AResponseMapper
     }
     package "registry" {
       class AgentCardRegistry
     }
-    package "mapper" {
-      class A2AResponseMapper
+    package "task" {
+      interface A2ATaskStore
+      enum A2aTaskStatus
+      class A2aTaskSnapshot
+      class A2aTaskSnapshotTransitions
+      class InMemoryA2ATaskStore
+      class RedisA2ATaskStore
     }
   }
 }
@@ -167,6 +235,8 @@ Rules
 - 모델 라우팅은 ChatModelType + ModelChatServiceFactory로 일원화한다
 - MCP tool callback은 mcp 설정 allowlist를 준수한다
 - A2A task는 scope ownership 검증을 통과한 경우에만 get/cancel/list 허용
+- MCP client는 재연결 우선, 타임아웃/백오프 정책 적용
+- A2A task store는 Redis/InMemory 분기 지원
 end note
 
 @enduml

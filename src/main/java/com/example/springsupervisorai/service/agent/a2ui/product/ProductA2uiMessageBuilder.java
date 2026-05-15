@@ -1,6 +1,7 @@
 package com.example.springsupervisorai.service.agent.a2ui.product;
 
 import com.example.springsupervisorai.service.agent.a2ui.common.A2uiTemplateView;
+import com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiSupport;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Assembles normalized product data into A2UI standard catalog messages.
+ * 정규화된 제품 데이터를 A2UI 표준 카탈로그 메시지로 조립한다.
  */
 @Component
 public class ProductA2uiMessageBuilder {
@@ -36,6 +37,60 @@ public class ProductA2uiMessageBuilder {
         }
         messages.add(beginRendering(surfaceId, "root"));
         return List.copyOf(messages);
+    }
+
+    /**
+     * Builds A2UI protocol messages and wraps them in a Spring AI API-compatible
+     * assistant message structure using JSONL for the protocol payload.
+     * <p>
+     * The returned string is the JSONL-formatted protocol payload, which the caller
+     * can pair with the human-readable text to form a Spring AI {@code AssistantMessage}.
+     *
+     * @param surfaceId target surface identifier
+     * @param model     product presentation data
+     * @param template  selected A2UI template
+     * @return JSONL string of the protocol messages
+     */
+    public String buildProtocolJsonl(String surfaceId, ProductPresentationModel model, ProductA2uiTemplate template) {
+        List<Map<String, Object>> protocolMessages = build(surfaceId, model, template);
+        return SupervisorA2uiSupport.toJsonl(protocolMessages);
+    }
+
+    /**
+     * Builds A2UI protocol messages and returns them as a Spring AI API-compatible
+     * assistant message map. The protocol payload is embedded as JSONL under the
+     * {@link SupervisorA2uiSupport#A2UI_PROTOCOL_MARKER} key.
+     *
+     * @param surfaceId  target surface identifier
+     * @param model      product presentation data
+     * @param template   selected A2UI template
+     * @param textMessage the human-readable assistant message text
+     * @return a message map with role, content, and a2ui_protocol fields
+     */
+    public Map<String, Object> buildAssistantMessage(
+            String surfaceId,
+            ProductPresentationModel model,
+            ProductA2uiTemplate template,
+            String textMessage
+    ) {
+        List<Map<String, Object>> protocolMessages = build(surfaceId, model, template);
+        String resolvedText = textMessage == null || textMessage.isBlank()
+                ? template.defaultMessage(resolveDefaultName(model))
+                : textMessage;
+        return Map.of(
+                "role", "assistant",
+                "content", resolvedText,
+                SupervisorA2uiSupport.A2UI_PROTOCOL_MARKER, SupervisorA2uiSupport.toJsonl(protocolMessages),
+                "contentType", SupervisorA2uiSupport.A2UI_CONTENT_TYPE
+        );
+    }
+
+    private String resolveDefaultName(ProductPresentationModel model) {
+        if (model == null) {
+            return "상품";
+        }
+        String name = model.name();
+        return name != null && !name.isBlank() ? name : "상품";
     }
 
     private Map<String, Object> surfaceUpdate(String surfaceId, List<Map<String, Object>> components) {

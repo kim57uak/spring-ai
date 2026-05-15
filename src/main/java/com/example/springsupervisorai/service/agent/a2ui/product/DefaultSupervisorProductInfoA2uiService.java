@@ -15,6 +15,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * downstream 제품 결과로부터 렌더링된 A2UI 페이로드를 빌드하는 기본 제품 도메인 A2UI 서비스.
+ * <p>
+ * 성공적인 downstream 결과에서 제품 JSON을 추출하고 페이로드 추출기, 데이터 매퍼,
+ * 메시지 빌더 파이프라인에 위임하여 모든 제품 소유 템플릿 뷰(요약, 가격, 일정, 예약, 생성 폼)를 처리한다.
+ * 제품 결과는 없지만 라우팅 계획이 있는 경우 독립 실행형 생성 폼 렌더링을 지원한다.
+ */
 @Component
 public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDomainService {
 
@@ -47,6 +54,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
         if (selectedView == null) {
             return false;
         }
+        // 제품 도메인이 소유한 뷰만 처리
         boolean productOwnedView = selectedView == A2uiTemplateView.PACKAGE_SUMMARY
                 || selectedView == A2uiTemplateView.PACKAGE_PRICING
                 || selectedView == A2uiTemplateView.PACKAGE_TIMELINE
@@ -55,12 +63,23 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
         if (!productOwnedView) {
             return false;
         }
+        // 생성 폼은 라우팅 계획만으로 충족 가능 (아직 결과 없음)
         if (selectedView == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM) {
             return hasSuccessfulProductResult(context) || hasProductRoutingPlan(context);
         }
+        // 다른 뷰는 최소 하나의 성공적인 제품 결과 필요
         return hasSuccessfulProductResult(context);
     }
 
+    /**
+     * Builds a product A2UI render result by extracting product data from downstream results
+     * and assembling protocol messages through the data mapper and message builder pipeline.
+     *
+     * @param context the current planning context containing downstream results
+     * @param selectedView the template view selected by compose
+     * @param message optional user message override; uses template default if blank
+     * @return render result with display message and protocol JSON, or empty if no eligible product result
+     */
     @Override
     public Optional<com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService.A2uiRenderResult> build(
             SupervisorPlanningContext context,
@@ -68,6 +87,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
             String message
     ) {
         ProductA2uiTemplate template = templateRegistry.resolve(selectedView == null ? A2uiTemplateView.PACKAGE_SUMMARY : selectedView);
+        // 독립형 생성 폼 처리 (제품 데이터 불필요)
         if (template.view() == A2uiTemplateView.PACKAGE_SALE_PRODUCT_CREATE_FORM) {
             Optional<com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService.A2uiRenderResult> standalone =
                     buildStandaloneCreationForm(context, message, template);
@@ -79,6 +99,7 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
             logger.info("Supervisor product A2UI skipped: no downstream results");
             return Optional.empty();
         }
+        // A2UI 데이터를 제공할 수 있는 첫 번째 downstream 결과를 찾기 위해 순회
         for (DownstreamCallResult result : context.getResults()) {
             if (!isSuccessfulProductResult(result)) {
                 continue;
@@ -86,12 +107,14 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
             logger.info("Supervisor product A2UI inspecting result sessionId={}, taskId={}, agentKey={}, payloadLength={}",
                     context.getSessionId(), result.taskId(), result.agentKey(),
                     result.payload() == null ? 0 : result.payload().length());
+            // downstream 페이로드에서 제품 JSON 노드 추출
             Optional<JsonNode> productNode = payloadExtractor.extractProductNode(result.payload());
             if (productNode.isEmpty()) {
                 logger.info("Supervisor product A2UI productDetail not found sessionId={}, taskId={}",
                         context.getSessionId(), result.taskId());
                 continue;
             }
+            // 추출된 제품 데이터로 프로토콜 메시지 빌드
             Optional<List<Map<String, Object>>> protocolMessages = buildProtocolMessages(productNode.get(), context, result, template);
             if (protocolMessages.isEmpty()) {
                 logger.info("Supervisor product A2UI message build returned empty sessionId={}, taskId={}",
@@ -132,6 +155,10 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
                 && context.getResults().stream().anyMatch(this::isSuccessfulProductResult);
     }
 
+    /**
+     * Builds protocol messages by mapping the product JSON to a presentation model
+     * and delegating to the message builder.
+     */
     private Optional<List<Map<String, Object>>> buildProtocolMessages(
             JsonNode productRoot,
             SupervisorPlanningContext context,
@@ -148,6 +175,10 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
         return Optional.of(messageBuilder.build(surfaceId, model.get(), template));
     }
 
+    /**
+     * Builds a standalone creation form render result from routing plan arguments
+     * without requiring a downstream product result.
+     */
     private Optional<com.example.springsupervisorai.service.agent.a2ui.common.SupervisorA2uiService.A2uiRenderResult> buildStandaloneCreationForm(
             SupervisorPlanningContext context,
             String message,
@@ -175,6 +206,9 @@ public class DefaultSupervisorProductInfoA2uiService implements SupervisorA2uiDo
         }
     }
 
+    /**
+     * Resolves the display name from the product JSON node using saleProdNm, saleProductCode, or a fallback.
+     */
     private String resolveDisplayName(JsonNode productNode) {
         String detailName = productNode.path("baseProductInfo").path("saleProdNm").asText("").trim();
         if (!detailName.isBlank()) {

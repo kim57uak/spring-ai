@@ -3,9 +3,10 @@ package com.example.springsupervisorai.service.agent.runtime;
 import reactor.core.publisher.Flux;
 
 /**
- * Supervisor가 사용하는 LLM 런타임 포트.
+ * Supervisor planning 및 compose 호출을 위한 LLM 런타임 추상화.
  * <p>
- * planning/compose 단계에서 동기 호출 및 스트리밍 호출을 추상화한다.
+ * Supervisor 그래프 실행의 planning 및 compose 단계에서 사용되는
+ * 동기 및 스트리밍 완료 호출을 제공한다.
  */
 public interface SupervisorLlmRuntime {
 

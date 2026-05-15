@@ -6,6 +6,14 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 도메인별 {@link A2uiComposePromptProvider} 인스턴스 레지스트리.
+ * <p>
+ * {@link #resolve(SupervisorPlanningContext)} 호출 시,
+ * {@link A2uiComposePromptProvider#supports(SupervisorPlanningContext)}가 true를 반환하는
+ * 모든 제공자를 수집하고 템플릿 카탈로그 프롬프트를 단일 병합 제공자로 구성한다.
+ * 컨텍스트와 일치하는 제공자가 없으면 {@link Optional#empty()}를 반환한다.
+ */
 @Component
 public class A2uiComposePromptProviderRegistry {
 
@@ -15,6 +23,12 @@ public class A2uiComposePromptProviderRegistry {
         this.providers = List.copyOf(providers);
     }
 
+    /**
+     * 주어진 컨텍스트에 일치하는 제공자를 찾아 단일 제공자로 병합한다.
+     *
+     * @param context 제공자 필터링에 사용되는 현재 planning 컨텍스트
+     * @return 하나 이상 일치 시 병합된 제공자, 없으면 {@link Optional#empty()}
+     */
     public Optional<A2uiComposePromptProvider> resolve(SupervisorPlanningContext context) {
         List<A2uiComposePromptProvider> matches = providers.stream()
                 .filter(provider -> provider.supports(context))

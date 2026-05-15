@@ -86,6 +86,7 @@ public class SaleProductStructuredDataExtractor implements ScopedAgentStructured
             return false;
         }
         if (node.isObject()) {
+            @SuppressWarnings("deprecation")
             Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
             while (fields.hasNext()) {
                 if (containsSaleProductDetail(fields.next().getValue())) {

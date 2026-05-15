@@ -37,6 +37,9 @@ class RoutingPlan {
   +reason: String
   +priority: int
   +arguments: Map<String, Object>
+  +sourceType: String
+  +handoffDepth: int
+  +parentAgentKey: String
 }
 
 class DownstreamCallResult {
@@ -148,10 +151,26 @@ class A2aTaskSnapshot {
   +taskId: String
   +sessionId: String
   +status: A2aTaskStatus
+  +createdAt: Instant
+  +updatedAt: Instant
   +requestMessage: String
   +responsePayload: String
   +errorCode: String
   +errorMessage: String
+  +contextId: String
+}
+
+enum A2aTaskStatus {
+  SUBMITTED
+  WORKING
+  WAITING_REVIEW
+  INPUT_REQUIRED
+  COMPLETED
+  CANCELED
+  FAILED
+  REJECTED
+  AUTH_REQUIRED
+  UNKNOWN
 }
 
 class SupervisorGraphSnapshot {
@@ -209,6 +228,58 @@ enum SupervisorRuntimeState {
   A2A_RESULT_MERGED
   COMPOSING
   COMPLETED
+}
+
+enum SupervisorGraphNode {
+  PLAN
+  SELECT
+  INVOKE
+  HANDOFF_EVALUATE
+  HANDOFF_APPLY
+  MERGE
+  COMPOSE
+}
+
+enum SupervisorGraphRoute {
+  INVOKE
+  COMPOSE
+}
+
+enum SupervisorInvocationStatus {
+  COMPLETED
+  FAILED
+}
+
+enum HitlDecisionType {
+  APPROVE
+  CANCEL
+  REVISE
+}
+
+enum HitlReviewStatus {
+  WAITING
+  APPROVED
+  CANCELED
+  REVISED
+}
+
+enum SupervisorA2aMethod {
+  SendMessage
+  SendStreamingMessage
+  GetTask
+  ListTasks
+  CancelTask
+  GetTaskReview
+  DecideTaskReview
+  DecideTaskReviewStream
+  message/send
+  message/stream
+  tasks/get
+  tasks/list
+  tasks/cancel
+  tasks/review/get
+  tasks/review/decide
+  tasks/review/decide/stream
 }
 
 interface SupervisorPlanningService {

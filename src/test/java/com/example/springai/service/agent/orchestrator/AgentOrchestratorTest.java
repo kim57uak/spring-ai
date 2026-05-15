@@ -38,7 +38,7 @@ class AgentOrchestratorTest {
         A2aLifecycleService lifecycleService = mock(A2aLifecycleService.class);
         A2aExecutionContext context = new A2aExecutionContext("task-orch-1", AgentScopeName.PRODUCT, "message/send");
         when(lifecycleService.get(eq("task-orch-1"), eq(AgentScopeName.PRODUCT)))
-                .thenReturn(Optional.of(snapshot("task-orch-1", AgentScopeName.PRODUCT, A2aTaskStatus.RUNNING)));
+                .thenReturn(Optional.of(snapshot("task-orch-1", AgentScopeName.PRODUCT, A2aTaskStatus.WORKING)));
 
         AgentOrchestrator orchestrator = new AgentOrchestrator(
                 new InMemoryConversationStore(),

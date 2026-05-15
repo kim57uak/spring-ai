@@ -32,6 +32,13 @@ public interface SupervisorSwarmStateStore {
     Optional<SwarmState> loadLatestBySession(String sessionId);
 
     /**
+     * 세션에 속한 swarm 상태를 삭제한다.
+     *
+     * @param sessionId 세션 식별자
+     */
+    void clearSession(String sessionId);
+
+    /**
      * swarm 상태를 저장/갱신한다.
      * <p>
      * 낙관적 락 정책:

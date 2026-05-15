@@ -1,5 +1,6 @@
 package com.example.springsupervisorai.service.agent.store.redis;
 
+import com.example.springsupervisorai.common.redis.RedisTtlPolicy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -13,11 +14,13 @@ import static org.mockito.Mockito.when;
 
 class RedisConversationStoreTest {
 
+    private static final RedisTtlPolicy ttlPolicy = new RedisTtlPolicy();
+
     @Test
     void saveLoadAndClearUsesLocalFallbackWhenRedisIsUnavailable() {
         ObjectProvider<StringRedisTemplate> redisProvider = mock(ObjectProvider.class);
         when(redisProvider.getIfAvailable()).thenReturn(null);
-        RedisConversationStore store = new RedisConversationStore(redisProvider, new ObjectMapper());
+        RedisConversationStore store = new RedisConversationStore(redisProvider, new ObjectMapper(), ttlPolicy);
 
         store.save("session-1", List.of("hello", "world"));
 
